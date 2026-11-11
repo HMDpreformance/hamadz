@@ -34,7 +34,18 @@ var _toast: Label
 var _drive: NeonButton
 var _owned_badge: Label
 var _hint: Label
-var _rev: AudioStreamPlayer
+var _voice: EngineVoice
+var _ind: AudioStreamPlayer
+var _ind_kind := ""
+var _eng_on := false
+var _eng_idle := 0.0
+var _rpm := 0.14
+var _boost := 0.0
+var _lim := 0.0
+var _auto_rev := 0.0
+var _was_thr := 0.0
+var _pops := 0
+var _pop_t := 0.0
 var _turn := 0.0
 
 
@@ -63,9 +74,16 @@ func _ready() -> void:
 	Audio.play_ambience("garage", -3.0)
 	Game.money_changed.connect(_on_money)
 	GFX.changed.connect(func(): GFX.apply_environment(env))
-	_rev = AudioStreamPlayer.new()
-	_rev.bus = "SFX"
-	add_child(_rev)
+	if not InputMap.has_action("garage_rev"):
+		InputMap.add_action("garage_rev")
+	_voice = EngineVoice.new()
+	add_child(_voice)
+	_ind = AudioStreamPlayer.new()
+	_ind.bus = "Engine"
+	add_child(_ind)
+	Audio.set_space("garage")
+	_sync_voice()
+	_sync_induction()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -76,6 +94,30 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	_turn += delta
+	if _voice:
+		_engine_process(delta)
+
+
+func _exit_tree() -> void:
+	Input.action_release("garage_rev")
+
+
+func _sync_induction() -> void:
+	var au := _audio_cfg()
+	var kind := ""
+	if au.induction == "turbo":
+		kind = "turbo_spool_big" if au.turbo >= 2 else "turbo_spool"
+	elif au.induction == "sc":
+		kind = "sc_whine"
+	if kind == _ind_kind:
+		return
+	_ind_kind = kind
+	_ind.stop()
+	if kind != "":
+		_ind.stream = Audio.stream("res://audio/car/%s.wav" % kind, true)
+		_ind.volume_db = -60.0
+		_ind.play()
+		_ind.stream_paused = true
 
 
 # ====================================================================== car
@@ -95,34 +137,132 @@ func _show_car(id: String, animate := true) -> void:
 		if car_mirror:
 			car_mirror.rotation.y = -1.2
 			tw.tween_property(car_mirror, "rotation:y", 0.0, 0.7)
+	if _voice:
+		_engine_stop()
+		_sync_voice()
+		_sync_induction()
 	_refresh_info()
 
 
 func _apply_preview() -> void:
+	if _voice:
+		_sync_voice()
+		_sync_induction()
 	car.apply(preview)
 	if car_mirror:
 		car_mirror.apply(preview)
 	_refresh_info()
 
 
-func _rev_engine(strength := 1.0) -> void:
-	var eng: String = CarDB.CARS[view_car].engine
-	_rev.stream = Audio.stream("res://audio/eng_%s_on.wav" % eng, true)
-	var ex := int(preview.get("exhaust", 0))
-	_rev.volume_db = -30.0
-	_rev.pitch_scale = 0.45
-	_rev.play()
-	var top := 1.0 + 0.25 * strength
-	var tw := create_tween()
-	tw.tween_property(_rev, "volume_db", -6.0 + ex * 1.5, 0.08)
-	tw.parallel().tween_property(_rev, "pitch_scale", top, 0.35).set_ease(Tween.EASE_OUT)
-	tw.tween_property(_rev, "pitch_scale", 0.5, 0.5)
-	tw.tween_property(_rev, "pitch_scale", top * 1.08, 0.3).set_ease(Tween.EASE_OUT)
-	tw.tween_property(_rev, "pitch_scale", 0.42, 0.8)
-	tw.parallel().tween_property(_rev, "volume_db", -40.0, 0.8)
-	tw.tween_callback(_rev.stop)
-	if int(preview.get("turbo", 0)) > 0:
-		get_tree().create_timer(0.48).timeout.connect(func(): Audio.sfx("blowoff", -6.0))
+# ---- engine preview: start it, hold REV, hear the installed/previewed parts
+func _audio_cfg() -> Dictionary:
+	return CarDB.audio_setup(view_car, preview)
+
+
+func _sync_voice() -> void:
+	var au := _audio_cfg()
+	if _voice.profile_id != au.profile or _voice.get_child_count() == 0:
+		_voice.setup(au.profile)
+		if not _eng_on:
+			_voice.silence()
+	Audio.set_engine_cutoff([5600.0, 8200.0, 12500.0][clampi(au.exhaust, 0, 2)] * (0.85 if au.induction == "turbo" else 1.0))
+	_voice.gain_db = -6.0 + au.exhaust * 2.2
+	_voice.intake_db = -4.0
+
+
+func _engine_start() -> void:
+	if _eng_on:
+		return
+	_eng_on = true
+	_eng_idle = 0.0
+	_rpm = 0.14
+	_sync_voice()
+	_voice.silence()
+	var sp := _voice.start_sound_path()
+	if ResourceLoader.exists(sp):
+		Audio.sfx(sp, -4.0, 1.0, "Engine")
+	get_tree().create_timer(0.9).timeout.connect(func():
+		if _eng_on:
+			_voice.start(0.5))
+	car.set_lights(true)
+
+
+func _engine_stop() -> void:
+	if not _eng_on:
+		return
+	_eng_on = false
+	_voice.stop(0.9)
+
+
+## Automatic blip after fitting a part, so the change is heard straight away.
+func _rev_engine(_strength := 1.0) -> void:
+	_engine_start()
+	_auto_rev = 1.5
+
+
+func _engine_process(dt: float) -> void:
+	var held := Input.is_action_pressed("garage_rev")
+	if held and not _eng_on:
+		_engine_start()
+	var thr := 0.0
+	if held:
+		thr = 1.0
+	elif _auto_rev > 0.0:
+		_auto_rev -= dt
+		thr = 1.0 if (_auto_rev > 1.05 or (_auto_rev < 0.6 and _auto_rev > 0.25)) else 0.0
+	var au := _audio_cfg()
+	var p := EngineProfiles.get_profile(au.profile)
+	var rate: float = p.rev_rate * 0.12
+	if thr > 0.0:
+		_rpm = move_toward(_rpm, 1.0, rate * dt * (1.3 - _rpm * 0.5))
+		_eng_idle = 0.0
+	else:
+		_rpm = move_toward(_rpm, 0.14, rate * 0.75 * dt * (0.5 + _rpm))
+		_eng_idle += dt
+	var load := thr
+	if _rpm > 0.985 and thr > 0.0:
+		# on the limiter
+		_lim = fmod(_lim + dt * 13.0, 1.0)
+		if _lim > 0.5:
+			load = 0.0
+			_rpm -= dt * 0.8
+	# turbo and blower follow the revs here (no road load, so boost stays modest)
+	if au.induction == "turbo":
+		var bt := thr * clampf((_rpm - 0.3) / 0.4, 0.0, 1.0) * 0.8
+		_boost = move_toward(_boost, bt, dt * (1.6 if bt > _boost else 3.0))
+		_ind.stream_paused = _boost < 0.03 or not _eng_on
+		_ind.volume_db = linear_to_db(maxf(_boost * _boost * 0.5, 0.001)) - 3.0
+		_ind.pitch_scale = 0.5 + _boost * 0.75 + _rpm * 0.25
+		if _was_thr > 0.5 and thr < 0.5 and _boost > 0.25 and _eng_on:
+			var big: bool = au.turbo >= 2
+			if _boost > 0.6:
+				Audio.sfx("res://audio/car/%s.wav" % ("bov_big" if big else "bov_small"), -6.0, 1.0, "Engine")
+			else:
+				Audio.sfx("res://audio/car/%s.wav" % ("flutter_1" if big else "flutter_2"), -7.0, 1.0, "Engine")
+	elif au.induction == "sc":
+		_ind.stream_paused = not _eng_on
+		_ind.volume_db = linear_to_db((0.12 + 0.5 * load) * clampf(_rpm * 1.4, 0.2, 1.0)) - 3.0
+		_ind.pitch_scale = 0.42 + _rpm * 1.25
+	else:
+		_ind.stream_paused = true
+	# overrun pops when the throttle snaps shut from high revs
+	if _was_thr > 0.5 and thr < 0.5 and _rpm > 0.55 and _eng_on:
+		_pops = int(round(float(p.pops) * [1.0, 3.0, 5.0][clampi(au.exhaust, 0, 2)]))
+		_pop_t = 0.12
+	if _pops > 0 and thr < 0.5:
+		_pop_t -= dt
+		if _pop_t <= 0.0:
+			_pops -= 1
+			_pop_t = randf_range(0.07, 0.22)
+			Audio.sfx("res://audio/car/pop_%d.wav" % (1 + randi() % 5), -9.0 + au.exhaust * 2.0, randf_range(0.85, 1.15), "Engine")
+	_was_thr = thr
+	var wob := sin(Time.get_ticks_msec() * 0.011) * float(p.idle_shake) * clampf((0.3 - _rpm) / 0.16, 0.0, 1.0)
+	_voice.update(_rpm + wob, load, dt)
+	# the body rocks with the engine
+	if _eng_on and car.body:
+		car.set_body_tilt(0.0, sin(Time.get_ticks_msec() * 0.03) * 0.0025 * (1.0 + float(p.idle_shake) * 20.0) + (_rpm - 0.14) * 0.012 * thr)
+	if _eng_on and _eng_idle > 9.0:
+		_engine_stop()
 
 
 # ====================================================================== UI build
@@ -285,6 +425,14 @@ func _build_ui() -> void:
 	_cards = HBoxContainer.new()
 	_cards.add_theme_constant_override("separation", 6)
 	_scroll.add_child(_cards)
+
+	# ---- hold to rev the engine with whatever is fitted or being previewed
+	var rk := TouchKey.make("garage_rev", "REV", UI.RED, Vector2(104, 104))
+	rk.position = Vector2(64, 436)
+	ui.add_child(rk)
+	var rl := UI.label("HOLD TO REV", 14, Color(1, 1, 1, 0.5))
+	rl.position = Vector2(70, 542)
+	ui.add_child(rl)
 
 	# ---- test drive
 	_drive = NeonButton.make("TEST DRIVE", Vector2(310, 76), UI.CYAN, 34)
@@ -555,12 +703,12 @@ func _on_action() -> void:
 			return
 		if Game.owns_car(view_car):
 			Game.select_car(view_car)
-			Audio.sfx("engine_start", -3.0)
+			_rev_engine()
 			_toast_msg("ACTIVE RIDE: " + CarDB.CARS[view_car].name, UI.GREEN)
 		elif Game.buy_car(view_car):
 			Game.select_car(view_car)
 			Audio.sfx("purchase")
-			Audio.sfx("engine_start", -3.0)
+			_rev_engine()
 			_toast_msg("PURCHASED  •  SAVED", UI.GREEN)
 		else:
 			Audio.sfx("ui_deny")
@@ -603,7 +751,6 @@ func _on_drive() -> void:
 		return
 	if view_car != Game.current_car():
 		Game.select_car(view_car)
-	Audio.sfx("engine_start")
 	Nav.goto("drive", {}, "HITTING THE STREETS")
 
 

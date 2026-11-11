@@ -10,21 +10,21 @@ const CARS := {
 		"name": "KAIDO RS-7", "tag": "JAPANESE TUNER COUPE", "price": 0,
 		"blurb": "Twin-cam turbo four. Light, sharp and built to be modified.",
 		"hp": 276, "torque": 260, "top": 152, "accel": 5.6, "handling": 78, "weight": 1280,
-		"engine": "tuner", "cyl": "2.0L TURBO I4", "drive": "RWD",
+		"engine": "i4", "factory_turbo": 1, "cyl": "2.0L TURBO I4", "drive": "RWD",
 		"default_color": 1,
 	},
 	"muscle": {
 		"name": "BRAWLER 427", "tag": "AMERICAN MUSCLE", "price": 18500,
 		"blurb": "Seven litres of big-block thunder. Straight-line king.",
 		"hp": 390, "torque": 460, "top": 158, "accel": 5.1, "handling": 58, "weight": 1620,
-		"engine": "muscle", "cyl": "7.0L V8", "drive": "RWD",
+		"engine": "v8", "cyl": "7.0L V8", "drive": "RWD",
 		"default_color": 0,
 	},
 	"euro": {
 		"name": "VERANO GT", "tag": "EUROPEAN PERFORMANCE", "price": 32000,
 		"blurb": "Rear-engined flat six. Precision at any speed.",
 		"hp": 340, "torque": 310, "top": 171, "accel": 4.7, "handling": 88, "weight": 1390,
-		"engine": "euro", "cyl": "3.6L FLAT 6", "drive": "RWD",
+		"engine": "i6", "cyl": "3.6L FLAT 6", "drive": "RWD",
 		"default_color": 6,
 	},
 }
@@ -147,10 +147,11 @@ static func parts() -> Dictionary:
 			{"name": "Stage 2 Cams + Ported", "price": 5500, "hp": 62, "tq": 48, "top": 9, "acc": -0.5},
 			{"name": "Stage 3 Forged Build", "price": 9800, "hp": 110, "tq": 85, "top": 15, "acc": -0.85},
 		]},
-		"turbo": {"label": "TURBO", "cam": "front", "options": [
+		"turbo": {"label": "INDUCTION", "cam": "front", "options": [
 			{"name": "Stock", "price": 0},
 			{"name": "Street Turbo Kit", "price": 4200, "hp": 55, "tq": 60, "top": 6, "acc": -0.35},
 			{"name": "Big Single Turbo", "price": 8600, "hp": 120, "tq": 115, "top": 12, "acc": -0.6},
+			{"name": "Supercharger Kit", "price": 7400, "hp": 95, "tq": 105, "top": 9, "acc": -0.55},
 		]},
 		"exhaust": {"label": "EXHAUST", "cam": "rear", "options": [
 			{"name": "Stock", "price": 0},
@@ -205,6 +206,31 @@ static func stats(car_id: String, cfg: Dictionary) -> Dictionary:
 	s.accel = maxf(s.accel, 2.2)
 	s.handling = minf(s.handling, 100.0)
 	return s
+
+
+## What the audio engine needs to know about a car + config.
+## profile: EngineProfiles id; induction: na | turbo | sc; turbo: 0 none, 1 small, 2 big; exhaust: 0..2.
+static func audio_setup(car_id: String, cfg: Dictionary) -> Dictionary:
+	var b: Dictionary = CARS[car_id]
+	var profile: String = b.engine
+	var kit := int(cfg.get("turbo", 0))
+	var induction: String = b.get("induction", "na")
+	var size := int(b.get("factory_turbo", 0))
+	if size > 0:
+		induction = "turbo"
+	if kit == 3:
+		induction = "sc"
+		size = 0
+	elif kit > 0:
+		induction = "turbo"
+		size = maxi(size, kit)
+	# forced induction changes the voice of a V8 completely
+	if profile == "v8" and induction == "sc":
+		profile = "v8sc"
+	elif profile == "v8" and induction == "turbo":
+		profile = "v8tt"
+	return {"profile": profile, "induction": induction, "turbo": size,
+		"exhaust": int(cfg.get("exhaust", 0)), "stage": int(cfg.get("engine", 0))}
 
 
 static func money(v: int) -> String:

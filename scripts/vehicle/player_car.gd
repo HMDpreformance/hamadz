@@ -21,7 +21,13 @@ var vmax := 65.0
 var a0 := 9.0
 var grip_base := 9.0
 var wheelbase := 2.55
-var has_turbo := 0
+var has_turbo := 0            # 0 none, 1 small frame, 2 big single
+var induction := "na"        # na | turbo | sc
+var engine_profile := "i4"
+var exhaust_level := 0
+var load := 0.0              # engine load 0..1 (what the audio hears)
+var limiter := false         # bouncing off the rev limiter
+var engine_on := true
 
 # state
 var steer := 0.0
@@ -42,6 +48,7 @@ var _crash_cd := 0.0
 var _pitch := 0.0
 var _roll := 0.0
 var _yaw_rate := 0.0
+var _lim_phase := 0.0
 
 
 func setup(id: String, config: Dictionary) -> void:
@@ -52,9 +59,11 @@ func setup(id: String, config: Dictionary) -> void:
 	a0 = 26.8 / st.accel * 1.55
 	grip_base = lerpf(6.0, 12.5, st.handling / 100.0)
 	_grip = grip_base
-	has_turbo = int(cfg.get("turbo", 0))
-	if id == "tuner":
-		has_turbo = maxi(has_turbo, 1)   # the Kaido is turbocharged from the factory
+	var au := CarDB.audio_setup(id, cfg)
+	engine_profile = au.profile
+	induction = au.induction
+	has_turbo = au.turbo
+	exhaust_level = au.exhaust
 	visual = CarVisual.new()
 	add_child(visual)
 	visual.setup(id, cfg)
@@ -134,7 +143,11 @@ func _physics_process(dt: float) -> void:
 	_shift_cut = maxf(_shift_cut - dt, 0.0)
 	if throttle > 0.0 and _shift_cut <= 0.0:
 		if vf > -0.5:
-			acc += a0 * throttle * clampf(1.0 - pow(maxf(vf, 0.0) / top, 2.4), 0.0, 1.0)
+			# turbo cars make their power on boost: soft off boost, harder once it comes in
+			var pw := 1.0
+			if induction == "turbo":
+				pw = lerpf(0.86, 1.05, boost) if has_turbo < 2 else lerpf(0.72, 1.12, boost)
+			acc += a0 * pw * throttle * clampf(1.0 - pow(maxf(vf, 0.0) / top, 2.4), 0.0, 1.0)
 		else:
 			acc += 20.0 * throttle
 	if using_nitro:
@@ -147,7 +160,7 @@ func _physics_process(dt: float) -> void:
 			acc -= 8.0 * brk * clampf(1.0 + vf / 13.0, 0.0, 1.0)
 	var res := 0.3 + 0.0009 * vf * vf
 	if throttle < 0.05:
-		res += 1.4
+		res += 0.8 + 1.4 * rpm          # engine braking, stronger at high revs
 	if handbraking:
 		res += 7.0
 	if absf(vf) > 0.05:
@@ -210,7 +223,18 @@ func _physics_process(dt: float) -> void:
 	global_position.y = lerpf(global_position.y, gy, 1.0 - exp(-dt * 14.0))
 
 	_gearbox(dt)
-	boost = move_toward(boost, throttle * clampf(rpm * 1.6, 0.0, 1.0) if has_turbo > 0 else 0.0, dt * (1.6 if throttle > 0.1 else 3.5))
+	# boost: big turbos need revs before they wake up and spool slower
+	var bt := 0.0
+	if induction == "turbo":
+		var thr := 0.18 if has_turbo < 2 else 0.36
+		bt = throttle * clampf((rpm - thr) / 0.3, 0.0, 1.0)
+		if _shift_cut > 0.0:
+			bt = 0.0
+	boost = move_toward(boost, bt, dt * ((1.9 if has_turbo < 2 else 1.15) if bt > boost else 3.2))
+	var want_load := 1.0 if using_nitro else throttle
+	if _shift_cut > 0.0 or limiter and _lim_phase > 0.5:
+		want_load = 0.0
+	load = move_toward(load, want_load, dt * 14.0)
 
 
 func _gearbox(dt: float) -> void:
@@ -233,6 +257,11 @@ func _gearbox(dt: float) -> void:
 	var target := 0.14 + 0.86 * clampf((v - lo) / (hi - lo), 0.0, 1.0)
 	if v < 2.0:
 		target = maxf(target, 0.14 + throttle * 0.45)   # free revving at standstill
+	# rev limiter: flat out at the top of the last gear (or held past it on nitro)
+	limiter = throttle > 0.6 and gear == GEAR_TOPS.size() - 1 and target > 0.985
+	if limiter:
+		_lim_phase = fmod(_lim_phase + dt * 13.0, 1.0)
+		target = 1.0 - 0.05 * _lim_phase
 	rpm = lerpf(rpm, target, 1.0 - exp(-dt * 12.0))
 
 

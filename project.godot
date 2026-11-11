@@ -49,3 +49,9 @@ anti_aliasing/quality/msaa_3d=1
 lights_and_shadows/directional_shadow/size=2048
 lights_and_shadows/directional_shadow/size.mobile=2048
 environment/defaults/default_clear_color=Color(0, 0, 0, 1)
+
+[importer_defaults]
+
+wav={
+"compress/mode": 2
+}

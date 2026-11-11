@@ -5,6 +5,7 @@ extends Node3D
 var car: PlayerCar
 var _smoke: Array[GPUParticles3D] = []
 var _flames: Array[GPUParticles3D] = []
+var _bf := 0.0
 var _beam: SpotLight3D
 var _flare: MeshInstance3D
 
@@ -134,5 +135,11 @@ func _process(_dt: float) -> void:
 		or (absf(car.speed) < 4.0 and car.throttle > 0.9 and car.gear == 0 and car.rpm > 0.35)
 	for p in _smoke:
 		p.emitting = smoking
+	_bf = maxf(_bf - _dt, 0.0)
 	for f in _flames:
-		f.emitting = car.using_nitro
+		f.emitting = car.using_nitro or _bf > 0.0
+
+
+## Short flame burst from the tailpipes (backfire on a hard shift).
+func backfire() -> void:
+	_bf = 0.14

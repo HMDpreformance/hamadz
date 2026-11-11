@@ -8,6 +8,7 @@ func _ready() -> void:
 	var spec := OS.get_environment("AH_DEV")
 	if spec == "":
 		return
+	Game.no_save = true
 	_run.call_deferred(spec)
 
 
@@ -58,6 +59,26 @@ func _run(spec: String) -> void:
 					for sub in DirAccess.get_directories_at(d):
 						stack.append(d + "/" + sub)
 				print("checked ", cnt, " scripts")
+			"press":
+				Input.action_press(v)
+			"release":
+				Input.action_release(v)
+			"solo":
+				# engine/car audio only: no music, no ambience (for audio captures)
+				AudioServer.set_bus_mute(AudioServer.get_bus_index("Music"), true)
+				Audio.play_ambience("")
+				Audio.set_meta("solo", true)
+			"ride":
+				# ride=muscle,turbo:3,exhaust:2  -> test a car + parts without touching the save
+				Game.no_save = true
+				var bits := v.split(",")
+				Game._ensure_car(bits[0])
+				Game.data.current_car = bits[0]
+				if not Game.data.owned_cars.has(bits[0]):
+					Game.data.owned_cars.append(bits[0])
+				for i in range(1, bits.size()):
+					var sv := bits[i].split(":")
+					Game.data.configs[bits[0]][sv[0]] = int(sv[1])
 			"quit":
 				get_tree().quit()
 	get_tree().quit()

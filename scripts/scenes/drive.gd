@@ -68,9 +68,12 @@ func _ready() -> void:
 	engine_audio = EngineAudio.new()
 	car.add_child(engine_audio)
 	engine_audio.attach(car)
+	engine_audio.start_engine()
+	Audio.set_space("street")
 	fx = CarFX.new()
 	car.add_child(fx)
 	fx.attach(car)
+	engine_audio.backfire.connect(fx.backfire)
 	cam = ChaseCamera.new()
 	cam.target = car
 	cam.fov = 62.0
@@ -297,6 +300,8 @@ func _on_crash(force: float) -> void:
 
 func _toggle_cam() -> void:
 	cam.toggle()
+	engine_audio.set_view(["chase", "hood", "cabin"][cam.mode])
+	_show_banner(["CHASE CAM", "HOOD CAM", "COCKPIT CAM"][cam.mode], 1.0)
 	Audio.sfx("ui_move")
 
 
@@ -495,16 +500,14 @@ func _toggle_pause() -> void:
 	var p := not get_tree().paused
 	get_tree().paused = p
 	_pause_panel.visible = p
-	engine_audio.muted = p
+	engine_audio.hush(p)
 	if p:
 		Controls.release_all()
-		engine_audio._process(0.0)
 	Audio.sfx("ui_select" if p else "ui_back", -4.0)
 
 
 func _leave(dest: String) -> void:
-	engine_audio.muted = true
-	engine_audio._process(0.0)
+	engine_audio.hush(true)
 	get_tree().paused = false
 	Nav.goto(dest)
 
@@ -597,6 +600,10 @@ func dev_press(action: String, on := "1") -> void:
 		Input.action_press(action)
 	else:
 		Input.action_release(action)
+
+
+func dev_cam() -> void:
+	_toggle_cam()
 
 
 func dev_pause() -> void:

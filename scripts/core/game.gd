@@ -11,6 +11,7 @@ const SAVE_VERSION := 1
 const START_MONEY := 60000
 
 var data := {}
+var no_save := false     # dev/test runs never touch the real save
 
 
 func _ready() -> void:
@@ -70,6 +71,8 @@ func _ensure_car(id: String) -> void:
 
 
 func save_game() -> void:
+	if no_save:
+		return
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f:
 		f.store_string(JSON.stringify(data, "\t"))

@@ -823,6 +823,9 @@ func _part_turbo(sf: Surfs, idx: int) -> void:
 	## Front-mount intercooler visible through the lower intake.
 	if idx == 0:
 		return
+	if idx == 3:
+		_part_blower(sf)
+		return
 	var w := 0.5 if idx == 1 else 0.68
 	var zc := -_L * 0.5 - 0.006
 	var y := _bot(0.0) + 0.085
@@ -832,6 +835,18 @@ func _part_turbo(sf: Surfs, idx: int) -> void:
 		MeshKit.box(sf.get_st("grille"), Vector3(lerpf(-w * 0.46, w * 0.46, k / float(fins - 1)), y, zc - 0.011), Vector3(0.006, 0.09, 0.004))
 	for sgn in [1.0, -1.0]:
 		MeshKit.cylinder(sf.get_st("chrome"), Vector3((w * 0.5 + 0.03) * sgn, y, zc), Vector3.RIGHT, 0.035, 0.07, 10)
+
+
+func _part_blower(sf: Surfs) -> void:
+	## Roots blower standing through the hood: polished case, belt pulley and a scoop.
+	var z: float = float(spec.front_axle) + 0.1
+	var y := _top(_u(z)) - 0.01
+	MeshKit.box(sf.get_st("chrome"), Vector3(0, y + 0.06, z), Vector3(0.3, 0.12, 0.42))
+	for k in 6:
+		MeshKit.box(sf.get_st("trim"), Vector3(0, y + 0.06, z - 0.18 + k * 0.072), Vector3(0.31, 0.1, 0.012))
+	MeshKit.cylinder(sf.get_st("trim"), Vector3(0, y + 0.06, z - 0.25), Vector3.BACK, 0.07, 0.05, 14)
+	MeshKit.box(sf.get_st("chrome"), Vector3(0, y + 0.16, z + 0.02), Vector3(0.26, 0.08, 0.3))
+	MeshKit.box(sf.get_st("grille"), Vector3(0, y + 0.165, z - 0.132), Vector3(0.22, 0.05, 0.004))
 
 
 func _part_badge(idx: int) -> void:

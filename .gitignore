@@ -1,0 +1,6 @@
+.godot/
+build/*.apk
+build/*.idsig
+*.keystore
+__pycache__/
+/shots/

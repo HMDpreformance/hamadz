@@ -12,7 +12,7 @@ static func studio_sky(accent_a := Color(1.0, 0.6, 0.15), accent_b := Color(0.1,
 		return _cache[key]
 	var w := 256
 	var h := 128
-	var img := Image.create(w, h, false, Image.FORMAT_RGBF)
+	var img := Image.create(w, h, false, Image.FORMAT_RGBAH)
 	for y in h:
 		var v := float(y) / h           # 0 = zenith, 1 = nadir
 		for x in w:
@@ -47,7 +47,7 @@ static func city_sky() -> ImageTexture:
 		return _cache["city"]
 	var w := 320
 	var h := 160
-	var img := Image.create(w, h, false, Image.FORMAT_RGBF)
+	var img := Image.create(w, h, false, Image.FORMAT_RGBAH)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 11
 	var skyline := []

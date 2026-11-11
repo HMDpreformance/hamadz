@@ -1,0 +1,8 @@
+Copyright (c) 2026 Hamad (HMDpreformance). All rights reserved.
+
+The source code, procedural asset definitions and generated audio in this
+repository were created for this project and belong to the project owner.
+
+Third-party components keep their own licences:
+- fonts/russoone_* and fonts/rajdhani_*: SIL Open Font License 1.1 (see the OFL files next to them)
+- Godot Engine (not included in this repository): MIT licence, https://godotengine.org/license

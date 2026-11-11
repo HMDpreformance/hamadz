@@ -390,7 +390,7 @@ func _build_hud() -> void:
 	# --- gauge
 	_gauge = _Gauge.new()
 	_gauge.car = car
-	UI.place(_gauge, Vector2(0, 1), Vector2(304, -204), Vector2(240, 200))
+	UI.place(_gauge, Vector2(0, 1), Vector2(304, -228), Vector2(240, 200))
 	_hud.add_child(_gauge)
 
 	_banner = UI.label("", 84, Color.WHITE, true)
@@ -606,3 +606,18 @@ func dev_pause() -> void:
 func dev_finish() -> void:
 	run_time = 44.0
 	_finish()
+
+
+func dev_log(tag := "") -> void:
+	print("SIM %s t=%.2f mph=%.1f gear=%d rpm=%.2f slip=%.1f yaw=%.0f pos=(%.0f,%.0f) nitro=%.2f state=%s cp=%d" % [tag, run_time, car.speed_mph(), car.gear + 1, car.rpm, car.slip, rad_to_deg(car.rotation.y), car.global_position.x, car.global_position.z, car.nitro, state, cp_index])
+
+
+func dev_traffic() -> void:
+	var worst := 0.0
+	for t in _traffic:
+		var c: Vector3 = t.global_position
+		# distance from the lane square around its block
+		var bc := Vector3(round(c.x / City.PITCH) * City.PITCH, 0, round(c.z / City.PITCH) * City.PITCH)
+		var d := absf(maxf(absf(c.x - bc.x), absf(c.z - bc.z)) - (City.PITCH * 0.5 - 5.6))
+		worst = maxf(worst, d)
+	print("TRAFFIC max lane error %.2f m" % worst)

@@ -202,15 +202,6 @@ func add_building(pos: Vector3, size: Vector3) -> void:
 	mi.material_override = _building_material()
 	mi.position = pos + Vector3(0, size.y * 0.5, 0)
 	add_child(mi)
-	if with_colliders:
-		var sb := StaticBody3D.new()
-		var cs := CollisionShape3D.new()
-		var bs := BoxShape3D.new()
-		bs.size = size
-		cs.shape = bs
-		sb.add_child(cs)
-		sb.position = mi.position
-		add_child(sb)
 	# rooftop: parapet glow + beacon on tall towers
 	if size.y > 38.0:
 		EnvKit.box(self, Vector3(0.6, 3.0, 0.6), pos + Vector3(0, size.y + 1.5, 0), EnvKit.solid(Color(0.05, 0.05, 0.05)))
@@ -279,6 +270,16 @@ func _fill_block(cx: float, cz: float, bi: int, bj: int) -> void:
 	var central := 1.0 - (absf(bi - (blocks - 1) * 0.5) + absf(bj - (blocks - 1) * 0.5)) / maxf(blocks, 1.0)
 	var pattern := _rng.randi() % 4
 	var rects := []
+	if with_colliders:
+		# one solid collider per block (no alley pockets for the car to wedge into)
+		var sb := StaticBody3D.new()
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = Vector3(lot, 14.0, lot)
+		cs.shape = bs
+		sb.add_child(cs)
+		sb.position = Vector3(cx, 7.0, cz)
+		add_child(sb)
 	match pattern:
 		0:  # four towers with alleys
 			var s := lot * 0.5 - 2.5

@@ -108,8 +108,8 @@ func _physics_process(dt: float) -> void:
 	# cap by lateral g so high-speed steering stays stable; the handbrake lifts the cap
 	var lat_cap := (14.0 + grip_base) / maxf(absf(speed), 4.0)
 	if handbraking and absf(speed) > 6.0:
-		_yaw_rate *= 1.4
-		lat_cap *= 1.55
+		_yaw_rate *= 1.3
+		lat_cap *= 1.4
 	elif absf(slip) > 4.0:
 		lat_cap *= 1.25
 	_yaw_rate = clampf(_yaw_rate, -lat_cap, lat_cap)
@@ -192,8 +192,18 @@ func _physics_process(dt: float) -> void:
 				_crash_cd = 0.4
 				crashed.emit(impact)
 		velocity *= 0.992
+		# glance off walls: swing the nose along the surface instead of sticking to it
+		var into := fwd.dot(n)
+		if into < -0.05 and absf(speed) > 1.0:
+			var tangent := fwd - n * into
+			if tangent.length_squared() > 0.0004:
+				tangent = tangent.normalized()
+				var turn := fwd.signed_angle_to(tangent, Vector3.UP)
+				rotate_y(clampf(turn, -1.0, 1.0) * minf(dt * (5.0 + absf(speed) * 0.15), 1.0))
+			else:
+				velocity += n * 2.0
 	velocity.y = 0.0
-	speed = velocity.dot(fwd)
+	speed = velocity.dot(forward())
 	var gy := 0.0
 	if ground_fn.is_valid():
 		gy = ground_fn.call(global_position)

@@ -101,7 +101,8 @@ func _ready() -> void:
 	var c := Vector3(City.PITCH * 0.5, 0, City.PITCH * 0.5)
 	_traffic = TrafficCar.new()
 	add_child(_traffic)
-	_traffic.setup("muscle" if Game.current_car() != "muscle" else "euro", 11, PackedVector3Array([c + Vector3(-h, 0, h), c + Vector3(-h, 0, -h), c + Vector3(h, 0, -h), c + Vector3(h, 0, h)]), 1, 0.3)
+	_traffic.setup("muscle" if Game.current_car() != "muscle" else "euro", 11)
+	_traffic.run_loop(PackedVector3Array([c + Vector3(-h, 0, h), c + Vector3(-h, 0, -h), c + Vector3(h, 0, -h), c + Vector3(h, 0, h)]), 1)
 	cam = Camera3D.new()
 	cam.fov = 38.0
 	cam.far = 500.0

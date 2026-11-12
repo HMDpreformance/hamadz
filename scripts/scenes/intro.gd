@@ -39,7 +39,7 @@ func _ready() -> void:
 	cam.fov = 45.0
 	add_child(cam)
 	_build_ui()
-	Audio.play_music("", 0.2)
+	Audio.music_state("", 0.2)
 	# draw the logo first, then build the 3D set behind it
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -183,7 +183,7 @@ func _enter_cine() -> void:
 	_fade.color.a = 1.0
 	for b in _bars:
 		b.visible = true
-	Audio.play_music("intro", 0.3, -3.0)
+	Audio.music_state("intro", 0.3)
 	_begin_shot(0)
 
 

@@ -533,9 +533,6 @@ def city_amb():
 
 if __name__ == "__main__":
     A = -3  # semitone offset helpers: key roots as midi
-    beat_track("music_menu", 90, 8, 57, [0, 0, -4, -2, 0, 0, -4, -5], "menu")       # A minor
-    beat_track("music_intro", 140, 16, 54, [0, 0, 3, -2, 0, 0, -4, -2], "intro")    # F# minor, half-time trap
-    beat_track("music_drive", 128, 8, 52, [0, 0, 3, -2, 0, 0, -4, -5], "drive")     # E minor
     engine_loop("eng_tuner_on", 4, 4200, "i4", 1.0)
     engine_loop("eng_tuner_off", 4, 4200, "i4", 0.35)
     engine_loop("eng_muscle_on", 8, 3000, "v8", 0.9)

@@ -18,6 +18,9 @@ var _events := {}              # id -> {ev, pos, yaw, node}
 var _near_event := ""
 var _card: Control
 var _pos_label: Label
+var _radio_toast: Label
+var _radio_btn: NeonButton
+var _toast_tw: Tween
 var _fade: ColorRect
 var _bars: Array = []
 var _cine: Camera3D
@@ -106,7 +109,7 @@ func _ready() -> void:
 	_make_event_markers()
 	_set_state("roam")
 	Audio.play_ambience("city", -10.0)
-	Audio.play_music("drive", 1.5, -11.0)
+	Audio.music_state("roam", 1.5)
 	GFX.changed.connect(func(): GFX.apply_environment(env))
 
 
@@ -313,14 +316,33 @@ func _start_event(id: String) -> void:
 	race.run_countdown()
 
 
+func _on_track_changed(title: String, artist: String) -> void:
+	if not is_instance_valid(_radio_toast) or title == "":
+		return
+	_radio_toast.text = "%s\n%s  •  %s" % [Soundtrack.STATION, title.to_upper(), artist.to_upper()]
+	if _toast_tw:
+		_toast_tw.kill()
+	_toast_tw = create_tween()
+	_toast_tw.tween_property(_radio_toast, "modulate:a", 1.0, 0.3)
+	_toast_tw.tween_interval(4.5)
+	_toast_tw.tween_property(_radio_toast, "modulate:a", 0.0, 0.8)
+
+
 func _on_countdown(n: int) -> void:
-	Audio.sfx("beep_lo")
+	Audio.sfx("beep_lo", -4.0 if Audio.voice("count_%d" % n, 2.0) else 0.0)
+	if n == 3:
+		# the music sinks under the countdown and comes back on GO
+		Audio.music_filter(650.0)
+		Audio.duck_music(-7.0, 0.5)
 	_show_banner(str(n), 0.45)
 
 
 func _on_go() -> void:
 	_set_state("race")
-	Audio.sfx("beep_hi")
+	Audio.sfx("beep_hi", -4.0 if Audio.voice("go", 3.0) else 0.0)
+	Audio.music_state("race", 0.3)
+	Audio.music_filter(20000.0)
+	Audio.duck_music(0.0, 0.25)
 	_show_banner("GO!", 0.9)
 	_place_marker(race.next_checkpoint(), "1" if race.cps.size() > 1 else "FINISH", UI.CYAN)
 
@@ -339,6 +361,8 @@ func _on_lap(lap: int, laps: int) -> void:
 
 func _on_race_finished(res: Dictionary) -> void:
 	_set_state("done")
+	Audio.sting(res.place == 1 or (res.medal != "" and res.place <= 3))
+	Audio.voice("win" if res.place == 1 else ("podium" if res.place <= 3 else "lose"), 2.0)
 	_pos_label.text = ""
 	(_info.get_parent() as Control).visible = false
 	Audio.sfx("finish")
@@ -373,6 +397,9 @@ func _end_race(to_roam := true) -> void:
 	cam.make_current()
 	_hud_driving(true)
 	_near_event = "?"          # so the card for the event you are parked on shows again
+	Audio.music_state("roam", 1.0)
+	Audio.music_filter(20000.0)
+	Audio.duck_music(0.0, 1.0)
 	if to_roam:
 		_set_state("roam")
 
@@ -619,6 +646,25 @@ func _build_hud() -> void:
 	ck.position = Vector2(92, 16)
 	ck.tapped.connect(_toggle_cam)
 	_hud.add_child(ck)
+	var rk := TouchKey.make("", "RADIO", UI.MAGENTA, Vector2(104, 64))
+	rk.toggle_only = true
+	rk.round_shape = false
+	rk.position = Vector2(184, 16)
+	rk.tapped.connect(func():
+		if Audio.radio_on():
+			Audio.radio_next()
+		else:
+			Audio.radio_set(true))
+	_hud.add_child(rk)
+	_drive_ui.append(rk)
+	# "now playing" toast under the position readout
+	_radio_toast = UI.label("", 17, Color.WHITE)
+	UI.outline(_radio_toast, 6)
+	_radio_toast.position = Vector2(24, 152)
+	_radio_toast.size = Vector2(520, 48)
+	_radio_toast.modulate.a = 0.0
+	_hud.add_child(_radio_toast)
+	Audio.track_changed.connect(_on_track_changed)
 
 	# --- top right: checkpoint arrow
 	_arrow = _Arrow.new()
@@ -789,9 +835,15 @@ func _build_pause(layer: CanvasLayer) -> void:
 			_toggle_pause()
 			if race:
 				_end_race()],
+		["RADIO: ON", func():
+			Audio.radio_set(not Audio.radio_on())
+			_radio_btn.set_caption("RADIO: ON" if Audio.radio_on() else "RADIO: OFF"), UI.MAGENTA],
 		["BACK TO GARAGE", func(): _leave("garage"), UI.CYAN],
 		["MAIN MENU", func(): _leave("menu")],
-	], 190.0)
+	], 170.0)
+	for c in _pause_panel.get_children():
+		if c is NeonButton and (c as NeonButton).caption.begins_with("RADIO"):
+			_radio_btn = c
 	var hint := UI.label("KEYBOARD: WASD / ARROWS  •  SPACE HANDBRAKE  •  SHIFT NITRO  •  C CAMERA  •  ENTER START RACE", 16, UI.DIM)
 	UI.place(hint, Vector2(0.5, 1), Vector2(-500, -50), Vector2(1000, 24))
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -863,8 +915,10 @@ func _toggle_pause() -> void:
 	get_tree().paused = p
 	_pause_panel.visible = p
 	engine_audio.hush(p)
+	Audio.music_filter(900.0 if p else 20000.0)      # the radio keeps playing, muffled, behind the menu
 	if p:
 		Controls.release_all()
+		_radio_btn.set_caption("RADIO: ON" if Audio.radio_on() else "RADIO: OFF")
 	Audio.sfx("ui_select" if p else "ui_back", -4.0)
 
 

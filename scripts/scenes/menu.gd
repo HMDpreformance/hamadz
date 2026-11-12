@@ -109,7 +109,7 @@ func _ready() -> void:
 	add_child(cam)
 	_build_ui()
 	_next_shot()
-	Audio.play_music("menu", 1.2, -5.0)
+	Audio.music_state("menu")
 	Audio.play_ambience("city", -14.0)
 	GFX.changed.connect(func(): GFX.apply_environment(env))
 
@@ -216,7 +216,7 @@ func _build_ui() -> void:
 	var l3 := UI.label("CASH  " + CarDB.money(Game.money()), 20, UI.AMBER)
 	l3.position = Vector2(30, 62)
 	info.add_child(l3)
-	var ver := UI.label("BUILD 0.5  •  VERTICAL SLICE", 14, Color(1, 1, 1, 0.4))
+	var ver := UI.label("BUILD 0.6  •  VERTICAL SLICE", 14, Color(1, 1, 1, 0.4))
 	UI.place(ver, Vector2(0, 1), Vector2(48, -30), Vector2(400, 20))
 	_menu_root.add_child(ver)
 

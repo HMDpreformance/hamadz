@@ -67,7 +67,10 @@ func setup(w: OpenWorld, event: Dictionary, p: PlayerCar, traffic: Traffic, hold
 	var level := int(ev.level)
 	var names := EventDB.RIVALS.duplicate()
 	for k in n_opp:
-		var id: String = CarDB.CAR_ORDER[rng.randi() % CarDB.CAR_ORDER.size()]
+		# the field gets more exotic as the events get harder
+		var pool: Array = [["tuner", "classic", "muscle", "sedan"], ["tuner", "muscle", "sedan", "rotary", "euro"],
+			["muscle", "sedan", "rotary", "euro", "suv"], ["rotary", "euro", "suv", "exotic", "muscle"]][clampi(level, 0, 3)]
+		var id: String = pool[rng.randi() % pool.size()]
 		var cfg := CarDB.default_config(id)
 		cfg["paint"] = rng.randi() % CarDB.PAINTS.size()
 		cfg["finish"] = rng.randi() % 3
@@ -75,6 +78,11 @@ func setup(w: OpenWorld, event: Dictionary, p: PlayerCar, traffic: Traffic, hold
 		cfg["spoiler"] = rng.randi() % 4
 		cfg["front"] = rng.randi() % 3
 		cfg["glow"] = rng.randi() % CarDB.UNDERGLOW.size()
+		cfg["vinyl"] = rng.randi() % 6 if rng.randf() < 0.6 else 0
+		cfg["vinyl_color"] = rng.randi() % CarDB.VINYL_COLORS.size()
+		cfg["tint"] = rng.randi() % 5
+		cfg["ride"] = rng.randi() % 3
+		cfg["widebody"] = (1 + rng.randi() % 2) if (level >= 2 and rng.randf() < 0.5) else 0
 		# rivals get faster parts as the events get harder
 		cfg["engine"] = clampi(level + (1 if diff == 2 else 0) - (1 if diff == 0 else 0), 0, 3)
 		cfg["exhaust"] = clampi(level, 0, 2)

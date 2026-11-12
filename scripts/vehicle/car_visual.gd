@@ -8,6 +8,10 @@ extends Node3D
 const J := 13
 const DROP := [0.0, 0.028, 0.05, 0.085]            # suspension option -> ride height drop
 const PATCH_OFF := 0.006
+const RIDE := [0.0, 0.025, 0.05, -0.04]              # ride height option -> extra drop
+const WIDE := [0.0, 0.045, 0.085]                  # widebody option -> extra half width at the arches
+const CAMBER := [0.0, 3.0, 6.0, 12.0]              # degrees of negative camber
+const TIRE_W := [0.0, 0.01, 0.035, 0.0]            # tyre option -> extra width (drag radials widen the rear only)
 
 static var _shell_cache := {}
 static var _shared_mats := {}
@@ -27,6 +31,8 @@ var _L := 4.4
 var _lights_on := true
 var _glow_light: OmniLight3D
 var _shadow: MeshInstance3D
+var _head_e := 2.2
+var _tail_e := 1.4
 
 
 # ====================================================================== public
@@ -83,23 +89,93 @@ func apply(config: Dictionary, force := false) -> void:
 		return
 	if changed.has("paint") or changed.has("finish"):
 		_update_paint()
-	if changed.has("rims") or changed.has("rim_color") or changed.has("wheel_size"):
-		_build_wheels()
-	if changed.has("wheel_size") or changed.has("suspension"):
+	for k in ["rims", "rim_color", "wheel_size", "tires", "camber", "widebody"]:
+		if changed.has(k):
+			_build_wheels()
+			break
+	if changed.has("wheel_size") or changed.has("suspension") or changed.has("ride"):
 		_update_ride()
-	for slot in ["front", "rear", "spoiler", "skirts", "hood", "exhaust", "glow", "turbo", "engine"]:
+	if changed.has("headlights") or changed.has("taillights") or changed.has("tint"):
+		_update_lights()
+	if changed.has("vinyl_color") and not changed.has("vinyl"):
+		changed.append("vinyl")
+	for slot in ["front", "rear", "spoiler", "skirts", "hood", "exhaust", "glow", "turbo", "engine", "vinyl", "decal", "widebody"]:
 		if changed.has(slot):
 			_rebuild_slot(slot)
 
 
 func set_lights(on: bool) -> void:
 	_lights_on = on
-	mats["head"].emission_energy_multiplier = 2.2 if on else 0.15
-	mats["tail"].emission_energy_multiplier = 1.4 if on else 0.2
+	mats["head"].emission_energy_multiplier = _head_e if on else 0.15
+	mats["tail"].emission_energy_multiplier = _tail_e if on else 0.2
 
 
 func set_brake(on: bool) -> void:
-	mats["tail"].emission_energy_multiplier = 4.5 if on else (1.4 if _lights_on else 0.2)
+	mats["tail"].emission_energy_multiplier = _tail_e * 3.2 if on else (_tail_e if _lights_on else 0.2)
+
+
+## Colour of the light the headlamps throw (used by the beam on the road).
+func head_color() -> Color:
+	return mats["head"].emission
+
+
+func _update_lights() -> void:
+	var head: StandardMaterial3D = mats["head"]
+	var tail: StandardMaterial3D = mats["tail"]
+	var glass: StandardMaterial3D = mats["glass"]
+	match int(cfg.get("headlights", 0)):
+		1:
+			head.albedo_color = Color(0.8, 0.9, 1.0)
+			head.emission = Color(0.55, 0.75, 1.0)
+			_head_e = 3.2
+		2:
+			head.albedo_color = Color(1.0, 0.8, 0.3)
+			head.emission = Color(1.0, 0.62, 0.12)
+			_head_e = 2.4
+		3:
+			head.albedo_color = Color(0.25, 0.26, 0.3)
+			head.emission = Color(0.8, 0.86, 1.0)
+			_head_e = 1.1
+		_:
+			head.albedo_color = Color(0.9, 0.92, 1.0)
+			head.emission = Color(0.85, 0.92, 1.0)
+			_head_e = 2.2
+	match int(cfg.get("taillights", 0)):
+		1:
+			tail.albedo_color = Color(0.12, 0.0, 0.0)
+			tail.emission = Color(0.8, 0.02, 0.02)
+			_tail_e = 0.6
+		2:
+			tail.albedo_color = Color(0.8, 0.8, 0.82)
+			tail.emission = Color(1.0, 0.12, 0.08)
+			_tail_e = 1.0
+		3:
+			tail.albedo_color = Color(0.6, 0.0, 0.0)
+			tail.emission = Color(1.0, 0.02, 0.04)
+			_tail_e = 2.6
+		_:
+			tail.albedo_color = Color(0.5, 0.0, 0.0)
+			tail.emission = Color(1.0, 0.03, 0.02)
+			_tail_e = 1.4
+	glass.metallic = 0.9
+	glass.roughness = 0.04
+	match int(cfg.get("tint", 0)):
+		1:
+			glass.albedo_color = Color(0.008, 0.01, 0.014)
+		2:
+			glass.albedo_color = Color(0.0, 0.0, 0.0)
+			glass.metallic = 0.6
+			glass.roughness = 0.12
+		3:
+			glass.albedo_color = Color(0.03, 0.14, 0.3)
+			glass.metallic = 1.0
+		4:
+			glass.albedo_color = Color(0.55, 0.38, 0.08)
+			glass.metallic = 1.0
+			glass.roughness = 0.02
+		_:
+			glass.albedo_color = Color(0.015, 0.02, 0.03)
+	set_lights(_lights_on)
 
 
 func spin_wheels(angle: float) -> void:
@@ -119,6 +195,10 @@ func set_body_tilt(pitch: float, roll: float) -> void:
 
 func length() -> float:
 	return _L
+
+
+func height() -> float:
+	return _top(0.5) + (body.position.y if body else 0.0)
 
 
 func half_width() -> float:
@@ -242,8 +322,13 @@ func _make_materials() -> void:
 	tail.emission = Color(1.0, 0.03, 0.02)
 	tail.emission_energy_multiplier = 1.4
 	mats["tail"] = tail
-	for id in ["glass", "trim", "grille", "chrome", "signal", "plate", "carbon", "titanium", "intercooler"]:
+	for id in ["trim", "grille", "chrome", "signal", "plate", "carbon", "titanium", "intercooler"]:
 		mats[id] = shared_mat(id)
+	mats["glass"] = shared_mat("glass").duplicate()      # tint is per car
+	var vinyl := StandardMaterial3D.new()
+	vinyl.roughness = 0.35
+	vinyl.metallic = 0.1
+	mats["vinyl"] = vinyl
 
 
 func _update_paint() -> void:
@@ -314,7 +399,7 @@ func _arch(z: float, bot: float) -> Vector2:
 	var lip := bot
 	var flare := 0.0
 	var rh: float = spec.arch
-	var apex := 2.0 * CarSpecs.R0 + 0.06
+	var apex := 2.0 * _spec_r() + 0.06
 	for az in [spec.front_axle, spec.rear_axle]:
 		var d := absf(z - az)
 		if d < rh:
@@ -573,23 +658,37 @@ func _build_wheels() -> void:
 		c.queue_free()
 	wheels.clear()
 	var size_idx := clampi(int(cfg.wheel_size), 0, 3)
-	wheel_radius = WheelFactory.radius(size_idx)
-	var tw: float = spec.tire_w
+	var ws: float = spec.get("wheel_scale", 1.0)
+	wheel_radius = WheelFactory.radius(size_idx) * ws
+	var tire := clampi(int(cfg.get("tires", 0)), 0, 3)
+	var wide: float = WIDE[clampi(int(cfg.get("widebody", 0)), 0, 2)]
+	var camber := deg_to_rad(CAMBER[clampi(int(cfg.get("camber", 0)), 0, 3)])
 	for front in [true, false]:
+		var tw: float = spec.tire_w / ws + TIRE_W[tire]
+		if tire == 3 and not front:
+			tw += 0.06
+		if not front:
+			tw += wide * 0.5              # a widebody is there to fit more rubber
 		var z: float = spec.front_axle if front else spec.rear_axle
 		var u := _u(z)
-		var x := _hw(u) + 0.022 - tw * 0.5 - 0.012
+		var x := _hw(u) + 0.022 + wide - tw * ws * 0.5 - 0.012
 		for left in [false, true]:
 			var w := WheelFactory.build(int(cfg.rims), int(cfg.rim_color), size_idx, tw, left)
 			w.pivot.position = Vector3(-x if left else x, wheel_radius, z)
+			w.pivot.scale = Vector3.ONE * ws
+			(w.spin.get_parent() as Node3D).rotation.z = camber
 			w["front"] = front
 			_wheel_root.add_child(w.pivot)
 			wheels.append(w)
 
 
+func _spec_r() -> float:
+	return CarSpecs.R0 * float(spec.get("wheel_scale", 1.0))
+
+
 func _update_ride() -> void:
-	var drop: float = DROP[clampi(int(cfg.suspension), 0, 3)]
-	body.position.y = (wheel_radius - CarSpecs.R0) - drop
+	var drop: float = DROP[clampi(int(cfg.suspension), 0, 3)] + RIDE[clampi(int(cfg.get("ride", 0)), 0, 3)]
+	body.position.y = (wheel_radius - _spec_r()) - drop
 
 
 func ride_offset() -> float:
@@ -611,6 +710,11 @@ func _rebuild_slot(slot: String) -> void:
 		"hood": _part_hood(sf, idx)
 		"exhaust": _part_exhaust(sf, idx)
 		"turbo": _part_turbo(sf, idx)
+		"vinyl": _part_vinyl(sf, idx)
+		"widebody": _part_widebody(sf, idx)
+		"decal":
+			_part_decal(idx)
+			return
 		"glow":
 			_part_glow(idx)
 			return
@@ -847,6 +951,159 @@ func _part_blower(sf: Surfs) -> void:
 	MeshKit.cylinder(sf.get_st("trim"), Vector3(0, y + 0.06, z - 0.25), Vector3.BACK, 0.07, 0.05, 14)
 	MeshKit.box(sf.get_st("chrome"), Vector3(0, y + 0.16, z + 0.02), Vector3(0.26, 0.08, 0.3))
 	MeshKit.box(sf.get_st("grille"), Vector3(0, y + 0.165, z - 0.132), Vector3(0.22, 0.05, 0.004))
+
+
+## A band of the body surface between two (fractional) ring positions, lifted
+## slightly off the paint. Used for vinyls so they follow every curve.
+func _band(st: SurfaceTool, gd: Dictionary, i: int, ja: float, jb: float, off: float) -> void:
+	var pts := []
+	var nrm := []
+	for ii in [i, i + 1]:
+		for jf: float in [ja, jb]:
+			var j0 := clampi(int(floor(jf)), 0, J - 2)
+			var f := jf - j0
+			var nn: Vector3 = (gd.n[ii][j0] as Vector3).lerp(gd.n[ii][j0 + 1], f).normalized()
+			pts.append((gd.g[ii][j0] as Vector3).lerp(gd.g[ii][j0 + 1], f) + nn * off)
+			nrm.append(nn)
+	MeshKit.quad(st, pts[0], pts[2], pts[3], pts[1], nrm[0], nrm[2], nrm[3], nrm[1])
+	MeshKit.quad(st, _mx(pts[0]), _mx(pts[2]), _mx(pts[3]), _mx(pts[1]), _mx(nrm[0]), _mx(nrm[2]), _mx(nrm[3]), _mx(nrm[1]))
+
+
+func _part_vinyl(sf: Surfs, idx: int) -> void:
+	if idx == 0:
+		return
+	var vc: Color = CarDB.VINYL_COLORS[clampi(int(cfg.get("vinyl_color", 0)), 0, CarDB.VINYL_COLORS.size() - 1)].c
+	(mats["vinyl"] as StandardMaterial3D).albedo_color = vc
+	var gd: Dictionary = _shell(car_id).grid
+	var us: Array = gd.us
+	var st := sf.get_st("vinyl")
+	var off := 0.0035
+	for i in us.size() - 1:
+		var um: float = (us[i] + us[i + 1]) * 0.5
+		var glass_top := _in(spec.ws, um) or _in(spec.rw, um)
+		match idx:
+			1:      # twin rally stripes over hood, roof and tail
+				if not glass_top and um > 0.004 and um < 0.996:
+					_band(st, gd, i, 10.25, 11.0, off)
+			2:      # single centre stripe with pinstripes
+				if not glass_top and um > 0.004 and um < 0.996:
+					_band(st, gd, i, 11.25, 12.0, off)
+					_band(st, gd, i, 10.9, 11.05, off)
+			3:      # rocker stripes along the doors
+				if um > 0.06 and um < 0.94:
+					_band(st, gd, i, 4.15, 4.75, off)
+					_band(st, gd, i, 4.95, 5.08, off)
+			4:      # two-tone: everything below the body line
+				_band(st, gd, i, 3.0, 4.0, off)
+				_band(st, gd, i, 4.0, 5.0, off)
+				_band(st, gd, i, 5.0, 5.55, off)
+			5:      # blackout hood
+				if _in(spec.hood, um):
+					for j in range(8, 12):
+						_band(st, gd, i, float(j), float(j + 1), off)
+
+
+func _part_widebody(sf: Surfs, idx: int) -> void:
+	## Flared arches lofted off the body's own rings, so they follow each car's shape.
+	if idx == 0:
+		return
+	var wide: float = WIDE[idx]
+	var gd: Dictionary = _shell(car_id).grid
+	var us: Array = gd.us
+	var st := sf.get_st("paint")
+	var span := float(spec.arch) + (0.2 if idx == 1 else 0.34)
+	var wts := [1.0, 1.0, 1.0, 0.72, 0.0]         # ring points 3..7: full flare at the lip, blending into the shoulder
+	for az in [spec.front_axle, spec.rear_axle]:
+		var prev := []
+		var prev_n := []
+		var prev_base := Vector3.ZERO
+		for i in us.size():
+			var z := _z(us[i])
+			var d := absf(z - az)
+			if d > span:
+				prev = []
+				continue
+			var b := 1.0 - pow(d / span, 2.0)
+			var e := wide * b * (2.0 - b)
+			var cur := []
+			var cur_n := []
+			for k in 5:
+				var p: Vector3 = gd.g[i][3 + k]
+				cur.append(p + Vector3(e * wts[k], 0.0, 0.0))
+				cur_n.append(gd.n[i][3 + k])
+			var base: Vector3 = gd.g[i][3]
+			if not prev.is_empty():
+				for k in 4:
+					MeshKit.quad(st, prev[k], cur[k], cur[k + 1], prev[k + 1], prev_n[k], cur_n[k], cur_n[k + 1], prev_n[k + 1])
+					MeshKit.quad(st, _mx(prev[k]), _mx(cur[k]), _mx(cur[k + 1]), _mx(prev[k + 1]), _mx(prev_n[k]), _mx(cur_n[k]), _mx(cur_n[k + 1]), _mx(prev_n[k + 1]))
+				# underside of the flare closes onto the original arch lip
+				MeshKit.quad(st, prev_base, base, cur[0], prev[0], Vector3.DOWN, Vector3.DOWN, Vector3.DOWN, Vector3.DOWN)
+				MeshKit.quad(st, _mx(prev_base), _mx(base), _mx(cur[0]), _mx(prev[0]), Vector3.DOWN, Vector3.DOWN, Vector3.DOWN, Vector3.DOWN)
+			prev = cur
+			prev_n = cur_n
+			prev_base = base
+	if idx == 2:
+		# riveted look: exposed fasteners along each flare
+		for az in [spec.front_axle, spec.rear_axle]:
+			for k in 7:
+				var z: float = az + lerpf(-0.42, 0.42, k / 6.0)
+				var u := _u(z)
+				var ar := _arch(z, _bot(u))
+				for sgn in [1.0, -1.0]:
+					MeshKit.cylinder(sf.get_st("chrome"), Vector3((_hw(u) + wide * 0.86) * sgn, minf(ar.x, _belt(u) - 0.03) + 0.13, z), Vector3(sgn, 0, 0), 0.011, 0.012, 6)
+
+
+func _part_decal(idx: int) -> void:
+	if idx == 0:
+		return
+	var root := Node3D.new()
+	root.name = "Decal"
+	body.add_child(root)
+	_slots["decal"] = root
+	var um: float = (float(spec.seams[0]) + float(spec.seams[1])) * 0.5
+	var z := _z(um)
+	var y := lerpf(_bot(um), _belt(um), 0.55)
+	var lines := []                # [text, size, colour, dy]
+	match idx:
+		1:
+			lines = [["77", 190, Color(0.96, 0.96, 0.93), 0.0]]
+		2:
+			lines = [["SYNDICATE", 80, Color(1.0, 0.72, 0.05), 0.05], ["STREET CREW", 40, Color(0.92, 0.92, 0.92), -0.07]]
+		3:
+			lines = [["REDLINE", 58, Color(1.0, 0.2, 0.12), 0.13], ["KANJI WHEELS", 44, Color(0.95, 0.95, 0.95), 0.03],
+				["VOLT N2O", 44, Color(0.2, 0.85, 1.0), -0.06], ["APEX OILS", 40, Color(1.0, 0.8, 0.1), -0.14]]
+	for sgn in [1.0, -1.0]:
+		for ln in lines:
+			var l := Label3D.new()
+			l.text = ln[0]
+			l.font = UI.title_font()
+			l.font_size = ln[1]
+			l.pixel_size = 0.0016
+			l.modulate = ln[2]
+			l.outline_size = 12
+			l.outline_modulate = Color(0.02, 0.02, 0.02)
+			l.shaded = false
+			l.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+			l.position = Vector3(sgn * (_hw(um) + 0.012), y + float(ln[3]), z)
+			l.rotation.y = PI * 0.5 * sgn
+			root.add_child(l)
+	if idx == 1:
+		# number roundel on the hood too
+		var hu: float = (float(spec.hood[0]) + float(spec.hood[1])) * 0.5
+		var h := Label3D.new()
+		h.text = "77"
+		h.font = UI.title_font()
+		h.font_size = 190
+		h.pixel_size = 0.0016
+		h.modulate = Color(0.96, 0.96, 0.93)
+		h.outline_size = 12
+		h.outline_modulate = Color(0.02, 0.02, 0.02)
+		h.shaded = false
+		h.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+		var slope := atan2(_top(hu + 0.03) - _top(hu - 0.03), 0.06 * _L)
+		h.position = Vector3(0, _top(hu) + 0.012, _z(hu))
+		h.rotation = Vector3(-PI * 0.5 + slope, PI, 0)
+		root.add_child(h)
 
 
 func _part_badge(idx: int) -> void:

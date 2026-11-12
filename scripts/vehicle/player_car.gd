@@ -8,7 +8,8 @@ extends CharacterBody3D
 signal crashed(force: float)
 signal shifted(gear: int)
 
-const GEAR_TOPS := [0.2, 0.36, 0.53, 0.7, 0.86, 1.06]
+const GEARS_5 := [0.24, 0.43, 0.63, 0.84, 1.06]
+const GEARS_6 := [0.2, 0.36, 0.53, 0.7, 0.86, 1.06]
 
 var car_id := "tuner"
 var cfg := {}
@@ -21,6 +22,11 @@ var vmax := 65.0
 var a0 := 9.0
 var grip_base := 9.0
 var wheelbase := 2.55
+var gear_tops: Array = GEARS_5
+var brake_force := 26.0
+var shift_time := 0.12
+var nitro_cap := 1.0       # bottle size: how long a full bar lasts
+var nitro_power := 1.0
 var has_turbo := 0            # 0 none, 1 small frame, 2 big single
 var induction := "na"        # na | turbo | sc
 var engine_profile := "i4"
@@ -68,6 +74,12 @@ func setup(id: String, config: Dictionary) -> void:
 	a0 = 26.8 / st.accel * 1.55
 	grip_base = lerpf(6.0, 12.5, st.handling / 100.0)
 	_grip = grip_base
+	var tn := CarDB.tuning(cfg)
+	brake_force = tn.brake
+	shift_time = tn.shift
+	gear_tops = GEARS_6 if int(tn.gears) == 6 else GEARS_5
+	nitro_cap = tn.nitro_cap
+	nitro_power = tn.nitro_power
 	var au := CarDB.audio_setup(id, cfg)
 	engine_profile = au.profile
 	induction = au.induction
@@ -149,9 +161,9 @@ func _physics_process(dt: float) -> void:
 	# ---- nitro
 	using_nitro = want_nitro and nitro > 0.02 and vf > 3.0
 	if using_nitro:
-		nitro = maxf(nitro - dt / 4.5, 0.0)
+		nitro = maxf(nitro - dt / (4.5 * nitro_cap), 0.0)
 	else:
-		nitro = minf(nitro + dt / 16.0, 1.0)
+		nitro = minf(nitro + dt / (16.0 * nitro_cap), 1.0)
 
 	# ---- longitudinal
 	var top := vmax * (1.2 if using_nitro else 1.0) * top_scale
@@ -167,11 +179,11 @@ func _physics_process(dt: float) -> void:
 		else:
 			acc += 20.0 * throttle
 	if using_nitro:
-		acc += 9.0 * clampf(1.0 - vf / top, 0.0, 1.0) + 1.5
+		acc += (9.0 * clampf(1.0 - vf / top, 0.0, 1.0) + 1.5) * nitro_power
 	braking = brk > 0.05
 	if braking:
 		if vf > 1.0:
-			acc -= 26.0 * brk
+			acc -= brake_force * brk
 		else:
 			acc -= 8.0 * brk * clampf(1.0 + vf / 13.0, 0.0, 1.0)
 	var res := 0.3 + 0.0009 * vf * vf
@@ -264,21 +276,21 @@ func _gearbox(dt: float) -> void:
 		gear = 0
 		rpm = lerpf(rpm, 0.12 + 0.6 * clampf(v / 13.0, 0.0, 1.0), 1.0 - exp(-dt * 10.0))
 		return
-	while gear < GEAR_TOPS.size() - 1 and v > vmax * GEAR_TOPS[gear] * 0.97:
+	while gear < gear_tops.size() - 1 and v > vmax * gear_tops[gear] * 0.97:
 		gear += 1
-	while gear > 0 and v < vmax * GEAR_TOPS[gear - 1] * 0.68:
+	while gear > 0 and v < vmax * gear_tops[gear - 1] * 0.68:
 		gear -= 1
 	if gear != old:
 		shifted.emit(gear)
 		if gear > old:
-			_shift_cut = 0.12
-	var lo: float = 0.0 if gear == 0 else vmax * GEAR_TOPS[gear - 1] * 0.55
-	var hi: float = vmax * GEAR_TOPS[gear]
+			_shift_cut = shift_time
+	var lo: float = 0.0 if gear == 0 else vmax * gear_tops[gear - 1] * 0.55
+	var hi: float = vmax * gear_tops[gear]
 	var target := 0.14 + 0.86 * clampf((v - lo) / (hi - lo), 0.0, 1.0)
 	if v < 2.0:
 		target = maxf(target, 0.14 + throttle * (0.8 if hold else 0.45))   # free revving at standstill
 	# rev limiter: flat out at the top of the last gear (or held past it on nitro)
-	limiter = throttle > 0.6 and gear == GEAR_TOPS.size() - 1 and target > 0.985
+	limiter = throttle > 0.6 and gear == gear_tops.size() - 1 and target > 0.985
 	if limiter:
 		_lim_phase = fmod(_lim_phase + dt * 13.0, 1.0)
 		target = 1.0 - 0.05 * _lim_phase

@@ -3,7 +3,7 @@ class_name CarDB
 ## To add a car, add an entry to CARS (shape lives in CarSpecs). To add a part,
 ## append an option to PARTS and handle its index in CarVisual.
 
-const CAR_ORDER := ["tuner", "muscle", "euro"]
+const CAR_ORDER := ["tuner", "classic", "muscle", "sedan", "rotary", "euro", "suv", "exotic"]
 
 const CARS := {
 	"tuner": {
@@ -27,7 +27,53 @@ const CARS := {
 		"engine": "i6", "cyl": "3.6L FLAT 6", "drive": "RWD",
 		"default_color": 6,
 	},
+	"classic": {
+		"name": "CORONADO '64", "tag": "CLASSIC LOWRIDER", "price": 14000,
+		"blurb": "Five metres of chrome and steel. Slow, low and impossible to ignore.",
+		"hp": 250, "torque": 350, "top": 122, "accel": 7.6, "handling": 46, "weight": 1760,
+		"engine": "v8", "cyl": "5.4L V8", "drive": "RWD",
+		"default_color": 7,
+	},
+	"sedan": {
+		"name": "VANTA S6", "tag": "LUXURY SPORT SEDAN", "price": 21000,
+		"blurb": "Quad-cam V6 in a tailored suit. Four doors, no excuses.",
+		"hp": 305, "torque": 290, "top": 155, "accel": 5.8, "handling": 70, "weight": 1640,
+		"engine": "v6", "cyl": "3.5L V6", "drive": "RWD",
+		"default_color": 10,
+	},
+	"rotary": {
+		"name": "AKAGI RZ-8", "tag": "ROTARY SPORTS COUPE", "price": 26000,
+		"blurb": "Twin-rotor, sequential turbos and a redline that never seems to come.",
+		"hp": 265, "torque": 220, "top": 158, "accel": 5.2, "handling": 85, "weight": 1240,
+		"engine": "rotary", "factory_turbo": 1, "cyl": "1.3L TWIN-ROTOR TURBO", "drive": "RWD",
+		"default_color": 2,
+	},
+	"suv": {
+		"name": "TITAN LX", "tag": "LUXURY SUV", "price": 38000,
+		"blurb": "Two and a half tonnes on a supercharged V8. Rolls on anything you can fit.",
+		"hp": 410, "torque": 520, "top": 138, "accel": 6.3, "handling": 50, "weight": 2480,
+		"engine": "v8sc", "induction": "sc", "cyl": "6.2L SUPERCHARGED V8", "drive": "AWD",
+		"default_color": 11,
+	},
+	"exotic": {
+		"name": "ARDENTE V12", "tag": "ITALIAN EXOTIC", "price": 125000,
+		"blurb": "Mid-engined, twelve cylinders, nine thousand rpm. The top of the food chain.",
+		"hp": 580, "torque": 470, "top": 205, "accel": 3.6, "handling": 92, "weight": 1480,
+		"engine": "exotic", "cyl": "6.0L V12", "drive": "AWD",
+		"default_color": 0,
+	},
 }
+
+const VINYL_COLORS := [
+	{"name": "White", "c": Color(0.93, 0.93, 0.9)},
+	{"name": "Black", "c": Color(0.02, 0.02, 0.025)},
+	{"name": "Red", "c": Color(0.8, 0.04, 0.04)},
+	{"name": "Gold", "c": Color(0.95, 0.68, 0.12)},
+	{"name": "Silver", "c": Color(0.7, 0.72, 0.75)},
+	{"name": "Blue", "c": Color(0.05, 0.25, 0.9)},
+	{"name": "Lime", "c": Color(0.45, 0.95, 0.1)},
+	{"name": "Pink", "c": Color(0.95, 0.15, 0.55)},
+]
 
 const PAINTS := [
 	{"name": "Inferno Red", "c": Color(0.78, 0.03, 0.03)},
@@ -65,14 +111,20 @@ const UNDERGLOW := [
 
 ## Each slot: label, group, camera focus preset and a list of options.
 ## Option fields: name, price and optional stat deltas (hp, tq, top, acc, hnd).
-const SLOT_ORDER := ["paint", "finish", "front", "rear", "spoiler", "skirts", "hood", "glow",
-	"rims", "rim_color", "wheel_size", "engine", "turbo", "exhaust", "suspension"]
+const SLOT_ORDER := ["paint", "finish", "vinyl", "vinyl_color", "decal",
+	"front", "rear", "spoiler", "skirts", "hood", "widebody",
+	"headlights", "taillights", "tint", "glow",
+	"rims", "rim_color", "wheel_size", "tires", "ride", "camber",
+	"engine", "turbo", "exhaust", "ecu", "nitro",
+	"trans", "final", "suspension", "brakes", "weight"]
 
 const GROUPS := [
-	{"id": "paint", "label": "PAINT", "slots": ["paint", "finish"]},
-	{"id": "body", "label": "BODY", "slots": ["front", "rear", "spoiler", "skirts", "hood", "glow"]},
-	{"id": "wheels", "label": "WHEELS", "slots": ["rims", "rim_color", "wheel_size"]},
-	{"id": "perf", "label": "PERFORMANCE", "slots": ["engine", "turbo", "exhaust", "suspension"]},
+	{"id": "paint", "label": "PAINT + VINYL", "slots": ["paint", "finish", "vinyl", "vinyl_color", "decal"]},
+	{"id": "body", "label": "BODY KIT", "slots": ["front", "rear", "spoiler", "skirts", "hood", "widebody"]},
+	{"id": "lights", "label": "LIGHTS + GLASS", "slots": ["headlights", "taillights", "tint", "glow"]},
+	{"id": "wheels", "label": "WHEELS + STANCE", "slots": ["rims", "rim_color", "wheel_size", "tires", "ride", "camber"]},
+	{"id": "perf", "label": "ENGINE", "slots": ["engine", "turbo", "exhaust", "ecu", "nitro"]},
+	{"id": "chassis", "label": "DRIVETRAIN", "slots": ["trans", "final", "suspension", "brakes", "weight"]},
 ]
 
 static var _parts := {}
@@ -90,7 +142,99 @@ static func parts() -> Dictionary:
 	var glow := []
 	for i in UNDERGLOW.size():
 		glow.append({"name": UNDERGLOW[i].name, "price": 0 if i == 0 else 900, "swatch": UNDERGLOW[i].c})
+	var vcol := []
+	for i in VINYL_COLORS.size():
+		vcol.append({"name": VINYL_COLORS[i].name, "price": 0 if i < 2 else 200, "swatch": VINYL_COLORS[i].c})
 	_parts = {
+		"vinyl": {"label": "VINYL", "cam": "default", "options": [
+			{"name": "None", "price": 0},
+			{"name": "Rally Stripes", "price": 700},
+			{"name": "Centre Stripe", "price": 600},
+			{"name": "Rocker Stripes", "price": 500},
+			{"name": "Two-Tone", "price": 1400},
+			{"name": "Blackout Hood", "price": 900},
+		]},
+		"vinyl_color": {"label": "VINYL COLOR", "cam": "default", "options": vcol},
+		"decal": {"label": "DECALS", "cam": "side", "options": [
+			{"name": "None", "price": 0},
+			{"name": "Race Number", "price": 300},
+			{"name": "Syndicate Crew", "price": 450},
+			{"name": "Sponsor Stack", "price": 800},
+		]},
+		"widebody": {"label": "WIDEBODY", "cam": "default", "options": [
+			{"name": "Stock", "price": 0},
+			{"name": "Bolt-On Flares", "price": 2800, "hnd": 3},
+			{"name": "Full Widebody", "price": 6500, "hnd": 6, "top": -1},
+		]},
+		"headlights": {"label": "HEADLIGHTS", "cam": "front", "options": [
+			{"name": "Stock", "price": 0},
+			{"name": "Xenon Ice", "price": 650},
+			{"name": "Amber Rally", "price": 500},
+			{"name": "Smoked", "price": 400},
+		]},
+		"taillights": {"label": "TAILLIGHTS", "cam": "rear", "options": [
+			{"name": "Stock", "price": 0},
+			{"name": "Smoked", "price": 400},
+			{"name": "Clear Euro", "price": 550},
+			{"name": "LED Bright", "price": 900},
+		]},
+		"tint": {"label": "WINDOW TINT", "cam": "side", "options": [
+			{"name": "Factory", "price": 0},
+			{"name": "Light Smoke", "price": 250},
+			{"name": "Limo Black", "price": 450},
+			{"name": "Ice Blue", "price": 700},
+			{"name": "Gold Mirror", "price": 1200},
+		]},
+		"tires": {"label": "TIRES", "cam": "wheel", "options": [
+			{"name": "Street", "price": 0},
+			{"name": "Sport Compound", "price": 900, "hnd": 3},
+			{"name": "Wide Semi-Slick", "price": 2200, "hnd": 6, "acc": -0.1},
+			{"name": "Drag Radials", "price": 1800, "hnd": -2, "acc": -0.35},
+		]},
+		"ride": {"label": "RIDE HEIGHT", "cam": "low", "options": [
+			{"name": "Factory", "price": 0},
+			{"name": "Lowered 25 mm", "price": 400, "hnd": 1},
+			{"name": "Slammed 50 mm", "price": 800, "hnd": 2},
+			{"name": "Lifted 40 mm", "price": 600, "hnd": -2},
+		]},
+		"camber": {"label": "CAMBER", "cam": "front", "options": [
+			{"name": "Factory", "price": 0},
+			{"name": "Street -3 deg", "price": 300, "hnd": 2},
+			{"name": "Track -6 deg", "price": 600, "hnd": 3, "acc": 0.05},
+			{"name": "Show -12 deg", "price": 900, "hnd": -3, "acc": 0.1},
+		]},
+		"ecu": {"label": "ECU", "cam": "hood", "options": [
+			{"name": "Factory Map", "price": 0},
+			{"name": "Street Tune", "price": 1500, "hp": 14, "tq": 12, "top": 1, "acc": -0.1},
+			{"name": "Race Tune + Launch", "price": 3800, "hp": 30, "tq": 24, "top": 3, "acc": -0.25},
+		]},
+		"nitro": {"label": "NITROUS", "cam": "rear", "options": [
+			{"name": "Single Bottle", "price": 0},
+			{"name": "Twin Bottles", "price": 2400},
+			{"name": "Direct Port", "price": 5200},
+		]},
+		"trans": {"label": "TRANSMISSION", "cam": "low", "options": [
+			{"name": "Factory 5-Speed", "price": 0},
+			{"name": "Short Shifter", "price": 1100, "acc": -0.1},
+			{"name": "Close-Ratio 6-Speed", "price": 4200, "acc": -0.25, "top": 2},
+			{"name": "Sequential Dog Box", "price": 8800, "acc": -0.45, "top": 3},
+		]},
+		"final": {"label": "FINAL DRIVE", "cam": "low", "options": [
+			{"name": "Factory", "price": 0},
+			{"name": "Short (Acceleration)", "price": 1400, "acc": -0.35, "top": -9},
+			{"name": "Long (Top Speed)", "price": 1400, "acc": 0.25, "top": 10},
+		]},
+		"brakes": {"label": "BRAKES", "cam": "wheel", "options": [
+			{"name": "Factory", "price": 0},
+			{"name": "Sport Pads + Lines", "price": 900},
+			{"name": "Big Brake Kit", "price": 3400, "hnd": 1},
+		]},
+		"weight": {"label": "WEIGHT REDUCTION", "cam": "side", "options": [
+			{"name": "Factory", "price": 0, "kg": 0},
+			{"name": "Stage 1 Strip-Out", "price": 1600, "acc": -0.15, "hnd": 2, "kg": -60},
+			{"name": "Stage 2 Carbon Panels", "price": 4400, "acc": -0.3, "hnd": 4, "kg": -130},
+			{"name": "Stage 3 Race Shell", "price": 8200, "acc": -0.5, "hnd": 6, "kg": -210},
+		]},
 		"paint": {"label": "COLOR", "cam": "side", "options": paint},
 		"finish": {"label": "FINISH", "cam": "side", "options": [
 			{"name": "Gloss", "price": 0},
@@ -190,7 +334,7 @@ static func default_owned(car_id: String) -> Dictionary:
 ## Final stats for a car + config. Returns hp, torque, top (mph), accel (0-60 s), handling (0-100).
 static func stats(car_id: String, cfg: Dictionary) -> Dictionary:
 	var b: Dictionary = CARS[car_id]
-	var s := {"hp": float(b.hp), "torque": float(b.torque), "top": float(b.top), "accel": float(b.accel), "handling": float(b.handling)}
+	var s := {"hp": float(b.hp), "torque": float(b.torque), "top": float(b.top), "accel": float(b.accel), "handling": float(b.handling), "weight": float(b.weight)}
 	var p := parts()
 	for slot in SLOT_ORDER:
 		var idx := int(cfg.get(slot, 0))
@@ -203,9 +347,24 @@ static func stats(car_id: String, cfg: Dictionary) -> Dictionary:
 		s.top += o.get("top", 0)
 		s.accel += o.get("acc", 0.0)
 		s.handling += o.get("hnd", 0)
+		s.weight += o.get("kg", 0)
 	s.accel = maxf(s.accel, 2.2)
-	s.handling = minf(s.handling, 100.0)
+	s.handling = clampf(s.handling, 20.0, 100.0)
 	return s
+
+
+## Behaviour that is not a headline stat: braking, shifting, nitrous.
+static func tuning(cfg: Dictionary) -> Dictionary:
+	var brakes := int(cfg.get("brakes", 0))
+	var trans := int(cfg.get("trans", 0))
+	var nos := int(cfg.get("nitro", 0))
+	return {
+		"brake": [26.0, 30.0, 35.0][clampi(brakes, 0, 2)],
+		"shift": [0.12, 0.085, 0.07, 0.04][clampi(trans, 0, 3)],
+		"gears": 6 if trans >= 2 else 5,
+		"nitro_cap": [1.0, 1.7, 1.7][clampi(nos, 0, 2)],
+		"nitro_power": [1.0, 1.0, 1.4][clampi(nos, 0, 2)],
+	}
 
 
 ## What the audio engine needs to know about a car + config.
@@ -227,7 +386,7 @@ static func audio_setup(car_id: String, cfg: Dictionary) -> Dictionary:
 	# forced induction changes the voice of a V8 completely
 	if profile == "v8" and induction == "sc":
 		profile = "v8sc"
-	elif profile == "v8" and induction == "turbo":
+	elif (profile == "v8" or profile == "v8sc") and induction == "turbo":
 		profile = "v8tt"
 	return {"profile": profile, "induction": induction, "turbo": size,
 		"exhaust": int(cfg.get("exhaust", 0)), "stage": int(cfg.get("engine", 0))}

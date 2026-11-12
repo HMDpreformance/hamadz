@@ -1,10 +1,7 @@
 extends Node3D
-## Test drive: night city free-roam with a checkpoint run ("Midnight Loop").
-## Owns the world, the player car, the HUD/touch controls and the pause menu.
-
-const GOLD := 46.0
-const SILVER := 58.0
-const BRONZE := 75.0
+## Free roam in Halcyon Bay with street race events. Owns the world, the player
+## car, cameras, HUD/touch controls, event cards, race presentation and menus.
+## The rules of a race live in Race (scripts/race/race.gd).
 
 var city: OpenWorld
 var car: PlayerCar
@@ -14,10 +11,22 @@ var fx: CarFX
 var env: Environment
 var post: PostFX
 
-var state := "roam"            # roam | run | done
-var checkpoints: Array[Vector3] = []
-var cp_index := 0
+var state := "roam"            # roam | intro | countdown | race | done
+var race: Race
 var run_time := 0.0
+var _events := {}              # id -> {ev, pos, yaw, node}
+var _near_event := ""
+var _card: Control
+var _pos_label: Label
+var _fade: ColorRect
+var _bars: Array = []
+var _cine: Camera3D
+var _cine_t := 0.0
+var _cine_center := Vector3.ZERO
+var _race_holder: Node3D
+var _title_card: Control
+var _drive_ui: Array = []
+var _last_event := ""
 var spawn_pos := Vector3.ZERO
 var spawn_yaw := 0.0
 
@@ -84,15 +93,21 @@ func _ready() -> void:
 	add_child(cam)
 	cam.make_current()
 
-	_route()
+	_race_holder = Node3D.new()
+	add_child(_race_holder)
+	_cine = Camera3D.new()
+	_cine.far = 600.0
+	_cine.fov = 50.0
+	add_child(_cine)
+	cam.doppler_tracking = Camera3D.DOPPLER_TRACKING_PHYSICS_STEP
 	_make_marker()
 	_build_hud()
 	_spawn_traffic()
+	_make_event_markers()
 	_set_state("roam")
 	Audio.play_ambience("city", -10.0)
 	Audio.play_music("drive", 1.5, -11.0)
 	GFX.changed.connect(func(): GFX.apply_environment(env))
-	_show_banner("FREE ROAM", 2.2)
 
 
 func _exit_tree() -> void:
@@ -106,31 +121,277 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_pause()
 
 
-# ====================================================================== route
-func _route() -> void:
-	# the original downtown loop, now a few blocks of a much larger map
-	var rx := func(i: int) -> float: return city.road_x(i + 4)
-	var rz := func(j: int) -> float: return city.road_z(j + 2)
-	var mx := func(a: int, b: int) -> float: return (city.road_x(a + 4) + city.road_x(b + 4)) * 0.5
-	var mz := func(a: int, b: int) -> float: return (city.road_z(a + 2) + city.road_z(b + 2)) * 0.5
-	checkpoints = [
-		Vector3(rx.call(2), 0, mz.call(1, 2)),
-		Vector3(mx.call(2, 3), 0, rz.call(1)),
-		Vector3(mx.call(3, 4), 0, rz.call(1)),
-		Vector3(rx.call(4), 0, mz.call(1, 2)),
-		Vector3(rx.call(4), 0, mz.call(2, 3)),
-		Vector3(mx.call(3, 4), 0, rz.call(3)),
-		Vector3(rx.call(3), 0, mz.call(3, 4)),
-		Vector3(mx.call(2, 3), 0, rz.call(4)),
-		Vector3(mx.call(1, 2), 0, rz.call(4)),
-		Vector3(rx.call(1), 0, mz.call(3, 4)),
-		Vector3(mx.call(1, 2), 0, rz.call(3)),
-		Vector3(rx.call(2), 0, mz.call(2, 3)),
-	]
+# ====================================================================== events in the world
+func _make_event_markers() -> void:
+	for ev in EventDB.EVENTS:
+		var pts := EventDB.build_points(city, ev)
+		var pos := pts[0]
+		var d := Vector3(pts[1].x - pts[0].x, 0, pts[1].z - pts[0].z).normalized()
+		var col: Color = EventDB.TYPE_COLOR[ev.type]
+		var n := Node3D.new()
+		n.position = pos
+		add_child(n)
+		var beam := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 5.0
+		cm.bottom_radius = 5.0
+		cm.height = 40.0
+		cm.radial_segments = 16
+		cm.rings = 1
+		cm.cap_top = false
+		cm.cap_bottom = false
+		beam.mesh = cm
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		m.albedo_texture = UI.gradient_tex([Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.08), Color(1, 1, 1, 0.6)], [0.0, 0.7, 1.0])
+		m.albedo_color = col
+		m.disable_receive_shadows = true
+		beam.material_override = m
+		beam.position.y = 20.0
+		beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		n.add_child(beam)
+		var l := Label3D.new()
+		l.font = UI.title_font()
+		l.font_size = 96
+		l.pixel_size = 0.022
+		l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		l.shaded = false
+		l.no_depth_test = true
+		l.text = ev.name
+		l.modulate = Color(col.r * 2.0 + 0.3, col.g * 2.0 + 0.3, col.b * 2.0 + 0.3)
+		l.position.y = 7.5
+		n.add_child(l)
+		var l2 := Label3D.new()
+		l2.font = UI.body_font(true)
+		l2.font_size = 64
+		l2.pixel_size = 0.02
+		l2.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		l2.shaded = false
+		l2.no_depth_test = true
+		l2.text = EventDB.TYPE_LABEL[ev.type]
+		l2.position.y = 5.6
+		n.add_child(l2)
+		_events[ev.id] = {"ev": ev, "pos": pos, "yaw": atan2(-d.x, -d.z), "node": n}
+	_refresh_event_markers()
 
 
-func _start_gate() -> Vector3:
-	return Vector3(city.road_x(6), 0, (city.road_z(4) + city.road_z(5)) * 0.5)
+func _event_lock(ev: Dictionary) -> String:
+	if _dev_unlock:
+		return ""
+	if Game.rep() < int(ev.rep):
+		return "NEEDS %d REP  (YOU HAVE %d)" % [int(ev.rep), Game.rep()]
+	var need := int(ev.get("rating", 0))
+	if need > 0 and CarDB.rating(Game.current_car(), Game.config()) < need:
+		return "NEEDS CAR RATING %d  (YOURS %d)" % [need, CarDB.rating(Game.current_car(), Game.config())]
+	return ""
+
+
+func _refresh_event_markers() -> void:
+	var mk := []
+	for id in _events:
+		var e: Dictionary = _events[id]
+		var show := state == "roam"
+		e.node.visible = show
+		if show:
+			var col: Color = EventDB.TYPE_COLOR[e.ev.type]
+			if _event_lock(e.ev) != "":
+				col = Color(0.45, 0.45, 0.5)
+			mk.append({"pos": e.pos, "color": col})
+	minimap.markers = mk
+
+
+func _update_event_card() -> void:
+	var p := car.global_position
+	var best := ""
+	var bd := 11.0
+	for id in _events:
+		var e: Dictionary = _events[id]
+		var d := Vector2(p.x - e.pos.x, p.z - e.pos.z).length()
+		if d < bd:
+			bd = d
+			best = id
+	if best == _near_event:
+		return
+	_near_event = best
+	if best == "":
+		create_tween().tween_property(_card, "modulate:a", 0.0, 0.2)
+		get_tree().create_timer(0.2).timeout.connect(func():
+			if _near_event == "":
+				_card.visible = false)
+		return
+	var ev: Dictionary = _events[best].ev
+	var col: Color = EventDB.TYPE_COLOR[ev.type]
+	(_card.get_node("Type") as Label).text = EventDB.TYPE_LABEL[ev.type]
+	(_card.get_node("Type") as Label).add_theme_color_override("font_color", col)
+	(_card.get_node("Name") as Label).text = ev.name
+	(_card.get_node("Blurb") as Label).text = ev.blurb
+	var bits := ["REWARD " + CarDB.money(int(ev.reward))]
+	if int(ev.opponents) > 0:
+		bits.append("%d RIVAL%s" % [int(ev.opponents), "" if int(ev.opponents) == 1 else "S"])
+	if int(ev.get("laps", 1)) > 1:
+		bits.append("%d LAPS" % int(ev.laps))
+	(_card.get_node("Info") as Label).text = "   •   ".join(bits)
+	var rec := Game.event_record(ev.id)
+	var lock := _event_lock(ev)
+	var st := _card.get_node("Status") as Label
+	var go := _card.get_node("Go") as NeonButton
+	if lock != "":
+		st.text = "LOCKED  •  " + lock
+		st.add_theme_color_override("font_color", UI.RED)
+	elif int(rec.runs) > 0:
+		st.text = "BEST: %s  •  %s" % [_place_name(int(rec.best_place)), _fmt(float(rec.best_time))]
+		st.add_theme_color_override("font_color", UI.GREEN)
+	else:
+		st.text = "NOT RACED YET  •  FIRST WIN PAYS +50%"
+		st.add_theme_color_override("font_color", UI.DIM)
+	go.locked = lock != ""
+	_card.visible = true
+	create_tween().tween_property(_card, "modulate:a", 1.0, 0.2)
+	Audio.sfx("ui_move", -4.0)
+
+
+static func _place_name(n: int) -> String:
+	return ["-", "1ST", "2ND", "3RD", "4TH", "5TH", "6TH", "7TH", "8TH"][clampi(n, 0, 8)]
+
+
+func _start_event(id: String) -> void:
+	if state != "roam" or not _events.has(id):
+		return
+	var ev: Dictionary = _events[id].ev
+	if _event_lock(ev) != "":
+		Audio.sfx("ui_deny")
+		return
+	_last_event = id
+	_set_state("intro")
+	Audio.sfx("ui_select")
+	Audio.sfx("whoosh", -3.0)
+	var tw := create_tween()
+	tw.tween_property(_fade, "color:a", 1.0, 0.3)
+	await tw.finished
+	race = Race.new()
+	add_child(race)
+	race.setup(city, ev, car, traffic, _race_holder)
+	race.countdown.connect(_on_countdown)
+	race.go.connect(_on_go)
+	race.checkpoint_hit.connect(_on_checkpoint)
+	race.lap_done.connect(_on_lap)
+	race.finished.connect(_on_race_finished)
+	city.preload_around(car.global_position)
+	minimap.route = race.path.pts
+	if race.path.closed:
+		var loop := race.path.pts.duplicate()
+		loop.append(race.path.pts[0])
+		minimap.route = loop
+	# short cinematic: sweep around the grid with the event title
+	_cine_center = race.path.pts[0] - race.path.dir_at(0.0) * 9.0
+	_cine_t = 0.0
+	_cine.make_current()
+	_set_bars(true)
+	_hud_driving(false)
+	(_title_card.get_node("Name") as Label).text = ev.name
+	(_title_card.get_node("Type") as Label).text = EventDB.TYPE_LABEL[ev.type]
+	(_title_card.get_node("Type") as Label).add_theme_color_override("font_color", EventDB.TYPE_COLOR[ev.type])
+	_title_card.visible = true
+	_title_card.modulate.a = 0.0
+	var tw2 := create_tween()
+	tw2.tween_property(_fade, "color:a", 0.0, 0.4)
+	tw2.parallel().tween_property(_title_card, "modulate:a", 1.0, 0.4)
+	tw2.tween_interval(2.3)
+	tw2.tween_property(_title_card, "modulate:a", 0.0, 0.3)
+	await tw2.finished
+	if race == null:
+		return
+	_title_card.visible = false
+	_set_bars(false)
+	cam.snap_behind()
+	cam.make_current()
+	_hud_driving(true)
+	_set_state("countdown")
+	race.run_countdown()
+
+
+func _on_countdown(n: int) -> void:
+	Audio.sfx("beep_lo")
+	_show_banner(str(n), 0.45)
+
+
+func _on_go() -> void:
+	_set_state("race")
+	Audio.sfx("beep_hi")
+	_show_banner("GO!", 0.9)
+	_place_marker(race.next_checkpoint(), "1" if race.cps.size() > 1 else "FINISH", UI.CYAN)
+
+
+func _on_checkpoint(index: int, total: int) -> void:
+	Audio.sfx("checkpoint", -2.0)
+	var last := race.is_last_checkpoint()
+	_place_marker(race.next_checkpoint(), "FINISH" if last else str(index + 1), UI.GREEN if last else UI.CYAN)
+
+
+func _on_lap(lap: int, laps: int) -> void:
+	Audio.sfx("checkpoint", 0.0, 1.25)
+	_show_banner("FINAL LAP" if lap == laps - 1 else "LAP %d" % (lap + 1), 1.0)
+	_place_marker(race.next_checkpoint(), "1", UI.CYAN)
+
+
+func _on_race_finished(res: Dictionary) -> void:
+	_set_state("done")
+	_pos_label.text = ""
+	(_info.get_parent() as Control).visible = false
+	Audio.sfx("finish")
+	car.input_enabled = false
+	_hud_driving(false)
+	_cine_center = car.global_position
+	_cine_t = 0.0
+	_cine.make_current()
+	_set_bars(true)
+	var win: bool = res.place == 1
+	_show_banner(("WINNER!" if win else _place_name(res.place) + " PLACE") if res.medal == "" else res.medal, 1.6)
+	await get_tree().create_timer(2.4).timeout
+	if state != "done":
+		return
+	_set_bars(false)
+	_show_result(res)
+
+
+func _end_race(to_roam := true) -> void:
+	if race:
+		race.cleanup()
+		race.queue_free()
+		race = null
+	minimap.route = PackedVector3Array()
+	minimap.target = null
+	_marker.visible = false
+	_result_panel.visible = false
+	_title_card.visible = false
+	_set_bars(false)
+	car.input_enabled = true
+	car.hold = false
+	cam.make_current()
+	_hud_driving(true)
+	_near_event = "?"          # so the card for the event you are parked on shows again
+	if to_roam:
+		_set_state("roam")
+
+
+func _retry_event() -> void:
+	var id := _last_event
+	_end_race(true)
+	if id != "":
+		_start_event(id)
+
+
+func _set_bars(on: bool) -> void:
+	for b in _bars:
+		create_tween().tween_property(b, "custom_minimum_size:y", 70.0 if on else 0.0, 0.3)
+
+
+func _hud_driving(on: bool) -> void:
+	for n in _drive_ui:
+		n.visible = on
 
 
 func _make_marker() -> void:
@@ -198,60 +459,70 @@ func _spawn_traffic() -> void:
 
 
 # ====================================================================== state
-func _set_state(s: String) -> void:
-	state = s
-	match s:
+func _set_state(st: String) -> void:
+	state = st
+	if st != "done":
+		(_info.get_parent() as Control).visible = true
+	match st:
 		"roam":
-			_place_marker(_start_gate(), "START", UI.AMBER)
-			_info.text = "FREE ROAM  •  DRIVE INTO THE START GATE"
+			_info.text = "FREE ROAM  •  " + city.district_name(car.global_position)
 			_timer.text = ""
-		"run":
-			cp_index = 0
-			run_time = 0.0
-			_place_marker(checkpoints[0], "1", UI.CYAN)
-			Audio.sfx("beep_hi")
-			_show_banner("GO!", 1.2)
-		"done":
-			_marker.visible = false
+			_pos_label.text = ""
+			_best.text = "REP %d   •   %s" % [Game.rep(), CarDB.money(Game.money())]
+		"intro", "countdown":
+			_card.visible = false
+			_near_event = ""
+			_info.text = race.ev.name if race else ""
+			_timer.text = ""
+			_best.text = ""
+	if minimap:
+		_refresh_event_markers()
 
 
-func _physics_process(dt: float) -> void:
-	if state == "run":
-		run_time += dt
+func _physics_process(_dt: float) -> void:
+	if race and state == "race":
+		run_time = race.time
 
 
 func _process(_dt: float) -> void:
 	var p := car.global_position
 	if state == "roam":
-		if Vector2(p.x - _marker.position.x, p.z - _marker.position.z).length() < 8.0:
-			_set_state("run")
-	elif state == "run":
-		var cp := checkpoints[cp_index]
-		if Vector2(p.x - cp.x, p.z - cp.z).length() < 9.5:
-			cp_index += 1
-			if cp_index >= checkpoints.size():
-				_finish()
-			else:
-				Audio.sfx("checkpoint", -2.0)
-				var last := cp_index == checkpoints.size() - 1
-				_place_marker(checkpoints[cp_index], "FINISH" if last else str(cp_index + 1), UI.GREEN if last else UI.CYAN)
-		_info.text = "CHECKPOINT  %d / %d" % [mini(cp_index + 1, checkpoints.size()), checkpoints.size()]
-		_timer.text = _fmt(run_time)
+		_update_event_card()
+	elif state == "race" and race:
+		var bits := []
+		if race.laps > 1:
+			bits.append("LAP %d / %d" % [mini(race.lap + 1, race.laps), race.laps])
+		bits.append("CHECKPOINT %d / %d" % [mini(race.cp_index + 1, race.cps.size()), race.cps.size()])
+		_info.text = "   •   ".join(bits)
+		_timer.text = _fmt(race.time)
+		if race.ev.type == "trial":
+			_pos_label.text = ""
+			_best.text = "GOLD %s   SILVER %s   BRONZE %s" % [_fmt(race.trial_times[0]), _fmt(race.trial_times[1]), _fmt(race.trial_times[2])]
+		else:
+			_pos_label.text = "%s / %d" % [_place_name(race.position()), race.field_size()]
+	# cinematic camera: slow orbit around the grid / the finished car
+	if _cine.current:
+		_cine_t += _dt
+		var a := 0.9 + _cine_t * 0.42
+		var r := 9.5 - minf(_cine_t, 3.0) * 0.6
+		_cine.position = _cine_center + Vector3(sin(a) * r, 1.5 + _cine_t * 0.25, cos(a) * r)
+		_cine.look_at(_cine_center + Vector3(0, 0.7, 0), Vector3.UP)
 	# acoustics and district name follow the car
 	_space_t -= _dt
 	if _space_t <= 0.0:
 		_space_t = 0.3
 		Audio.set_space(city.space_at(p))
-		var dn := city.district_name(p)
+		var dn: String = city.district_name(p)
 		if dn != _district:
 			_district = dn
 			if state == "roam":
 				_show_banner(dn, 1.6)
+				_info.text = "FREE ROAM  •  " + dn
 	# marker pulse
 	if _marker.visible:
 		var ring := _marker.get_node("Ring") as Node3D
-		var s := 1.0 + 0.06 * sin(Time.get_ticks_msec() * 0.006)
-		ring.scale = Vector3(s, 0.2, s)
+		var sc := 1.0 + 0.06 * sin(Time.get_ticks_msec() * 0.006)
+		ring.scale = Vector3(sc, 0.2, sc)
 	# speed post effect
 	var sp := clampf(absf(car.speed) / car.vmax, 0.0, 1.2)
 	var amt := clampf((sp - 0.7) * 1.6, 0.0, 0.5) + (0.55 if car.using_nitro else 0.0)
@@ -261,39 +532,15 @@ func _process(_dt: float) -> void:
 		_toggle_cam()
 	if Input.is_action_just_pressed("pause"):
 		_toggle_pause()
+	if Input.is_action_just_pressed("ui_accept") and state == "roam" and _near_event != "" and _events.has(_near_event):
+		_start_event(_near_event)
 	for k in _steer_keys:
-		k.visible = int(Game.setting("steer_mode", 0)) == 0
+		k.visible = int(Game.setting("steer_mode", 0)) == 0 and _gauge.visible
 
 
 static func _fmt(t: float) -> String:
 	var m := int(t / 60.0)
 	return "%02d:%05.2f" % [m, t - m * 60.0]
-
-
-func _finish() -> void:
-	_set_state("done")
-	Audio.sfx("finish")
-	var medal := "FINISHED"
-	var pay := 600
-	var col := UI.TEXT
-	if run_time <= GOLD:
-		medal = "GOLD"
-		pay = 3000
-		col = Color(1.0, 0.82, 0.2)
-	elif run_time <= SILVER:
-		medal = "SILVER"
-		pay = 2000
-		col = Color(0.8, 0.85, 0.9)
-	elif run_time <= BRONZE:
-		medal = "BRONZE"
-		pay = 1200
-		col = Color(0.85, 0.5, 0.25)
-	var is_best := Game.record_run(run_time)
-	if is_best:
-		pay += 500
-	Game.add_money(pay)
-	_best.text = "BEST  " + _fmt(float(Game.data.best_time))
-	_show_result(medal, col, pay, is_best)
 
 
 func _on_crash(force: float) -> void:
@@ -309,10 +556,15 @@ func _toggle_cam() -> void:
 
 
 func _restart() -> void:
-	car.reset_to(spawn_pos, spawn_yaw)
+	## Pause menu: restart the race, or in free roam put the car back on the road.
+	if race:
+		_retry_event()
+		return
+	var p := car.global_position
+	var gx := clampf(round((p.x - city.x0) / City.PITCH), 0, OpenWorld.NX)
+	var road_pos := Vector3(city.x0 + gx * City.PITCH + 1.9, 0, clampf(p.z, city.z0 + 20.0, city.z1 - 20.0))
+	car.reset_to(road_pos, 0.0)
 	car.nitro = 1.0
-	_set_state("roam")
-	_result_panel.visible = false
 
 
 # ====================================================================== HUD
@@ -416,6 +668,73 @@ func _build_hud() -> void:
 	_banner.modulate.a = 0.0
 	_hud.add_child(_banner)
 
+	# --- race position (top left, under the pause button)
+	_pos_label = UI.label("", 46, Color.WHITE, true)
+	UI.chrome(_pos_label, Color(1, 1, 1), Color(1.0, 0.8, 0.15), Color(0.85, 0.25, 0.0), 54.0)
+	UI.outline(_pos_label, 9)
+	_pos_label.position = Vector2(22, 90)
+	_pos_label.size = Vector2(260, 56)
+	_hud.add_child(_pos_label)
+
+	# --- event card (shown when parked on an event marker)
+	_card = Control.new()
+	_card.visible = false
+	_card.modulate.a = 0.0
+	UI.place(_card, Vector2(0.5, 0), Vector2(-300, 116), Vector2(600, 236))
+	_hud.add_child(_card)
+	var cbg := UI.panel(Color(0.02, 0.03, 0.05, 0.88), Color(1.0, 0.69, 0.0, 0.6))
+	UI.full(cbg)
+	_card.add_child(cbg)
+	var defs := [["Type", 18, 12.0, UI.AMBER, false], ["Name", 44, 34.0, Color.WHITE, true], ["Blurb", 18, 88.0, UI.TEXT, false],
+		["Info", 20, 116.0, UI.AMBER, false], ["Status", 16, 146.0, UI.DIM, false]]
+	for d in defs:
+		var l := UI.label("", d[1], d[3], d[4])
+		l.position = Vector2(20, d[2])
+		l.size = Vector2(560, d[1] + 10)
+		l.name = d[0]
+		_card.add_child(l)
+	var gob := NeonButton.make("START RACE", Vector2(260, 52), UI.GREEN, 26)
+	gob.align_left = false
+	gob.filled = true
+	gob.position = Vector2(320, 174)
+	gob.name = "Go"
+	gob.pressed.connect(func(): _start_event(_near_event))
+	_card.add_child(gob)
+	var ch := UI.label("DRIVE AWAY TO CANCEL", 14, Color(1, 1, 1, 0.45))
+	ch.position = Vector2(20, 196)
+	_card.add_child(ch)
+
+	# --- cinematic letterbox, event title and fade
+	for top_bar in [true, false]:
+		var bar := UI.rect(Color.BLACK)
+		bar.anchor_right = 1.0
+		bar.anchor_top = 0.0 if top_bar else 1.0
+		bar.anchor_bottom = 0.0 if top_bar else 1.0
+		bar.grow_vertical = Control.GROW_DIRECTION_END if top_bar else Control.GROW_DIRECTION_BEGIN
+		bar.custom_minimum_size.y = 0.0
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		layer.add_child(bar)
+		_bars.append(bar)
+	_title_card = Control.new()
+	_title_card.visible = false
+	_title_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	UI.place(_title_card, Vector2(0, 1), Vector2(60, -250), Vector2(900, 150))
+	layer.add_child(_title_card)
+	var tt := UI.label("", 24, UI.AMBER)
+	tt.name = "Type"
+	_title_card.add_child(tt)
+	var tn := UI.label("", 78, Color.WHITE, true)
+	UI.chrome(tn, Color(1, 1, 1), Color(1.0, 0.8, 0.15), Color(0.85, 0.25, 0.0), 92.0)
+	UI.outline(tn, 12)
+	tn.position = Vector2(0, 30)
+	tn.size = Vector2(900, 100)
+	tn.name = "Name"
+	_title_card.add_child(tn)
+	_fade = UI.full(UI.rect(Color(0, 0, 0, 0)))
+	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(_fade)
+	_drive_ui = [left, right, gas, brk, nos, hb, _gauge, minimap, _arrow, pk, ck]
+
 	_build_pause(layer)
 	_build_result(layer)
 
@@ -463,42 +782,75 @@ func _build_pause(layer: CanvasLayer) -> void:
 	_pause_panel = _menu_panel(layer, "PAUSED", UI.AMBER)
 	_menu_buttons(_pause_panel, [
 		["RESUME", _toggle_pause, UI.GREEN],
-		["RESTART AT START GATE", func():
+		["RESTART RACE / RESET CAR", func():
 			_toggle_pause()
 			_restart()],
+		["LEAVE RACE", func():
+			_toggle_pause()
+			if race:
+				_end_race()],
 		["BACK TO GARAGE", func(): _leave("garage"), UI.CYAN],
 		["MAIN MENU", func(): _leave("menu")],
-	], 220.0)
-	var hint := UI.label("KEYBOARD: WASD / ARROWS  •  SPACE HANDBRAKE  •  SHIFT NITRO  •  C CAMERA", 16, UI.DIM)
+	], 190.0)
+	var hint := UI.label("KEYBOARD: WASD / ARROWS  •  SPACE HANDBRAKE  •  SHIFT NITRO  •  C CAMERA  •  ENTER START RACE", 16, UI.DIM)
 	UI.place(hint, Vector2(0.5, 1), Vector2(-500, -50), Vector2(1000, 24))
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_pause_panel.add_child(hint)
 
 
 func _build_result(layer: CanvasLayer) -> void:
-	_result_panel = _menu_panel(layer, "RUN COMPLETE", UI.GREEN)
-	for n in ["Medal", "Time", "Pay"]:
-		var l := UI.label("", 40 if n != "Time" else 64, Color.WHITE, true)
+	_result_panel = _menu_panel(layer, "RACE OVER", UI.GREEN)
+	var defs := [["Place", 44, 150.0], ["Time", 56, 198.0], ["Pay", 28, 264.0]]
+	for d in defs:
+		var l := UI.label("", d[1], Color.WHITE, true)
 		UI.outline(l, 8)
-		UI.place(l, Vector2(0.5, 0), Vector2(-500, {"Medal": 160.0, "Time": 212.0, "Pay": 296.0}[n]), Vector2(1000, 70))
+		UI.place(l, Vector2(0.5, 0), Vector2(-620, d[2]), Vector2(700, d[1] + 14))
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		l.name = n
+		l.name = d[0]
 		_result_panel.add_child(l)
-	_menu_buttons(_result_panel, [
-		["RUN IT AGAIN", _restart, UI.GREEN],
-		["FREE ROAM", func():
-			_result_panel.visible = false
-			_set_state("roam")],
-		["BACK TO GARAGE", func(): _leave("garage"), UI.CYAN],
-	], 380.0)
+	var tb := UI.label("", 24, UI.TEXT)
+	UI.outline(tb, 5)
+	UI.place(tb, Vector2(0.5, 0), Vector2(120, 160), Vector2(420, 260))
+	tb.name = "Table"
+	_result_panel.add_child(tb)
+	var y := 330.0
+	var btns := [["RACE AGAIN", _retry_event, UI.GREEN], ["FREE ROAM", func(): _end_race(), UI.AMBER], ["BACK TO GARAGE", func(): _leave("garage"), UI.CYAN]]
+	for d in btns:
+		var b := NeonButton.make(d[0], Vector2(380, 58), d[2], 28)
+		b.align_left = false
+		UI.place(b, Vector2(0.5, 0), Vector2(-460, y), Vector2(380, 58))
+		b.pressed.connect(d[1])
+		_result_panel.add_child(b)
+		y += 68.0
 
 
-func _show_result(medal: String, col: Color, pay: int, is_best: bool) -> void:
-	(_result_panel.get_node("Medal") as Label).text = medal + ("   •   NEW BEST!" if is_best else "")
-	(_result_panel.get_node("Medal") as Label).add_theme_color_override("font_color", col)
-	(_result_panel.get_node("Time") as Label).text = _fmt(run_time)
-	(_result_panel.get_node("Pay") as Label).text = "+" + CarDB.money(pay) + "   CASH: " + CarDB.money(Game.money())
+func _show_result(res: Dictionary) -> void:
+	var title := _result_panel.get_node("Title") as Label
+	var place := _result_panel.get_node("Place") as Label
+	var col := UI.TEXT
+	if res.medal != "":
+		title.text = "TIME TRIAL"
+		place.text = res.medal
+		col = [Color(1.0, 0.82, 0.2), Color(0.8, 0.85, 0.9), Color(0.85, 0.5, 0.25), UI.DIM][res.place - 1]
+	else:
+		title.text = "YOU WIN" if res.place == 1 else "RACE OVER"
+		place.text = "%s PLACE  OF %d" % [_place_name(res.place), res.field]
+		col = [Color(1.0, 0.82, 0.2), Color(0.8, 0.85, 0.9), Color(0.85, 0.5, 0.25)][res.place - 1] if res.place <= 3 else UI.DIM
+	place.add_theme_color_override("font_color", col)
+	(_result_panel.get_node("Time") as Label).text = _fmt(res.time) + ("  BEST!" if res.best else "")
+	var pay := "+" + CarDB.money(res.pay)
+	if res.first_win:
+		pay += "  (FIRST WIN BONUS)"
+	if res.rep > 0:
+		pay += "   +%d REP" % res.rep
+	(_result_panel.get_node("Pay") as Label).text = pay
 	(_result_panel.get_node("Pay") as Label).add_theme_color_override("font_color", UI.AMBER)
+	var lines := ""
+	var i := 1
+	for row in res.table:
+		lines += "%d.  %-9s %s\n" % [i, row[0], _fmt(row[1]) if row[1] >= 0.0 else "DNF"]
+		i += 1
+	(_result_panel.get_node("Table") as Label).text = lines if res.field > 1 else ""
 	_result_panel.visible = true
 	_result_panel.modulate.a = 0.0
 	create_tween().tween_property(_result_panel, "modulate:a", 1.0, 0.4)
@@ -621,12 +973,55 @@ func dev_pause() -> void:
 
 
 func dev_finish() -> void:
-	run_time = 44.0
-	_finish()
+	if race:
+		race.time = 44.0
+		race._finish()
+
+
+var _dev_unlock := false
+
+
+func dev_event(id: String) -> void:
+	_dev_unlock = true
+	_start_event(id)
+
+
+func dev_race_log() -> void:
+	if race == null:
+		print("RACE none")
+		return
+	var out := "RACE t=%.1f state=%s pos=%d/%d cp=%d/%d lap=%d player_s=%.0f/%.0f |" % [race.time, race.state, race.position(), race.field_size(), race.cp_index, race.cps.size(), race.lap, race.player_progress(), race.path.total]
+	for r in race.rivals:
+		out += " %s s=%.0f lap=%d v=%.0f%s" % [r.name, r.driver.s, r.driver.lap, r.car.speed_mph(), " FIN %.1f" % r.finish_time if r.finish_time >= 0.0 else ""]
+		if OS.get_environment("AH_POS") != "":
+			var tp: Vector3 = race.path.pos_at(r.driver.s)
+			out += " @(%.0f,%.1f,%.0f) line(%.0f,%.0f)" % [r.car.global_position.x, r.car.global_position.y, r.car.global_position.z, tp.x, tp.z]
+	print(out)
+
+
+## Test helper: the player's car is driven by the same AI as the rivals.
+func dev_autopilot() -> void:
+	if race == null:
+		return
+	var drv := RaceDriver.new()
+	car.add_child(drv)
+	drv.attach(car, race.path)
+	drv.world = city
+	drv.skill = 0.95
+	drv.active = true
+	var obs: Array = []
+	for r in race.rivals:
+		obs.append(r.car)
+	for t in traffic.cars:
+		obs.append(t)
+	drv.obstacles = obs
+	race.tree_exiting.connect(func():
+		car.ai = false
+		drv.queue_free())
 
 
 func dev_log(tag := "") -> void:
-	print("SIM %s t=%.2f mph=%.1f gear=%d rpm=%.2f slip=%.1f yaw=%.0f pos=(%.0f,%.0f) nitro=%.2f state=%s cp=%d" % [tag, run_time, car.speed_mph(), car.gear + 1, car.rpm, car.slip, rad_to_deg(car.rotation.y), car.global_position.x, car.global_position.z, car.nitro, state, cp_index])
+	print("SIM %s t=%.2f mph=%.1f gear=%d rpm=%.2f slip=%.1f yaw=%.0f pos=(%.0f,%.0f) nitro=%.2f state=%s" % [tag, run_time, car.speed_mph(), car.gear + 1, car.rpm, car.slip, rad_to_deg(car.rotation.y), car.global_position.x, car.global_position.z, car.nitro, state])
 
 
 func dev_traffic() -> void:
@@ -670,3 +1065,25 @@ func dev_look(x: String, y: String, z: String, tx: String, ty: String, tz: Strin
 	_hud.visible = false
 	post.amount = 0.0
 	post.visible = false
+
+
+func dev_near(x: String, z: String) -> void:
+	var p := Vector3(float(x), 0, float(z))
+	for t in traffic.cars:
+		var q: Vector3 = t.global_position
+		if Vector2(q.x - p.x, q.z - p.z).length() < 40.0:
+			print("NEAR traffic (%.0f,%.1f,%.0f) v=%.1f hw=%d blocked=%s" % [q.x, q.y, q.z, t.speed(), t.hw_index, t.blocked])
+	var space := car.get_world_3d().direct_space_state
+	for dx in [-8, -4, 0, 4, 8, 12]:
+		var from := Vector3(p.x + dx, 1.0, p.z + 12.0)
+		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, from + Vector3(0, 0, -30)))
+		if hit:
+			var cs: CollisionShape3D = hit.collider.shape_owner_get_owner(hit.collider.shape_find_owner(hit.shape))
+			print("NEAR ray dx=%d hit %s at (%.0f,%.1f,%.0f) n=%s shape=%s size=%s at %s parent=%s" % [dx, hit.collider.name, hit.position.x, hit.position.y, hit.position.z, hit.normal, cs.shape, cs.shape.get("size"), cs.global_position, hit.collider.get_parent().name])
+
+
+func dev_goto_event(id: String, back := "0") -> void:
+	var e: Dictionary = _events[id]
+	var yaw: float = e.yaw
+	car.reset_to(e.pos + Vector3(sin(yaw), 0, cos(yaw)) * float(back), yaw)
+	cam.snap_behind()

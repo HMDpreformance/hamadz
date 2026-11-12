@@ -84,6 +84,10 @@ func _build_cockpit() -> void:
 	_cockpit.add_child(glow)
 
 
+func snap_behind() -> void:
+	_inited = false
+
+
 func shake(amount: float) -> void:
 	_shake = maxf(_shake, amount)
 

@@ -233,6 +233,12 @@ static func audio_setup(car_id: String, cfg: Dictionary) -> Dictionary:
 		"exhaust": int(cfg.get("exhaust", 0)), "stage": int(cfg.get("engine", 0))}
 
 
+## Single performance number shown on event cards and used for entry requirements.
+static func rating(car_id: String, cfg: Dictionary) -> int:
+	var s := stats(car_id, cfg)
+	return int(round(s.hp * 0.45 + s.top * 0.9 + s.handling * 1.6 + (8.0 - s.accel) * 28.0))
+
+
 static func money(v: int) -> String:
 	var s := str(absi(v))
 	var out := ""

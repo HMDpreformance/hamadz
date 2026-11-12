@@ -3,8 +3,8 @@ extends Node3D
 ## cinematic cameras cycling behind an animated menu.
 
 const ITEMS := [
+	["HIT THE STREETS", "streets"],
 	["CAREER MODE", "career"],
-	["ARCADE MODE", "arcade"],
 	["GARAGE", "garage"],
 	["OPTIONS", "options"],
 	["CREDITS", "credits"],
@@ -216,7 +216,7 @@ func _build_ui() -> void:
 	var l3 := UI.label("CASH  " + CarDB.money(Game.money()), 20, UI.AMBER)
 	l3.position = Vector2(30, 62)
 	info.add_child(l3)
-	var ver := UI.label("DEMO BUILD 0.1  •  VERTICAL SLICE", 14, Color(1, 1, 1, 0.4))
+	var ver := UI.label("BUILD 0.4  •  VERTICAL SLICE", 14, Color(1, 1, 1, 0.4))
 	UI.place(ver, Vector2(0, 1), Vector2(48, -30), Vector2(400, 20))
 	_menu_root.add_child(ver)
 
@@ -231,6 +231,8 @@ func _on_item(id: String) -> void:
 	match id:
 		"garage":
 			Nav.goto("garage", {}, "ENTERING GARAGE")
+		"streets":
+			Nav.goto("drive", {}, "HITTING THE STREETS")
 		"career", "arcade":
 			_open(_coming_soon(id))
 		"options":

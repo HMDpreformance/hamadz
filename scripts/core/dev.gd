@@ -43,7 +43,7 @@ func _run(spec: String) -> void:
 				await RenderingServer.frame_post_draw
 				var img := get_viewport().get_texture().get_image()
 				DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://" + v.get_base_dir()))
-				img.save_png("res://" + v)
+				img.save_png("res://shots/" + v + ".png")
 				print("Dev: saved ", v)
 			"check":
 				var stack := ["res://scripts"]

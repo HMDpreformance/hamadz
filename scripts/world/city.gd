@@ -26,6 +26,11 @@ var _signal_phase := -1
 var _light_pool: Array[OmniLight3D] = []
 var _pool_timer := 0.0
 var focus: Node3D                    # lights gather around this node
+var build_parent: Node               # where add_building / add_sign put their nodes (default: self)
+
+
+func _tgt() -> Node:
+	return build_parent if build_parent else self
 
 
 func road(i: int) -> float:
@@ -53,14 +58,16 @@ func ground_height(p: Vector3) -> float:
 
 
 # ---------------------------------------------------------------- ground
-func _ground() -> void:
+func _ground_shader() -> Shader:
 	var sh := Shader.new()
 	sh.code = """
 shader_type spatial;
 uniform float pitch = 82.0;
 uniform float half_road = 9.0;
-uniform float offset = 0.0;
-uniform float extent = 205.0;
+uniform vec2 offset = vec2(0.0);
+uniform vec2 extent = vec2(205.0);
+uniform vec3 outside : source_color = vec3(0.035, 0.036, 0.04);
+uniform float outside_rough = 0.5;
 uniform sampler2D noise_tex : repeat_enable, filter_linear_mipmap;
 varying vec3 wp;
 void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
@@ -74,7 +81,7 @@ void fragment() {
 	vec2 p = wp.xz;
 	vec2 q = mod(p - offset + pitch * 0.5, pitch) - pitch * 0.5;
 	vec2 d = abs(q);
-	bool in_grid = abs(p.x) < extent + half_road && abs(p.y) < extent + half_road;
+	bool in_grid = abs(p.x) < extent.x + half_road && abs(p.y) < extent.y + half_road;
 	bool on_x = d.x < half_road && in_grid;
 	bool on_z = d.y < half_road && in_grid;
 	float white = 0.0;
@@ -102,18 +109,26 @@ void fragment() {
 	vec3 col = mix(asphalt, vec3(0.62, 0.62, 0.6), clamp(white, 0.0, 1.0) * wear);
 	col = mix(col, vec3(0.7, 0.5, 0.05), clamp(yellow, 0.0, 1.0) * wear);
 	float puddle = smoothstep(0.52, 0.66, n2);
+	if (!in_grid) {
+		col = outside * (0.6 + 0.8 * fine) * (0.8 + 0.4 * n);
+		puddle *= 1.0 - step(0.6, outside_rough);
+	}
 	ALBEDO = col * (1.0 - puddle * 0.45);
-	ROUGHNESS = mix(0.42, 0.06, puddle) + fine * 0.12;
+	ROUGHNESS = (in_grid ? mix(0.42, 0.06, puddle) : mix(outside_rough, 0.06, puddle)) + fine * 0.12;
 	METALLIC = 0.25 * puddle;
 	SPECULAR = 0.6;
 }
 """
+	return sh
+
+
+func _ground() -> void:
 	var m := ShaderMaterial.new()
-	m.shader = sh
+	m.shader = _ground_shader()
 	m.set_shader_parameter("pitch", PITCH)
 	m.set_shader_parameter("half_road", ROAD * 0.5)
-	m.set_shader_parameter("offset", road(0))
-	m.set_shader_parameter("extent", half)
+	m.set_shader_parameter("offset", Vector2(road(0), road(0)))
+	m.set_shader_parameter("extent", Vector2(half, half))
 	m.set_shader_parameter("noise_tex", EnvKit.noise_tex(3, 0.03))
 	var mi := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
@@ -201,11 +216,11 @@ func add_building(pos: Vector3, size: Vector3) -> void:
 	mi.mesh = bm
 	mi.material_override = _building_material()
 	mi.position = pos + Vector3(0, size.y * 0.5, 0)
-	add_child(mi)
+	_tgt().add_child(mi)
 	# rooftop: parapet glow + beacon on tall towers
 	if size.y > 38.0:
-		EnvKit.box(self, Vector3(0.6, 3.0, 0.6), pos + Vector3(0, size.y + 1.5, 0), EnvKit.solid(Color(0.05, 0.05, 0.05)))
-		EnvKit.box(self, Vector3(0.9, 0.5, 0.9), pos + Vector3(0, size.y + 3.2, 0), EnvKit.emissive(Color(1.0, 0.1, 0.05), 5.0))
+		EnvKit.box(_tgt(), Vector3(0.6, 3.0, 0.6), pos + Vector3(0, size.y + 1.5, 0), EnvKit.solid(Color(0.05, 0.05, 0.05)))
+		EnvKit.box(_tgt(), Vector3(0.9, 0.5, 0.9), pos + Vector3(0, size.y + 3.2, 0), EnvKit.emissive(Color(1.0, 0.1, 0.05), 5.0))
 
 
 func add_sign(text: String, pos: Vector3, rot_y: float, color: Color, height := 2.2, vertical := false) -> void:
@@ -226,12 +241,12 @@ func add_sign(text: String, pos: Vector3, rot_y: float, color: Color, height := 
 	l.alpha_cut = Label3D.ALPHA_CUT_DISCARD
 	l.position = pos
 	l.rotation.y = rot_y
-	add_child(l)
+	_tgt().add_child(l)
 	# dark backing board + halo
 	var fwd := Vector3(sin(rot_y), 0, cos(rot_y))
 	var w := height * 0.62 * (1.4 if vertical else float(text.length())) + 1.0
 	var h := (height * 0.82 * text.replace(" ", "").length() + 1.0) if vertical else height * 1.5
-	EnvKit.box(self, Vector3(w, h, 0.2), pos - fwd * 0.16, EnvKit.solid(Color(0.015, 0.015, 0.02), 0.4), Vector3(0, rot_y, 0))
+	EnvKit.box(_tgt(), Vector3(w, h, 0.2), pos - fwd * 0.16, EnvKit.solid(Color(0.015, 0.015, 0.02), 0.4), Vector3(0, rot_y, 0))
 	var halo := MeshInstance3D.new()
 	var qm := QuadMesh.new()
 	qm.size = Vector2(w * 2.2, h * 2.2)
@@ -239,7 +254,7 @@ func add_sign(text: String, pos: Vector3, rot_y: float, color: Color, height := 
 	halo.material_override = EnvKit.glow_mat(color, 0.22)
 	halo.position = pos + fwd * 0.12
 	halo.rotation.y = rot_y
-	add_child(halo)
+	_tgt().add_child(halo)
 
 
 func _blocks() -> void:

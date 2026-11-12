@@ -6,7 +6,7 @@ const GOLD := 46.0
 const SILVER := 58.0
 const BRONZE := 75.0
 
-var city: City
+var city: OpenWorld
 var car: PlayerCar
 var cam: ChaseCamera
 var engine_audio: EngineAudio
@@ -34,7 +34,10 @@ var _banner: Label
 var _pause_panel: Control
 var _result_panel: Control
 var _steer_keys: Array = []
-var _traffic: Array = []
+var traffic: Traffic
+var minimap: MiniMap
+var _space_t := 0.0
+var _district := ""
 
 
 func _ready() -> void:
@@ -51,12 +54,12 @@ func _ready() -> void:
 	moon.directional_shadow_max_distance = 60.0
 	add_child(moon)
 
-	city = City.new()
-	city.blocks = 5
+	city = OpenWorld.new()
 	add_child(city)
 	city.build()
 
-	spawn_pos = Vector3(city.road(2) + 1.9, 0, 22.0)
+	spawn_pos = Vector3(city.road_x(6) + 1.9, 0, 22.0)
+	city.preload_around(spawn_pos)
 	spawn_yaw = 0.0
 	car = PlayerCar.new()
 	add_child(car)
@@ -83,8 +86,8 @@ func _ready() -> void:
 
 	_route()
 	_make_marker()
-	_spawn_traffic()
 	_build_hud()
+	_spawn_traffic()
 	_set_state("roam")
 	Audio.play_ambience("city", -10.0)
 	Audio.play_music("drive", 1.5, -11.0)
@@ -105,26 +108,29 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # ====================================================================== route
 func _route() -> void:
-	var r := func(i: int) -> float: return city.road(i)
-	var mid := func(a: int, b: int) -> float: return (city.road(a) + city.road(b)) * 0.5
+	# the original downtown loop, now a few blocks of a much larger map
+	var rx := func(i: int) -> float: return city.road_x(i + 4)
+	var rz := func(j: int) -> float: return city.road_z(j + 2)
+	var mx := func(a: int, b: int) -> float: return (city.road_x(a + 4) + city.road_x(b + 4)) * 0.5
+	var mz := func(a: int, b: int) -> float: return (city.road_z(a + 2) + city.road_z(b + 2)) * 0.5
 	checkpoints = [
-		Vector3(r.call(2), 0, mid.call(1, 2)),
-		Vector3(mid.call(2, 3), 0, r.call(1)),
-		Vector3(mid.call(3, 4), 0, r.call(1)),
-		Vector3(r.call(4), 0, mid.call(1, 2)),
-		Vector3(r.call(4), 0, mid.call(2, 3)),
-		Vector3(mid.call(3, 4), 0, r.call(3)),
-		Vector3(r.call(3), 0, mid.call(3, 4)),
-		Vector3(mid.call(2, 3), 0, r.call(4)),
-		Vector3(mid.call(1, 2), 0, r.call(4)),
-		Vector3(r.call(1), 0, mid.call(3, 4)),
-		Vector3(mid.call(1, 2), 0, r.call(3)),
-		Vector3(r.call(2), 0, mid.call(2, 3)),
+		Vector3(rx.call(2), 0, mz.call(1, 2)),
+		Vector3(mx.call(2, 3), 0, rz.call(1)),
+		Vector3(mx.call(3, 4), 0, rz.call(1)),
+		Vector3(rx.call(4), 0, mz.call(1, 2)),
+		Vector3(rx.call(4), 0, mz.call(2, 3)),
+		Vector3(mx.call(3, 4), 0, rz.call(3)),
+		Vector3(rx.call(3), 0, mz.call(3, 4)),
+		Vector3(mx.call(2, 3), 0, rz.call(4)),
+		Vector3(mx.call(1, 2), 0, rz.call(4)),
+		Vector3(rx.call(1), 0, mz.call(3, 4)),
+		Vector3(mx.call(1, 2), 0, rz.call(3)),
+		Vector3(rx.call(2), 0, mz.call(2, 3)),
 	]
 
 
 func _start_gate() -> Vector3:
-	return Vector3(city.road(2), 0, (city.road(2) + city.road(3)) * 0.5)
+	return Vector3(city.road_x(6), 0, (city.road_z(4) + city.road_z(5)) * 0.5)
 
 
 func _make_marker() -> void:
@@ -174,6 +180,8 @@ func _make_marker() -> void:
 
 
 func _place_marker(pos: Vector3, text: String, color: Color) -> void:
+	if minimap:
+		minimap.target = pos
 	_marker.visible = true
 	_marker.position = pos
 	_marker_label.text = text
@@ -182,26 +190,11 @@ func _place_marker(pos: Vector3, text: String, color: Color) -> void:
 
 
 func _spawn_traffic() -> void:
-	var count: int = [2, 4, 6][GFX.index]
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 5
-	var used := {}
-	var h := City.PITCH * 0.5 - 5.6
-	for k in count:
-		var bi := rng.randi() % 5
-		var bj := rng.randi() % 5
-		while used.has(bi * 10 + bj):
-			bi = rng.randi() % 5
-			bj = rng.randi() % 5
-		used[bi * 10 + bj] = true
-		var c := Vector3(city.road(bi) + City.PITCH * 0.5, 0, city.road(bj) + City.PITCH * 0.5)
-		var path := PackedVector3Array([c + Vector3(-h, 0, h), c + Vector3(-h, 0, -h), c + Vector3(h, 0, -h), c + Vector3(h, 0, h)])
-		var t := TrafficCar.new()
-		add_child(t)
-		t.setup(CarDB.CAR_ORDER[rng.randi() % 3], [6, 9, 10, 11, 5, 4][rng.randi() % 6], path, rng.randi() % 4, rng.randf_range(0.2, 0.8))
-		t.cruise = rng.randf_range(10.0, 14.0)
-		t.player = car
-		_traffic.append(t)
+	traffic = Traffic.new()
+	add_child(traffic)
+	traffic.setup(city, car, [5, 8, 11][GFX.index], [2, 3, 4][GFX.index])
+	if minimap:
+		minimap.traffic = traffic
 
 
 # ====================================================================== state
@@ -244,6 +237,16 @@ func _process(_dt: float) -> void:
 				_place_marker(checkpoints[cp_index], "FINISH" if last else str(cp_index + 1), UI.GREEN if last else UI.CYAN)
 		_info.text = "CHECKPOINT  %d / %d" % [mini(cp_index + 1, checkpoints.size()), checkpoints.size()]
 		_timer.text = _fmt(run_time)
+	# acoustics and district name follow the car
+	_space_t -= _dt
+	if _space_t <= 0.0:
+		_space_t = 0.3
+		Audio.set_space(city.space_at(p))
+		var dn := city.district_name(p)
+		if dn != _district:
+			_district = dn
+			if state == "roam":
+				_show_banner(dn, 1.6)
 	# marker pulse
 	if _marker.visible:
 		var ring := _marker.get_node("Ring") as Node3D
@@ -370,6 +373,13 @@ func _build_hud() -> void:
 	_arrow.scene = self
 	UI.place(_arrow, Vector2(1, 0), Vector2(-150, 14), Vector2(130, 130))
 	_hud.add_child(_arrow)
+
+	# --- minimap under the checkpoint arrow
+	minimap = MiniMap.new()
+	minimap.world = city
+	minimap.player = car
+	UI.place(minimap, Vector2(1, 0), Vector2(-196, 168), Vector2(176, 176))
+	_hud.add_child(minimap)
 
 	# --- driving controls
 	var left := TouchKey.make("steer_left", "<", UI.TEXT, Vector2(124, 124))
@@ -621,10 +631,42 @@ func dev_log(tag := "") -> void:
 
 func dev_traffic() -> void:
 	var worst := 0.0
-	for t in _traffic:
+	for t in traffic.cars:
+		if t.hw_index >= 0:
+			continue
 		var c: Vector3 = t.global_position
-		# distance from the lane square around its block
-		var bc := Vector3(round(c.x / City.PITCH) * City.PITCH, 0, round(c.z / City.PITCH) * City.PITCH)
-		var d := absf(maxf(absf(c.x - bc.x), absf(c.z - bc.z)) - (City.PITCH * 0.5 - 5.6))
-		worst = maxf(worst, d)
-	print("TRAFFIC max lane error %.2f m" % worst)
+		# distance from the nearest lane line of the grid
+		var fx := absf(fposmod(c.x - city.x0 + City.PITCH * 0.5, City.PITCH) - City.PITCH * 0.5)
+		var fz := absf(fposmod(c.z - city.z0 + City.PITCH * 0.5, City.PITCH) - City.PITCH * 0.5)
+		worst = maxf(worst, minf(absf(fx - Traffic.LANE), absf(fz - Traffic.LANE)))
+	print("TRAFFIC max lane error %.2f m, blocks loaded %d, lamps %d" % [worst, city.loaded_count(), city.lamp_positions.size()])
+
+
+func dev_warp(x: String, z: String, yaw := "0") -> void:
+	car.reset_to(Vector3(float(x), 0, float(z)), deg_to_rad(float(yaw)))
+
+
+func dev_top(size := "1300", x := "0", z := "60") -> void:
+	var c := Camera3D.new()
+	add_child(c)
+	c.projection = Camera3D.PROJECTION_ORTHOGONAL
+	c.size = float(size)
+	c.far = 2000.0
+	c.position = Vector3(float(x), 600, float(z))
+	c.rotation_degrees = Vector3(-90, 0, 0)
+	c.make_current()
+	_hud.visible = false
+	env.fog_enabled = false
+	env.ambient_light_energy = 3.0
+
+
+func dev_look(x: String, y: String, z: String, tx: String, ty: String, tz: String) -> void:
+	var c := Camera3D.new()
+	add_child(c)
+	c.far = 1500.0
+	c.fov = 65.0
+	c.look_at_from_position(Vector3(float(x), float(y), float(z)), Vector3(float(tx), float(ty), float(tz)), Vector3.UP)
+	c.make_current()
+	_hud.visible = false
+	post.amount = 0.0
+	post.visible = false

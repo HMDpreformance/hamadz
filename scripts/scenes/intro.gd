@@ -192,6 +192,7 @@ func _enter_title() -> void:
 	_title_t = 0.0
 	_title_root.visible = true
 	Audio.sfx("title_slam", 2.0)
+	get_tree().create_timer(0.55).timeout.connect(func(): Audio.voice("title", 2.0))
 	_flash.color.a = 0.9
 	create_tween().tween_property(_flash, "color:a", 0.0, 0.7)
 	_title.pivot_offset = _title.size * 0.5

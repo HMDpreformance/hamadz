@@ -710,9 +710,11 @@ func _on_action() -> void:
 			Game.select_car(view_car)
 			Audio.sfx("purchase")
 			_rev_engine()
+			Audio.voice("garage_new_car", 1.0, 2)
 			_toast_msg("PURCHASED  •  SAVED", UI.GREEN)
 		else:
 			Audio.sfx("ui_deny")
+			Audio.voice("garage_broke", 1.0)
 			_toast_msg("NOT ENOUGH CASH", UI.RED)
 		_fill_cards()
 		_refresh_info()
@@ -727,6 +729,7 @@ func _on_action() -> void:
 		"ok":
 			if not had:
 				Audio.sfx("purchase")
+				Audio.voice("garage_install", 1.0)
 			Audio.sfx("install", -2.0)
 			_toast_msg("INSTALLED  •  SAVED" if had else "PURCHASED + INSTALLED", UI.GREEN)
 			if slot in ["engine", "turbo", "exhaust"]:
@@ -737,6 +740,7 @@ func _on_action() -> void:
 			tw.tween_property(car.body, "position:y", car.body.position.y, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 		"poor":
 			Audio.sfx("ui_deny")
+			Audio.voice("garage_broke", 1.0)
 			_toast_msg("NOT ENOUGH CASH", UI.RED)
 		"locked":
 			Audio.sfx("ui_deny")

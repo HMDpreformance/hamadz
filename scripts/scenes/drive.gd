@@ -18,6 +18,8 @@ var _events := {}              # id -> {ev, pos, yaw, node}
 var _near_event := ""
 var _card: Control
 var _pos_label: Label
+var _lead_pos := 0              # race position at the last lead call
+var _lead_t := -9.0             # race time of the last lead call
 var _radio_toast: Label
 var _radio_btn: NeonButton
 var _toast_tw: Tween
@@ -110,6 +112,7 @@ func _ready() -> void:
 	_set_state("roam")
 	Audio.play_ambience("city", -10.0)
 	Audio.music_state("roam", 1.5)
+	get_tree().create_timer(5.0).timeout.connect(func(): Audio.dj_break(true))
 	GFX.changed.connect(func(): GFX.apply_environment(env))
 
 
@@ -302,7 +305,9 @@ func _start_event(id: String) -> void:
 	var tw2 := create_tween()
 	tw2.tween_property(_fade, "color:a", 0.0, 0.4)
 	tw2.parallel().tween_property(_title_card, "modulate:a", 1.0, 0.4)
-	tw2.tween_interval(2.3)
+	# the starter briefs the event; the card stays up until the line is over
+	Audio.voice("brief_" + str(ev.type), 1.0)
+	tw2.tween_interval(maxf(2.3, Audio.voice_remaining() + 0.1))
 	tw2.tween_property(_title_card, "modulate:a", 0.0, 0.3)
 	await tw2.finished
 	if race == null:
@@ -339,6 +344,7 @@ func _on_countdown(n: int) -> void:
 
 func _on_go() -> void:
 	_set_state("race")
+	_lead_pos = 0
 	Audio.sfx("beep_hi", -4.0 if Audio.voice("go", 3.0) else 0.0)
 	Audio.music_state("race", 0.3)
 	Audio.music_filter(20000.0)
@@ -356,13 +362,17 @@ func _on_checkpoint(index: int, total: int) -> void:
 func _on_lap(lap: int, laps: int) -> void:
 	Audio.sfx("checkpoint", 0.0, 1.25)
 	_show_banner("FINAL LAP" if lap == laps - 1 else "LAP %d" % (lap + 1), 1.0)
+	if lap == laps - 1:
+		Audio.voice("final_lap", 2.0, 2)
 	_place_marker(race.next_checkpoint(), "1", UI.CYAN)
 
 
 func _on_race_finished(res: Dictionary) -> void:
 	_set_state("done")
 	Audio.sting(res.place == 1 or (res.medal != "" and res.place <= 3))
-	Audio.voice("win" if res.place == 1 else ("podium" if res.place <= 3 else "lose"), 2.0)
+	# "podium" only when there was somebody left to beat (a duel has a winner and a loser)
+	var on_podium: bool = res.place <= 3 and (res.medal != "" or res.place < race.field_size())
+	Audio.voice("win" if res.place == 1 else ("podium" if on_podium else "lose"), 2.0, 3)
 	_pos_label.text = ""
 	(_info.get_parent() as Control).visible = false
 	Audio.sfx("finish")
@@ -488,6 +498,7 @@ func _spawn_traffic() -> void:
 # ====================================================================== state
 func _set_state(st: String) -> void:
 	state = st
+	Audio.dj_ok = st == "roam"
 	if st != "done":
 		(_info.get_parent() as Control).visible = true
 	match st:
@@ -526,7 +537,18 @@ func _process(_dt: float) -> void:
 			_pos_label.text = ""
 			_best.text = "GOLD %s   SILVER %s   BRONZE %s" % [_fmt(race.trial_times[0]), _fmt(race.trial_times[1]), _fmt(race.trial_times[2])]
 		else:
-			_pos_label.text = "%s / %d" % [_place_name(race.position()), race.field_size()]
+			var pos := race.position()
+			_pos_label.text = "%s / %d" % [_place_name(pos), race.field_size()]
+			# the starter calls it when the lead changes hands (not in the opening scramble)
+			if race.time > 6.0 and race.time - _lead_t > 9.0:
+				if _lead_pos > 1 and pos == 1 and Audio.voice("lead_taken", 1.0, 1):
+					_lead_t = race.time
+				elif _lead_pos == 1 and pos > 1 and Audio.voice("lead_lost", 1.0, 1):
+					_lead_t = race.time
+				_lead_pos = pos
+			elif race.time <= 6.0:
+				_lead_pos = pos
+				_lead_t = -9.0
 	# cinematic camera: slow orbit around the grid / the finished car
 	if _cine.current:
 		_cine_t += _dt

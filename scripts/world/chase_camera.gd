@@ -107,19 +107,21 @@ func _process(dt: float) -> void:
 			travel_yaw = car_yaw - clampf(atan2(target.slip, absf(target.speed)), -0.5, 0.5) * 0.6
 		_yaw = lerp_angle(_yaw, travel_yaw, 1.0 - exp(-dt * (4.0 + sp * 3.0)))
 		var back := Vector3(sin(_yaw), 0, cos(_yaw))
-		var dist := 5.4 + sp * 1.3 - (0.5 if target.using_nitro else 0.0)
-		var want := target.global_position + back * dist + Vector3(0, 1.95 + sp * 0.25, 0)
+		# taller cars (the SUV) get a higher, further camera so the road stays visible
+		var tall := maxf(target.visual.height() - 1.3, 0.0) if target.visual else 0.0
+		var dist := 5.4 + sp * 1.3 - (0.5 if target.using_nitro else 0.0) + tall * 2.2
+		var want := target.global_position + back * dist + Vector3(0, 1.95 + sp * 0.25 + tall * 1.5, 0)
 		if not _inited:
 			_pos = want
 			_inited = true
 		_pos = _pos.lerp(want, 1.0 - exp(-dt * 12.0))
 		global_position = _pos
-		look_at(target.global_position + Vector3(0, 0.95, 0) - back * (3.0 + sp * 4.0), Vector3.UP)
+		look_at(target.global_position + Vector3(0, 0.95 + tall * 0.6, 0) - back * (3.0 + sp * 4.0), Vector3.UP)
 		fov_target = 60.0 + sp * 16.0 + (9.0 if target.using_nitro else 0.0)
 	elif mode == Mode.CABIN:
 		_inited = true
 		var bc := target.global_transform.basis
-		global_position = target.global_position + bc * Vector3(-0.36, 1.12 + target.visual.ride_offset(), 0.28)
+		global_position = target.global_position + bc * Vector3(-0.36, target.visual.height() * 0.88, 0.28)
 		global_transform.basis = bc * Basis(Vector3.UP, target.steer * 0.12) * Basis(Vector3.RIGHT, -0.03)
 		fov_target = 72.0 + sp * 9.0 + (6.0 if target.using_nitro else 0.0)
 		if _wheel:
@@ -128,7 +130,7 @@ func _process(dt: float) -> void:
 	else:
 		_inited = true
 		var b := target.global_transform.basis
-		global_position = target.global_position + b * Vector3(0, 1.02 + target.visual.ride_offset(), -0.35)
+		global_position = target.global_position + b * Vector3(0, target.visual.height() * 0.8, -0.35)
 		global_transform.basis = b * Basis(Vector3.RIGHT, -0.04)
 		fov_target = 68.0 + sp * 12.0 + (8.0 if target.using_nitro else 0.0)
 	fov = lerpf(fov, fov_target, 1.0 - exp(-dt * 5.0))

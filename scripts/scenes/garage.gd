@@ -320,15 +320,15 @@ func _build_ui() -> void:
 	var defs := [["cars", "VEHICLES"]]
 	for g in CarDB.GROUPS:
 		defs.append([g.id, g.label])
-	var y := 112.0
+	var y := 96.0
 	for d in defs:
-		var b := NeonButton.make(d[1], Vector2(232, 52), UI.AMBER, 23)
+		var b := NeonButton.make(d[1], Vector2(232, 46), UI.AMBER, 19)
 		b.position = Vector2(22, y)
 		b.pressed.connect(_select_group.bind(d[0]))
 		ui.add_child(b)
 		_group_buttons[d[0]] = b
 		UI.pop(b, 0.05 * _group_buttons.size())
-		y += 60.0
+		y += 49.0
 	_hint = UI.label("DRAG TO ROTATE  •  PINCH TO ZOOM", 16, Color(1, 1, 1, 0.45))
 	UI.place(_hint, Vector2(0.5, 0), Vector2(-200, 92), Vector2(400, 22))
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -528,7 +528,7 @@ func _refresh_info() -> void:
 	var d: Dictionary = CarDB.CARS[view_car]
 	_name.text = d.name
 	_tag.text = d.tag
-	_specline.text = "%s  •  %s  •  %d KG" % [d.cyl, d.drive, d.weight]
+	_specline.text = "%s  •  %s  •  %d KG" % [d.cyl, d.drive, int(CarDB.stats(view_car, preview).weight)]
 	_blurb.text = d.blurb
 	var owned := Game.owns_car(view_car)
 	_owned_badge.text = ("IN YOUR GARAGE" + ("  •  ACTIVE" if view_car == Game.current_car() else "")) if owned else "NOT OWNED  •  " + CarDB.money(d.price)

@@ -336,13 +336,15 @@ func _update_paint() -> void:
 	var col: Color = CarDB.PAINTS[clampi(int(cfg.paint), 0, CarDB.PAINTS.size() - 1)].c
 	m.clearcoat_enabled = true
 	m.clearcoat = 1.0
-	m.clearcoat_roughness = 0.04
+	m.clearcoat_roughness = 0.015
 	m.rim_enabled = false
-	m.albedo_color = col
+	# deep, slightly darker base so the clearcoat reflections read like real paint
+	m.albedo_color = Color(col.r * 0.72, col.g * 0.72, col.b * 0.72) if col.get_luminance() > 0.12 else col
+	m.specular_mode = BaseMaterial3D.SPECULAR_SCHLICK_GGX
 	match int(cfg.finish):
 		0:  # gloss
-			m.metallic = 0.25
-			m.roughness = 0.22
+			m.metallic = 0.5
+			m.roughness = 0.17
 		1:  # metallic
 			m.metallic = 0.75
 			m.roughness = 0.3
@@ -422,19 +424,21 @@ func _ring(u: float) -> Array:
 	var xi := maxf(hw - 0.30, 0.2)
 	var xe := _edge_x(u)
 	var y4 := lip + minf(0.05, (belt - lip) * 0.3)
+	# crown: roof/hood/deck panels curve down towards the edges
+	var cr := clampf((top - belt) / 0.12, 0.35, 1.0)
 	return [
 		Vector3(0, bot, z),
 		Vector3(xi, bot, z),
 		Vector3(xi, lip, z),
-		Vector3(hw - 0.012 + fl, lip, z),
-		Vector3(hw + fl, y4, z),
-		Vector3(hw + fl, lerpf(y4, belt, 0.5), z),
-		Vector3(hw - 0.006 + fl * 0.6, lerpf(y4, belt, 0.85), z),
-		Vector3(hw - 0.03, belt, z),
-		Vector3(xe, top - 0.04, z),
-		Vector3(xe - 0.06, top - 0.012, z),
-		Vector3(xe * 0.55, top, z),
-		Vector3(xe * 0.27, top, z),
+		Vector3(hw - 0.05 + fl, lip, z),
+		Vector3(hw - 0.022 + fl, y4, z),
+		Vector3(hw + fl, lerpf(y4, belt, 0.55), z),
+		Vector3(hw - 0.016 + fl * 0.6, lerpf(y4, belt, 0.86), z),
+		Vector3(hw - 0.05, belt, z),
+		Vector3(xe, top - 0.055 * cr, z),
+		Vector3(xe - 0.06, top - 0.032 * cr, z),
+		Vector3(xe * 0.55, top - 0.012 * cr, z),
+		Vector3(xe * 0.27, top - 0.003 * cr, z),
 		Vector3(0, top, z),
 	]
 

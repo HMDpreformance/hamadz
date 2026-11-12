@@ -69,6 +69,7 @@ uniform vec2 extent = vec2(205.0);
 uniform vec3 outside : source_color = vec3(0.035, 0.036, 0.04);
 uniform float outside_rough = 0.5;
 uniform sampler2D noise_tex : repeat_enable, filter_linear_mipmap;
+uniform sampler2D asphalt_tex : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
 varying vec3 wp;
 void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 float lane(float d, float along) {
@@ -104,17 +105,18 @@ void fragment() {
 	float n = texture(noise_tex, p * 0.035).r;
 	float n2 = texture(noise_tex, p * 0.011 + 0.37).r;
 	float fine = texture(noise_tex, p * 0.6).r;
-	vec3 asphalt = vec3(0.035, 0.036, 0.04) * (0.7 + 0.6 * fine);
+	vec3 tex = texture(asphalt_tex, p * 0.22).rgb;
+	vec3 asphalt = tex * 0.32 * (0.8 + 0.4 * n);
 	float wear = 0.55 + 0.45 * n;
 	vec3 col = mix(asphalt, vec3(0.62, 0.62, 0.6), clamp(white, 0.0, 1.0) * wear);
 	col = mix(col, vec3(0.7, 0.5, 0.05), clamp(yellow, 0.0, 1.0) * wear);
-	float puddle = smoothstep(0.52, 0.66, n2);
+	float puddle = smoothstep(0.42, 0.6, n2);
 	if (!in_grid) {
 		col = outside * (0.6 + 0.8 * fine) * (0.8 + 0.4 * n);
 		puddle *= 1.0 - step(0.6, outside_rough);
 	}
-	ALBEDO = col * (1.0 - puddle * 0.45);
-	ROUGHNESS = (in_grid ? mix(0.42, 0.06, puddle) : mix(outside_rough, 0.06, puddle)) + fine * 0.12;
+	ALBEDO = col * (1.0 - puddle * 0.5);
+	ROUGHNESS = (in_grid ? mix(0.24, 0.04, puddle) : mix(outside_rough, 0.06, puddle)) + fine * 0.12;
 	METALLIC = 0.25 * puddle;
 	SPECULAR = 0.6;
 }
@@ -130,6 +132,7 @@ func _ground() -> void:
 	m.set_shader_parameter("offset", Vector2(road(0), road(0)))
 	m.set_shader_parameter("extent", Vector2(half, half))
 	m.set_shader_parameter("noise_tex", EnvKit.noise_tex(3, 0.03))
+	m.set_shader_parameter("asphalt_tex", load("res://textures/asphalt.jpg"))
 	var mi := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(half * 2 + 140, half * 2 + 140)

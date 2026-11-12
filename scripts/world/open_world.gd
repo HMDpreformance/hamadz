@@ -181,6 +181,7 @@ func _world_ground() -> void:
 	m.set_shader_parameter("outside", Color(0.035, 0.05, 0.03))
 	m.set_shader_parameter("outside_rough", 0.95)
 	m.set_shader_parameter("noise_tex", EnvKit.noise_tex(3, 0.03))
+	m.set_shader_parameter("asphalt_tex", load("res://textures/asphalt.jpg"))
 	var mi := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(hw_h.x * 2 + 240, (water_z - (z0 - HW_OFF - 120.0)))
@@ -373,6 +374,7 @@ func _hw_material() -> ShaderMaterial:
 shader_type spatial;
 uniform sampler2D noise_tex : repeat_enable, filter_linear_mipmap;
 uniform float width = 24.0;
+uniform sampler2D asphalt_tex : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
 void fragment() {
 	float x = (UV.x - 0.5) * width;
 	float ax = abs(x);
@@ -383,20 +385,21 @@ void fragment() {
 	float yellow = smoothstep(0.1, 0.06, abs(ax - 0.28));
 	float fine = texture(noise_tex, vec2(x, along) * 0.6).r;
 	float n = texture(noise_tex, vec2(x, along) * 0.03).r;
-	vec3 asphalt = vec3(0.03, 0.031, 0.035) * (0.7 + 0.6 * fine);
+	vec3 asphalt = texture(asphalt_tex, vec2(x, along) * 0.22).rgb * 0.3 * (0.8 + 0.4 * n);
 	// darker tyre lanes
 	asphalt *= 1.0 - 0.18 * smoothstep(1.6, 0.4, abs(fract(ax / 3.85 + 0.02) - 0.5) * 3.85);
 	vec3 col = mix(asphalt, vec3(0.62), clamp(white, 0.0, 1.0) * (0.55 + 0.45 * n));
 	col = mix(col, vec3(0.7, 0.5, 0.05), yellow * (0.55 + 0.45 * n));
 	ALBEDO = col;
-	ROUGHNESS = 0.35 + fine * 0.15;
-	SPECULAR = 0.6;
+	ROUGHNESS = 0.2 + fine * 0.14;
+	SPECULAR = 0.65;
 }
 """
 	var m := ShaderMaterial.new()
 	m.shader = sh
 	m.set_shader_parameter("noise_tex", EnvKit.noise_tex(3, 0.03))
 	m.set_shader_parameter("width", HW_HALF * 2.0)
+	m.set_shader_parameter("asphalt_tex", load("res://textures/asphalt.jpg"))
 	return m
 
 

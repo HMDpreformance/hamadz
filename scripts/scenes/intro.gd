@@ -293,7 +293,7 @@ func _input(event: InputEvent) -> void:
 			if _title_t > 0.8:
 				_leaving = true
 				Audio.sfx("ui_select")
-				Nav.goto("menu", {}, "AFTER HOURS")
+				Nav.goto("menu", {}, "HMDNIGHT CLUB")
 
 
 func _skip_to_title() -> void:
@@ -342,7 +342,7 @@ func _build_ui() -> void:
 	glow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_title_root.add_child(glow)
-	_title = UI.label("AFTER HOURS", 136, Color.WHITE, true)
+	_title = UI.label("HMDNIGHT", 136, Color.WHITE, true)
 	UI.chrome(_title, Color(1, 1, 1), Color(1.0, 0.8, 0.14), Color(0.9, 0.22, 0.0), 164.0)
 	UI.outline(_title, 18, Color(0, 0, 0, 0.92))
 	UI.place(_title, Vector2(0.5, 0.5), Vector2(-620, -230), Vector2(1240, 170))
@@ -353,7 +353,7 @@ func _build_ui() -> void:
 	UI.place(line, Vector2(0.5, 0.5), Vector2(-360, -52), Vector2(720, 5))
 	line.pivot_offset = Vector2(360, 2)
 	_title_root.add_child(line)
-	var sub := UI.label("S T R E E T    S Y N D I C A T E", 40, UI.CYAN, true)
+	var sub := UI.label("C    L    U    B", 40, UI.CYAN, true)
 	sub.name = "Sub"
 	UI.outline(sub, 10)
 	UI.place(sub, Vector2(0.5, 0.5), Vector2(-500, -40), Vector2(1000, 56))

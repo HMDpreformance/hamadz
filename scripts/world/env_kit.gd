@@ -157,3 +157,39 @@ static func cyl(parent: Node, radius: float, height: float, pos: Vector3, mat: M
 	mi.rotation = rot
 	parent.add_child(mi)
 	return mi
+
+
+## Photographic workshop sky from the generated 360 panorama (LDR jpg).
+## Bright light tubes are boosted in the shader so they read as HDR light
+## sources in reflections and ambient light.
+static func photo_sky(boost := 14.0, gain := 1.0) -> Sky:
+	var key := "photo_sky%f%f" % [boost, gain]
+	if _cache.has(key):
+		return _cache[key]
+	var sh := Shader.new()
+	sh.code = """
+shader_type sky;
+uniform sampler2D pano : source_color, filter_linear, repeat_enable;
+uniform float boost = 14.0;
+uniform float gain = 1.0;
+void sky() {
+	vec2 uv = vec2(atan(EYEDIR.x, -EYEDIR.z) / 6.2831853 + 0.5, acos(clamp(EYEDIR.y, -1.0, 1.0)) / 3.1415927);
+	vec3 c = texture(pano, uv).rgb;
+	float l = dot(c, vec3(0.3333));
+	float b = clamp((l - 0.45) / 0.4, 0.0, 1.0);
+	c *= 1.0 + b * b * boost;
+	if (EYEDIR.y < -0.05) { c *= 0.8; }
+	COLOR = c * gain;
+}
+"""
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("pano", load("res://textures/garage_pano.jpg"))
+	m.set_shader_parameter("boost", boost)
+	m.set_shader_parameter("gain", gain)
+	var sky := Sky.new()
+	sky.sky_material = m
+	sky.radiance_size = Sky.RADIANCE_SIZE_256
+	sky.process_mode = Sky.PROCESS_MODE_QUALITY
+	_cache[key] = sky
+	return sky

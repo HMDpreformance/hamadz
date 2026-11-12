@@ -6,6 +6,7 @@ extends CharacterBody3D
 ## Reads input from the Controls autoload, so touch/keyboard/pad all work.
 
 signal crashed(force: float)
+signal scraped(point: Vector3, force: float)
 signal shifted(gear: int)
 
 const GEARS_5 := [0.24, 0.43, 0.63, 0.84, 1.06]
@@ -230,6 +231,8 @@ func _physics_process(dt: float) -> void:
 			continue
 		n = n.normalized()
 		var impact := -pre.dot(n)
+		if impact > 0.6 or absf(speed) > 8.0:
+			scraped.emit(col.get_position(), maxf(impact, absf(speed) * 0.08))
 		if impact > 1.0:
 			velocity += n * impact * 0.25
 			velocity *= clampf(1.0 - impact * 0.012, 0.5, 1.0)

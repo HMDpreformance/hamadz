@@ -50,13 +50,13 @@ var _turn := 0.0
 
 
 func _ready() -> void:
-	env = GFX.make_environment(Color(0.3, 0.32, 0.4), 0.35, Color.BLACK, 0.0, EnvKit.studio_sky())
+	env = GFX.make_environment(Color(0.3, 0.32, 0.4), 0.35, Color.BLACK, 0.0)
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 	room = GarageRoom.new()
 	add_child(room)
-	room.build()
+	room.build_photo(env)
 	cam = OrbitCamera.new()
 	add_child(cam)
 	cam.snap("showcase")
@@ -325,7 +325,10 @@ func _build_ui() -> void:
 	for d in defs:
 		var b := NeonButton.make(d[1], Vector2(232, 46), UI.AMBER, 19)
 		b.position = Vector2(22, y)
-		b.pressed.connect(_select_group.bind(d[0]))
+		if d[0] == "cars":
+			b.pressed.connect(func(): Nav.goto("showroom", {"from": "garage"}, "CAR LOT"))
+		else:
+			b.pressed.connect(_select_group.bind(d[0]))
 		ui.add_child(b)
 		_group_buttons[d[0]] = b
 		UI.pop(b, 0.05 * _group_buttons.size())

@@ -9,6 +9,7 @@ const SCENES := {
 	"menu": "res://scenes/menu.tscn",
 	"garage": "res://scenes/garage.tscn",
 	"drive": "res://scenes/drive.tscn",
+	"showroom": "res://scenes/showroom.tscn",
 	"dev_show": "res://scenes/dev_show.tscn",
 }
 const TIPS := [

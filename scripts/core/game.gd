@@ -29,7 +29,9 @@ func _fresh() -> Dictionary:
 		"owned_parts": {},
 		"best_time": 0.0,
 		"runs": 0,
-		"settings": {"preset": 1, "music": 0.8, "sfx": 0.9, "steer_mode": 0, "show_fps": false},
+		"rep": 0,
+		"events": {},
+		"settings": {"difficulty": 1, "preset": 1, "music": 0.8, "sfx": 0.9, "steer_mode": 0, "show_fps": false},
 	}
 
 
@@ -172,3 +174,30 @@ func record_run(time: float) -> bool:
 		data.best_time = time
 	save_game()
 	return is_best
+
+
+## Stores a race result. Returns {"best": bool, "first_win": bool}.
+func record_event(id: String, place: int, time: float, rep_gain: int) -> Dictionary:
+	var ev: Dictionary = data.events.get(id, {"best_place": 0, "best_time": 0.0, "wins": 0, "runs": 0})
+	var out := {"best": false, "first_win": false}
+	ev.runs = int(ev.runs) + 1
+	if int(ev.best_place) == 0 or place < int(ev.best_place):
+		ev.best_place = place
+	if place == 1:
+		out.first_win = int(ev.wins) == 0
+		ev.wins = int(ev.wins) + 1
+	if float(ev.best_time) <= 0.0 or time < float(ev.best_time):
+		ev.best_time = time
+		out.best = true
+	data.events[id] = ev
+	data.rep = int(data.rep) + rep_gain
+	save_game()
+	return out
+
+
+func event_record(id: String) -> Dictionary:
+	return data.events.get(id, {"best_place": 0, "best_time": 0.0, "wins": 0, "runs": 0})
+
+
+func rep() -> int:
+	return int(data.get("rep", 0))

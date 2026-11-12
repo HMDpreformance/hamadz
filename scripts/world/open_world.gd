@@ -500,11 +500,11 @@ func _connectors() -> void:
 	add_child(edge)
 	var spans := []
 	var hr := ROAD * 0.5 + 0.4
-	var xs := [x0 - hr - 40.0]
+	var xs := [x0 - hr - 8.0]
 	for i in EXIT_N:
 		xs.append(road_x(i) - w - 0.5)
 		xs.append(road_x(i) + w + 0.5)
-	xs.append(x1 + hr + 40.0)
+	xs.append(x1 + hr + 8.0)
 	for k in range(0, xs.size(), 2):
 		spans.append([Vector3(xs[k], 0, z0 - hr), Vector3(xs[k + 1], 0, z0 - hr)])
 	for sgx: float in [-1.0, 1.0]:

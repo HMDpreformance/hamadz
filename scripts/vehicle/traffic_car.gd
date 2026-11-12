@@ -87,7 +87,9 @@ func _physics_process(dt: float) -> void:
 	_speed = move_toward(_speed, want, (11.0 if want < _speed else 4.0) * dt)
 	var cur := -global_transform.basis.z
 	cur.y = 0.0
-	var new_dir := cur.normalized().slerp(to.normalized(), clampf(dt * 4.0, 0.0, 1.0)).normalized()
+	var yaw0 := atan2(cur.x, cur.z)
+	var yaw1 := lerp_angle(yaw0, atan2(to.x, to.z), clampf(dt * 4.0, 0.0, 1.0)) if to.length_squared() > 0.0001 else yaw0
+	var new_dir := Vector3(sin(yaw1), 0.0, cos(yaw1))
 	var pos := global_position + new_dir * _speed * dt
 	pos.y = manager.height_at(pos) if manager else 0.0
 	global_transform = Transform3D(Basis.looking_at(new_dir, Vector3.UP), pos)

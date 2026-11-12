@@ -28,6 +28,15 @@ var exhaust_level := 0
 var load := 0.0              # engine load 0..1 (what the audio hears)
 var limiter := false         # bouncing off the rev limiter
 var engine_on := true
+# inputs: read from Controls for the player, written by a RaceDriver for AI cars
+var ai := false
+var in_steer := 0.0
+var in_throttle := 0.0
+var in_brake := 0.0
+var in_hand := false
+var in_nitro := false
+var hold := false            # on the grid: engine revs freely, car stays put
+var top_scale := 1.0         # AI catch-up / difficulty
 
 # state
 var steer := 0.0
@@ -102,7 +111,13 @@ func _physics_process(dt: float) -> void:
 	var brk := 0.0
 	handbraking = false
 	var want_nitro := false
-	if input_enabled:
+	if ai:
+		steer_in = in_steer
+		throttle = in_throttle
+		brk = in_brake
+		handbraking = in_hand
+		want_nitro = in_nitro
+	elif input_enabled:
 		steer_in = Controls.steer()
 		throttle = Controls.throttle()
 		brk = Controls.brake()
@@ -122,6 +137,7 @@ func _physics_process(dt: float) -> void:
 	elif absf(slip) > 4.0:
 		lat_cap *= 1.25
 	_yaw_rate = clampf(_yaw_rate, -lat_cap, lat_cap)
+	transform.basis = transform.basis.orthonormalized()
 	rotate_y(-_yaw_rate * dt)
 
 	var fwd := forward()
@@ -138,7 +154,7 @@ func _physics_process(dt: float) -> void:
 		nitro = minf(nitro + dt / 16.0, 1.0)
 
 	# ---- longitudinal
-	var top := vmax * (1.2 if using_nitro else 1.0)
+	var top := vmax * (1.2 if using_nitro else 1.0) * top_scale
 	var acc := 0.0
 	_shift_cut = maxf(_shift_cut - dt, 0.0)
 	if throttle > 0.0 and _shift_cut <= 0.0:
@@ -170,6 +186,10 @@ func _physics_process(dt: float) -> void:
 		else:
 			acc -= signf(vf) * res
 	var vf_before := vf
+	if hold:
+		acc = 0.0
+		vf = 0.0
+		vl = 0.0
 	vf += acc * dt
 	accel_g = lerpf(accel_g, (vf - vf_before) / dt / 9.8, 1.0 - exp(-dt * 6.0))
 
@@ -256,7 +276,7 @@ func _gearbox(dt: float) -> void:
 	var hi: float = vmax * GEAR_TOPS[gear]
 	var target := 0.14 + 0.86 * clampf((v - lo) / (hi - lo), 0.0, 1.0)
 	if v < 2.0:
-		target = maxf(target, 0.14 + throttle * 0.45)   # free revving at standstill
+		target = maxf(target, 0.14 + throttle * (0.8 if hold else 0.45))   # free revving at standstill
 	# rev limiter: flat out at the top of the last gear (or held past it on nitro)
 	limiter = throttle > 0.6 and gear == GEAR_TOPS.size() - 1 and target > 0.985
 	if limiter:

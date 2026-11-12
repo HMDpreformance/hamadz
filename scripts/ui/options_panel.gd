@@ -29,17 +29,19 @@ func _ready() -> void:
 	title.position = Vector2(34, 18)
 	box.add_child(title)
 
-	var y := 96.0
+	var y := 92.0
 	_choice_row(box, y, "GRAPHICS", "preset", ["PERFORMANCE", "BALANCED", "QUALITY"])
-	y += 74.0
+	y += 62.0
+	_choice_row(box, y, "RIVALS", "difficulty", ["EASY", "NORMAL", "HARD"])
+	y += 62.0
 	_slider_row(box, y, "MUSIC", "music")
-	y += 74.0
+	y += 62.0
 	_slider_row(box, y, "SOUND FX", "sfx")
-	y += 74.0
+	y += 62.0
 	_choice_row(box, y, "STEERING", "steer_mode", ["BUTTONS", "TILT"])
-	y += 74.0
+	y += 62.0
 	_choice_row(box, y, "FPS COUNTER", "show_fps", ["OFF", "ON"])
-	y += 84.0
+	y += 76.0
 	var note := UI.label("Graphics presets change resolution, bloom, reflections, shadows and effects. Progress saves automatically.", 16, UI.DIM)
 	note.position = Vector2(36, y - 14)
 	note.size = Vector2(790, 22)
@@ -122,6 +124,8 @@ func _set_choice(key: String, i: int) -> void:
 			GFX.set_preset(i)
 		"steer_mode":
 			Game.set_setting("steer_mode", i)
+		"difficulty":
+			Game.set_setting("difficulty", i)
 		"show_fps":
 			Game.set_setting("show_fps", i == 1)
 	_refresh()
@@ -150,7 +154,7 @@ func _on_reset() -> void:
 
 
 func _refresh() -> void:
-	var sel := {"preset": int(Game.setting("preset", 1)), "steer_mode": int(Game.setting("steer_mode", 0)), "show_fps": 1 if Game.setting("show_fps", false) else 0}
+	var sel := {"preset": int(Game.setting("preset", 1)), "difficulty": int(Game.setting("difficulty", 1)), "steer_mode": int(Game.setting("steer_mode", 0)), "show_fps": 1 if Game.setting("show_fps", false) else 0}
 	for key in sel:
 		var btns: Array = _rows[key]
 		for i in btns.size():

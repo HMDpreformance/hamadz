@@ -70,7 +70,8 @@ func _ready() -> void:
 	_build_ui()
 	_show_car(Game.current_car(), false)
 	_select_group("")
-	Audio.play_music("menu", 1.0, -9.0)
+	Audio.music_state("garage")
+	Audio.voice("garage_welcome", 1.0)      # plays only once a recorded line exists in audio/voice/
 	Audio.play_ambience("garage", -3.0)
 	Game.money_changed.connect(_on_money)
 	GFX.changed.connect(func(): GFX.apply_environment(env))

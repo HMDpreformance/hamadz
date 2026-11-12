@@ -2,11 +2,8 @@ extends Node
 ## Audio manager (autoload "Audio"): music with crossfade, looping ambience,
 ## one-shot SFX pool and helpers to create looping players for engines.
 
-const MUSIC := {
-	"menu": "res://audio/music_menu.ogg",
-	"intro": "res://audio/music_intro.ogg",
-	"drive": "res://audio/music_drive.ogg",
-}
+signal track_changed(title: String, artist: String)
+
 const AMBIENCE := {
 	"garage": "res://audio/amb_garage.ogg",
 	"city": "res://audio/amb_city.ogg",
@@ -19,7 +16,13 @@ var _pool: Array[AudioStreamPlayer] = []
 var _cache := {}
 var _current_music := ""
 var _current_amb := ""
-var _music_gain := 1.0
+var _state := ""               # intro | menu | garage | roam | race | ""
+var _playlist: Array = []      # shuffled radio order
+var _pl_index := -1
+var _music_db := -8.0          # level the current state wants
+var _duck_db := 0.0            # temporary offset (countdown, stings, pause)
+var _mlp: AudioEffectLowPassFilter
+var _mlp_target := 20000.0
 var _eng_bus := 0
 var _lp: AudioEffectLowPassFilter
 var _reverbs: Array[AudioEffectReverb] = []
@@ -50,6 +53,8 @@ func _process(dt: float) -> void:
 	for rv in _reverbs:
 		rv.wet = lerpf(rv.wet, _wet_target, k)
 		rv.room_size = lerpf(rv.room_size, _room_target, k)
+	# music filter moves on a log scale so sweeps sound even
+	_mlp.cutoff_hz = exp(lerpf(log(_mlp.cutoff_hz), log(_mlp_target), clampf(dt * 4.0, 0.0, 1.0)))
 
 
 func _ready() -> void:
@@ -83,8 +88,14 @@ func _ready() -> void:
 		rv.hipass = 0.2
 		AudioServer.add_bus_effect(AudioServer.get_bus_index(b), rv)
 		_reverbs.append(rv)
+	_mlp = AudioEffectLowPassFilter.new()
+	_mlp.cutoff_hz = 20000.0
+	_mlp.resonance = 0.5
+	AudioServer.add_bus_effect(AudioServer.get_bus_index("Music"), _mlp)
 	_music_a = _mk("Music")
 	_music_b = _mk("Music")
+	_music_a.finished.connect(_on_track_finished.bind(_music_a))
+	_music_b.finished.connect(_on_track_finished.bind(_music_b))
 	_amb = _mk("SFX")
 	for i in 14:
 		_pool.append(_mk("SFX"))
@@ -144,8 +155,136 @@ func sfx(sfx_name: String, volume_db := 0.0, pitch := 1.0, bus := "SFX") -> void
 	p0.play()
 
 
-func play_music(id: String, fade := 1.0, gain_db := -4.0) -> void:
-	if id == _current_music:
+# ====================================================================== music
+## The soundtrack follows the game state:
+##   intro / menu   the main theme (looping)
+##   garage         the radio, quiet and slightly muffled, like shop speakers
+##   roam / race    the radio: a shuffled rotation that moves on when a track ends
+##   ""             silence
+## Countdown, pause and stings shape it with duck_music() and music_filter().
+func music_state(st: String, fade := 1.2) -> void:
+	if st == _state:
+		return
+	var was := _state
+	_state = st
+	_duck_db = 0.0
+	_mlp_target = 20000.0
+	match st:
+		"":
+			_fade_to("", fade)
+		"intro", "menu":
+			_music_db = -4.0 if st == "intro" else -6.0
+			_fade_to(Soundtrack.STATE_TRACK[st], fade, true)
+		"garage":
+			_music_db = -12.0
+			_mlp_target = 5200.0
+			_radio_resume(fade, was)
+		"roam":
+			_music_db = -10.0
+			_radio_resume(fade, was)
+		"race":
+			_music_db = -7.5
+			_radio_resume(fade, was)
+	_apply_level(fade)
+
+
+func music_state_id() -> String:
+	return _state
+
+
+func radio_on() -> bool:
+	return bool(Game.setting("radio", true))
+
+
+func radio_set(on: bool) -> void:
+	Game.set_setting("radio", on)
+	if _state in ["garage", "roam", "race"]:
+		if on:
+			_radio_resume(0.6, "")
+		else:
+			_fade_to("", 0.4)
+
+
+func radio_next(step := 1) -> void:
+	if not radio_on() or not (_state in ["garage", "roam", "race"]):
+		return
+	_radio_step(step, 0.35)
+
+
+func now_playing() -> Dictionary:
+	return Soundtrack.info(_current_music)
+
+
+## Temporary level change on top of the state's own level (0 restores it).
+func duck_music(db: float, time := 0.4) -> void:
+	_duck_db = db
+	_apply_level(time)
+
+
+## Low-pass on the music bus: 20000 = open, 400 = "heard through a wall".
+func music_filter(hz: float) -> void:
+	_mlp_target = clampf(hz, 200.0, 20000.0)
+
+
+## Victory / defeat sting: the radio drops away, the sting plays, the radio returns.
+func sting(win: bool) -> void:
+	duck_music(-22.0, 0.25)
+	sfx("sting_win" if win else "sting_lose", -3.0, 1.0, "Music")
+	await get_tree().create_timer(4.2).timeout
+	if _duck_db <= -20.0:
+		duck_music(-6.0, 1.5)
+
+
+## A spoken line from audio/voice/<id>.ogg, if that file ships with the build.
+## The music steps back while the line plays.
+func voice(id: String, db := 0.0) -> bool:
+	var path := "res://audio/voice/%s.ogg" % id
+	if not ResourceLoader.exists(path):
+		return false
+	sfx(path, db, 1.0, "SFX")
+	return true
+
+
+func _radio_resume(fade: float, was: String) -> void:
+	if not radio_on():
+		_fade_to("", fade)
+		return
+	if _playlist.is_empty():
+		_playlist = Soundtrack.radio_ids()
+		_playlist.shuffle()
+		# the first thing the radio plays after the menu should not be the menu theme again
+		if _playlist.size() > 1 and _playlist[0] == Soundtrack.STATE_TRACK["menu"]:
+			_playlist.push_back(_playlist.pop_front())
+		_pl_index = -1
+	if _playlist.is_empty():
+		_fade_to("", fade)
+		return
+	if was in ["garage", "roam", "race"] and _music_a.playing and _playlist.has(_current_music):
+		return                       # same radio, keep the song going across scenes
+	_radio_step(1, fade)
+
+
+func _radio_step(step: int, fade: float) -> void:
+	if _playlist.is_empty():
+		return
+	_pl_index = posmod(_pl_index + step, _playlist.size())
+	_fade_to(_playlist[_pl_index], fade, false)
+	var inf := Soundtrack.info(_playlist[_pl_index])
+	track_changed.emit(inf.get("title", ""), inf.get("artist", ""))
+
+
+func _on_track_finished(pl: AudioStreamPlayer) -> void:
+	if pl == _music_a and _state in ["garage", "roam", "race"] and radio_on():
+		_radio_step(1, 0.05)
+
+
+func _apply_level(time: float) -> void:
+	if _music_a.playing:
+		create_tween().tween_property(_music_a, "volume_db", _music_db + _duck_db, maxf(time, 0.02))
+
+
+func _fade_to(id: String, fade: float, loop := false) -> void:
+	if id == _current_music and (id == "" or _music_a.playing):
 		return
 	_current_music = id
 	var old := _music_a
@@ -157,16 +296,10 @@ func play_music(id: String, fade := 1.0, gain_db := -4.0) -> void:
 		tw.tween_callback(old.stop)
 	if id == "":
 		return
-	_music_a.stream = stream(MUSIC[id], true)
+	_music_a.stream = stream(Soundtrack.path(id), loop)
 	_music_a.volume_db = -40.0
 	_music_a.play()
-	var tw2 := create_tween()
-	tw2.tween_property(_music_a, "volume_db", gain_db, fade)
-
-
-func duck_music(db: float, time := 0.4) -> void:
-	if _music_a.playing:
-		create_tween().tween_property(_music_a, "volume_db", db, time)
+	create_tween().tween_property(_music_a, "volume_db", _music_db + _duck_db, fade)
 
 
 func play_ambience(id: String, gain_db := -6.0) -> void:

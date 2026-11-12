@@ -13,6 +13,12 @@ var _music_a: AudioStreamPlayer
 var _music_b: AudioStreamPlayer
 var _amb: AudioStreamPlayer
 var _pool: Array[AudioStreamPlayer] = []
+var _voice_pl: AudioStreamPlayer
+var _voice_prio := 0
+var _voice_opts := {}          # id -> [paths] (id.ogg, id_2.ogg, ...)
+var _voice_last := {}          # id -> index played last, so variants alternate
+var dj_ok := true               # scenes switch the DJ off while something else needs the air
+var _dj_gap := 0               # tracks since the DJ last spoke
 var _cache := {}
 var _current_music := ""
 var _current_amb := ""
@@ -61,7 +67,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	# Master <- Music, SFX <- Engine (player car, camera filter + space reverb)
 	#                      <- World  (other cars, positional, space reverb only)
-	for bus_name in ["Music", "SFX", "Engine", "World"]:
+	for bus_name in ["Music", "SFX", "Engine", "World", "Voice"]:
 		AudioServer.add_bus()
 		var i := AudioServer.bus_count - 1
 		AudioServer.set_bus_name(i, bus_name)
@@ -92,6 +98,15 @@ func _ready() -> void:
 	_mlp.cutoff_hz = 20000.0
 	_mlp.resonance = 0.5
 	AudioServer.add_bus_effect(AudioServer.get_bus_index("Music"), _mlp)
+	# the music steps back by itself whenever someone is talking
+	var vduck := AudioEffectCompressor.new()
+	vduck.sidechain = &"Voice"
+	vduck.threshold = -34.0
+	vduck.ratio = 5.0
+	vduck.attack_us = 20000.0
+	vduck.release_ms = 450.0
+	AudioServer.add_bus_effect(AudioServer.get_bus_index("Music"), vduck)
+	_voice_pl = _mk("Voice")
 	_music_a = _mk("Music")
 	_music_b = _mk("Music")
 	_music_a.finished.connect(_on_track_finished.bind(_music_a))
@@ -112,6 +127,7 @@ func _mk(bus: String) -> AudioStreamPlayer:
 func apply_volumes() -> void:
 	_set_bus("Music", float(Game.setting("music", 0.8)))
 	_set_bus("SFX", float(Game.setting("sfx", 0.9)))
+	_set_bus("Voice", float(Game.setting("sfx", 0.9)))
 
 
 func _set_bus(bus: String, v: float) -> void:
@@ -237,12 +253,54 @@ func sting(win: bool) -> void:
 
 ## A spoken line from audio/voice/<id>.ogg, if that file ships with the build.
 ## The music steps back while the line plays.
-func voice(id: String, db := 0.0) -> bool:
-	var path := "res://audio/voice/%s.ogg" % id
-	if not ResourceLoader.exists(path):
+## Spoken line. Plays audio/voice/<id>.ogg, or one of <id>_2.ogg, <id>_3.ogg ...
+## when variants exist (never the same one twice in a row). One voice talks at
+## a time: a line only interrupts another when its priority is at least as high.
+## Returns false (and does nothing) when there is no recording for the id.
+func voice(id: String, db := 0.0, prio := 1) -> bool:
+	if not _voice_opts.has(id):
+		var found := []
+		for i in range(1, 7):
+			var path := "res://audio/voice/%s.ogg" % (id if i == 1 else "%s_%d" % [id, i])
+			if ResourceLoader.exists(path):
+				found.append(path)
+		_voice_opts[id] = found
+	var opts: Array = _voice_opts[id]
+	if opts.is_empty():
 		return false
-	sfx(path, db, 1.0, "SFX")
+	if _voice_pl.playing and prio < _voice_prio:
+		return false
+	var k := randi() % opts.size()
+	if opts.size() > 1 and k == int(_voice_last.get(id, -1)):
+		k = (k + 1) % opts.size()
+	_voice_last[id] = k
+	_voice_prio = prio
+	_voice_pl.stream = stream(opts[k])
+	_voice_pl.volume_db = db + 3.0
+	_voice_pl.play()
+	if OS.get_environment("AH_DEV") != "":
+		print("Voice: ", (opts[k] as String).get_file().get_basename())
 	return true
+
+
+## Seconds left of the line that is being spoken (0 when nobody is talking).
+func voice_remaining() -> float:
+	if not _voice_pl.playing or _voice_pl.stream == null:
+		return 0.0
+	return maxf(_voice_pl.stream.get_length() - _voice_pl.get_playback_position(), 0.0)
+
+
+## Syndicate FM's DJ talks over the start of a song now and then (free roam only,
+## never during a race) and stays quiet while anyone else is talking.
+func dj_break(force := false) -> void:
+	if _state != "roam" or not radio_on() or not dj_ok:
+		return
+	_dj_gap += 1
+	if not force and _dj_gap < 2:
+		return
+	await get_tree().create_timer(1.2).timeout
+	if _state == "roam" and radio_on() and dj_ok and voice("dj", -1.0, 0):
+		_dj_gap = 0
 
 
 func _radio_resume(fade: float, was: String) -> void:
@@ -276,6 +334,7 @@ func _radio_step(step: int, fade: float) -> void:
 func _on_track_finished(pl: AudioStreamPlayer) -> void:
 	if pl == _music_a and _state in ["garage", "roam", "race"] and radio_on():
 		_radio_step(1, 0.05)
+		dj_break()
 
 
 func _apply_level(time: float) -> void:

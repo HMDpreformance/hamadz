@@ -1,8 +1,11 @@
 extends Node3D
-## Startup sequence: studio logo -> in-engine night cinematic -> title -> "tap to start".
+## Startup sequence: studio logo -> intro film (video/intro.ogv, when present) ->
+## in-engine night cinematic -> title -> "tap to start".
 ## Any tap skips ahead to the title; a tap on the title goes to the main menu.
 
-enum Phase { LOGO, CINE, TITLE }
+enum Phase { LOGO, VIDEO, CINE, TITLE }
+
+const INTRO_VIDEO := "res://video/intro.ogv"
 
 const LOGO_TIME := 4.6
 
@@ -26,6 +29,9 @@ var _flash: ColorRect
 var _title_t := 0.0
 var _leaving := false
 var _world_ready := false
+var _video: VideoStreamPlayer
+var _video_t := 0.0
+var _video_len := 5.0
 
 
 func _ready() -> void:
@@ -167,6 +173,12 @@ func _process(dt: float) -> void:
 	match phase:
 		Phase.LOGO:
 			if t >= LOGO_TIME:
+				_after_logo()
+		Phase.VIDEO:
+			_video_t += dt
+			_fit_video()
+			_fade.color.a = clampf(1.0 - _video_t / 0.35, 0.0, 1.0) + clampf((_video_t - _video_len + 0.3) / 0.3, 0.0, 1.0)
+			if _video_t >= _video_len:
 				_enter_cine()
 		Phase.CINE, Phase.TITLE:
 			_update_shot(dt)
@@ -177,9 +189,60 @@ func _process(dt: float) -> void:
 					(_title.material as ShaderMaterial).set_shader_parameter("shine", fmod(_title_t * 700.0, 3600.0) - 500.0)
 
 
+func _after_logo() -> void:
+	if ResourceLoader.exists(INTRO_VIDEO):
+		_enter_video()
+	else:
+		_enter_cine()
+
+
+## The intro film plays full screen (scaled to cover) over the 3D set; a tap skips it.
+func _enter_video() -> void:
+	phase = Phase.VIDEO
+	_logo.queue_free()
+	_logo = null
+	_fade.color.a = 1.0
+	_video_t = 0.0
+	_video = VideoStreamPlayer.new()
+	_video.stream = load(INTRO_VIDEO)
+	_video.expand = true
+	_video.volume_db = -80.0
+	_video.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ui.add_child(_video)
+	_ui.move_child(_video, 0)            # under the fade, CRT overlay and letterbox
+	_fit_video()
+	_video.play()
+	var l := _video.get_stream_length()
+	if l > 0.5:
+		_video_len = l
+	for b in _bars:
+		b.visible = true
+	Audio.music_state("intro", 0.3)
+	if OS.get_environment("AH_DEV") != "":
+		print("Intro: video %.1fs" % _video_len)
+
+
+func _fit_video() -> void:
+	if _video == null:
+		return
+	var vp := _ui.size
+	var tex := _video.get_video_texture()
+	var ar := 16.0 / 9.0
+	if tex and tex.get_height() > 0:
+		ar = float(tex.get_width()) / float(tex.get_height())
+	var sz := Vector2(maxf(vp.x, vp.y * ar), maxf(vp.y, vp.x / ar))
+	_video.size = sz
+	_video.position = (vp - sz) * 0.5
+
+
 func _enter_cine() -> void:
 	phase = Phase.CINE
-	_logo.queue_free()
+	if _logo:
+		_logo.queue_free()
+		_logo = null
+	if _video:
+		_video.queue_free()
+		_video = null
 	_fade.color.a = 1.0
 	for b in _bars:
 		b.visible = true
@@ -192,6 +255,7 @@ func _enter_title() -> void:
 	_title_t = 0.0
 	_title_root.visible = true
 	Audio.sfx("title_slam", 2.0)
+	get_tree().create_timer(0.55).timeout.connect(func(): Audio.voice("title", 2.0))
 	_flash.color.a = 0.9
 	create_tween().tween_property(_flash, "color:a", 0.0, 0.7)
 	_title.pivot_offset = _title.size * 0.5
@@ -220,6 +284,9 @@ func _input(event: InputEvent) -> void:
 			if t > 0.6:
 				_enter_cine()
 				_skip_to_title()
+		Phase.VIDEO:
+			if _video_t > 0.4:
+				_enter_cine()
 		Phase.CINE:
 			_skip_to_title()
 		Phase.TITLE:
@@ -375,6 +442,6 @@ class _StudioLogo extends Control:
 
 
 func dev_skip() -> void:
-	if phase == Phase.LOGO:
+	if phase == Phase.LOGO or phase == Phase.VIDEO:
 		_enter_cine()
 	_skip_to_title()

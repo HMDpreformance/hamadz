@@ -33,6 +33,10 @@ var _glow_light: OmniLight3D
 var _shadow: MeshInstance3D
 var _head_e := 2.2
 var _tail_e := 1.4
+var model: Node3D            # generated mesh (res://cars/<id>.glb) when one exists
+var _model_hw := 0.0
+var _model_h := 0.0
+var _model_cfg := {}
 
 
 # ====================================================================== public
@@ -56,7 +60,10 @@ func setup(id: String, config: Dictionary) -> void:
 	for i in shell.names.size():
 		mi.set_surface_override_material(i, mats[shell.names[i]])
 	body.add_child(mi)
-	_add_mirrors()
+	if _load_model(id):
+		mi.visible = false
+	else:
+		_add_mirrors()
 	_wheel_root = Node3D.new()
 	_wheel_root.name = "Wheels"
 	add_child(_wheel_root)
@@ -198,10 +205,14 @@ func length() -> float:
 
 
 func height() -> float:
+	if model:
+		return _model_h + (body.position.y if body else 0.0)
 	return _top(0.5) + (body.position.y if body else 0.0)
 
 
 func half_width() -> float:
+	if model:
+		return _model_hw
 	return _hw(0.5)
 
 
@@ -333,6 +344,8 @@ func _make_materials() -> void:
 
 func _update_paint() -> void:
 	var m: StandardMaterial3D = mats["paint"]
+	if model:
+		_paint_model()
 	var col: Color = CarDB.PAINTS[clampi(int(cfg.paint), 0, CarDB.PAINTS.size() - 1)].c
 	m.clearcoat_enabled = true
 	m.clearcoat = 1.0
@@ -676,6 +689,8 @@ func _build_wheels() -> void:
 		var z: float = spec.front_axle if front else spec.rear_axle
 		var u := _u(z)
 		var x := _hw(u) + 0.022 + wide - tw * ws * 0.5 - 0.012
+		if model:
+			x = float(_model_cfg.get("track", _model_hw - 0.03)) - tw * ws * 0.5 + wide
 		for left in [false, true]:
 			var w := WheelFactory.build(int(cfg.rims), int(cfg.rim_color), size_idx, tw, left)
 			w.pivot.position = Vector3(-x if left else x, wheel_radius, z)
@@ -704,6 +719,8 @@ func _rebuild_slot(slot: String) -> void:
 	if _slots.has(slot) and is_instance_valid(_slots[slot]):
 		_slots[slot].queue_free()
 	_slots.erase(slot)
+	if model and slot != "glow":
+		return
 	var idx := int(cfg.get(slot, 0))
 	var sf := Surfs.new()
 	match slot:
@@ -1186,3 +1203,160 @@ func _part_glow(idx: int) -> void:
 		l.position.y = 0.12
 		l.shadow_enabled = false
 		root.add_child(l)
+
+
+# ====================================================================== generated model
+const MODEL_SHADER := """
+shader_type spatial;
+render_mode cull_back;
+uniform sampler2D tex : source_color, filter_linear_mipmap;
+uniform vec3 paint : source_color = vec3(0.6, 0.0, 0.0);
+uniform vec3 key : source_color = vec3(0.35, 0.85, 0.1);   // colour painted on the model
+uniform float hue_tol = 0.09;
+uniform float paint_metal = 0.5;
+uniform float paint_rough = 0.17;
+uniform float coat = 1.0;
+vec3 rgb2hsv(vec3 c) {
+	vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+	vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+	vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+	float d = q.x - min(q.w, q.y);
+	return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-5)), d / (q.x + 1e-5), q.x);
+}
+void fragment() {
+	vec3 c = texture(tex, UV).rgb;
+	vec3 h = rgb2hsv(c);
+	vec3 kh = rgb2hsv(key);
+	float dh = abs(h.x - kh.x); dh = min(dh, 1.0 - dh);
+	float m = (1.0 - smoothstep(hue_tol * 0.6, hue_tol, dh)) * smoothstep(0.18, 0.35, h.y) * smoothstep(0.06, 0.15, h.z);
+	// keep the model's shading: scale the paint by how bright the key colour is here
+	float shade = clamp(h.z / max(kh.z, 0.05), 0.0, 1.6);
+	ALBEDO = mix(c, paint * shade, m);
+	METALLIC = mix(0.2, paint_metal, m);
+	ROUGHNESS = mix(0.5, paint_rough, m);
+	CLEARCOAT = coat * m;
+	CLEARCOAT_ROUGHNESS = 0.02;
+	SPECULAR = 0.5;
+}
+"""
+
+static var _model_cache := {}
+
+
+## Loads res://cars/<id>.glb (an original generated body) if it exists, scales it
+## to the car's length, stands it on the ground and gives it a paint shader.
+## Optional res://cars/<id>.json: {"yaw": deg, "track": half track, "lift": m,
+## "key": "#rrggbb", "hide_wheels": true}
+func _load_model(id: String) -> bool:
+	var path := "res://cars/%s.glb" % id
+	if not ResourceLoader.exists(path):
+		return false
+	var ps: PackedScene = load(path)
+	if ps == null:
+		return false
+	_model_cfg = {}
+	var jp := "res://cars/%s.json" % id
+	if FileAccess.file_exists(jp):
+		var j = JSON.parse_string(FileAccess.get_file_as_string(jp))
+		if j is Dictionary:
+			_model_cfg = j
+	model = ps.instantiate()
+	model.name = "Model"
+	var holder := Node3D.new()
+	holder.name = "ModelHolder"
+	holder.rotation.y = deg_to_rad(float(_model_cfg.get("yaw", 0.0)))
+	holder.add_child(model)
+	body.add_child(holder)
+	# measure in the holder's frame
+	var box := AABB()
+	var first := true
+	for mi in _meshes(model):
+		var xf: Transform3D = holder.transform * _rel_xf(mi, holder)
+		var b: AABB = xf * mi.get_aabb()
+		box = b if first else box.merge(b)
+		first = false
+	if first:
+		return false
+	var s := _L / maxf(box.size.z, 0.01)
+	var root := Node3D.new()
+	root.name = "ModelRoot"
+	body.remove_child(holder)
+	root.add_child(holder)
+	root.scale = Vector3.ONE * s
+	var c := box.get_center()
+	root.position = Vector3(-c.x * s, -box.position.y * s + float(_model_cfg.get("lift", 0.0)), -c.z * s)
+	body.add_child(root)
+	_model_hw = box.size.x * s * 0.5
+	_model_h = box.size.y * s
+	_paint_mats.clear()
+	for mi in _meshes(model):
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		for i in mi.mesh.get_surface_count():
+			var src: Material = mi.get_active_material(i)
+			var sm := ShaderMaterial.new()
+			sm.shader = _model_shader()
+			if src is BaseMaterial3D and src.albedo_texture:
+				sm.set_shader_parameter("tex", src.albedo_texture)
+			if _model_cfg.has("key"):
+				sm.set_shader_parameter("key", Color(_model_cfg.key))
+			mi.set_surface_override_material(i, sm)
+			_paint_mats.append(sm)
+	return true
+
+
+var _paint_mats := []
+
+
+static func _model_shader() -> Shader:
+	if not _model_cache.has("shader"):
+		var sh := Shader.new()
+		sh.code = MODEL_SHADER
+		_model_cache["shader"] = sh
+	return _model_cache["shader"]
+
+
+func _meshes(n: Node) -> Array:
+	var out := []
+	if n is MeshInstance3D and n.mesh:
+		out.append(n)
+	for c in n.get_children():
+		out.append_array(_meshes(c))
+	return out
+
+
+func _rel_xf(n: Node3D, top: Node3D) -> Transform3D:
+	var t := Transform3D.IDENTITY
+	var cur: Node = n
+	while cur and cur != top:
+		if cur is Node3D:
+			t = (cur as Node3D).transform * t
+		cur = cur.get_parent()
+	return t
+
+
+func _paint_model() -> void:
+	var col: Color = CarDB.PAINTS[clampi(int(cfg.paint), 0, CarDB.PAINTS.size() - 1)].c
+	var metal := 0.5
+	var rough := 0.17
+	var coat := 1.0
+	match int(cfg.finish):
+		1:
+			metal = 0.75
+			rough = 0.3
+		2:
+			metal = 0.55
+			rough = 0.24
+		3:
+			metal = 0.3
+			rough = 0.72
+			coat = 0.0
+		4:
+			col = col.lerp(Color(1, 1, 1), 0.45)
+			metal = 1.0
+			rough = 0.05
+	var base := Color(col.r * 0.8, col.g * 0.8, col.b * 0.8) if col.get_luminance() > 0.12 else col
+	for sm in _paint_mats:
+		sm.set_shader_parameter("paint", base)
+		sm.set_shader_parameter("paint_metal", metal)
+		sm.set_shader_parameter("paint_rough", rough)
+		sm.set_shader_parameter("coat", coat)

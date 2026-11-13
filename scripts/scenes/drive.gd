@@ -636,7 +636,11 @@ func _build_hud() -> void:
 	_hud = UI.full(Control.new())
 	_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(_hud)
-	_hud.add_child(UI.crt_overlay())
+	var film := UI.crt_overlay()            # soft vignette only: no scanlines or grain while driving
+	(film.material as ShaderMaterial).set_shader_parameter("scan", 0.0)
+	(film.material as ShaderMaterial).set_shader_parameter("grain", 0.008)
+	(film.material as ShaderMaterial).set_shader_parameter("vignette", 0.35)
+	_hud.add_child(film)
 
 	# --- top centre info
 	var top := Control.new()

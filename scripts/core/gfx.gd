@@ -5,8 +5,8 @@ extends Node
 signal changed
 
 const PRESETS := [
-	{"name": "PERFORMANCE", "scale": 0.6, "msaa": 0, "glow": false, "shadows": false, "particles": 0.4, "mirror": false, "lights": 4, "fps": 60},
-	{"name": "BALANCED", "scale": 0.8, "msaa": 0, "glow": true, "shadows": false, "particles": 0.7, "mirror": true, "lights": 6, "fps": 60},
+	{"name": "PERFORMANCE", "scale": 0.75, "msaa": 0, "glow": false, "shadows": false, "particles": 0.4, "mirror": false, "lights": 4, "fps": 60},
+	{"name": "BALANCED", "scale": 1.0, "msaa": 1, "glow": true, "shadows": false, "particles": 0.7, "mirror": true, "lights": 6, "fps": 60},
 	{"name": "QUALITY", "scale": 1.0, "msaa": 1, "glow": true, "shadows": true, "particles": 1.0, "mirror": true, "lights": 8, "fps": 60},
 ]
 
@@ -25,6 +25,7 @@ func set_preset(i: int) -> void:
 	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 	vp.scaling_3d_scale = p.scale
 	vp.msaa_3d = Viewport.MSAA_2X if p.msaa == 1 else Viewport.MSAA_DISABLED
+	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA if index > 0 else Viewport.SCREEN_SPACE_AA_DISABLED
 	Engine.max_fps = p.fps
 	changed.emit()
 

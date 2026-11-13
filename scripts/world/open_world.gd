@@ -183,6 +183,7 @@ func _world_ground() -> void:
 	m.set_shader_parameter("extent", Vector2((x1 - x0) * 0.5, (z1 - z0) * 0.5))
 	m.set_shader_parameter("outside", Color(0.2, 0.15, 0.1))
 	m.set_shader_parameter("outside_rough", 0.95)
+	m.set_shader_parameter("shop_rect", Vector4(road_x(4) - ROAD, road_x(9) + ROAD, z0 - ROAD, z1 + ROAD))
 	m.set_shader_parameter("noise_tex", EnvKit.noise_tex(3, 0.03))
 	m.set_shader_parameter("asphalt_tex", load("res://textures/asphalt.jpg"))
 	var mi := MeshInstance3D.new()

@@ -68,6 +68,7 @@ uniform vec2 offset = vec2(0.0);
 uniform vec2 extent = vec2(205.0);
 uniform vec3 outside : source_color = vec3(0.035, 0.036, 0.04);
 uniform float outside_rough = 0.5;
+uniform vec4 shop_rect = vec4(0.0);   // xmin, xmax, zmin, zmax of the streets lined with lit shopfronts
 uniform sampler2D noise_tex : repeat_enable, filter_linear_mipmap;
 uniform sampler2D asphalt_tex : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
 varying vec3 wp;
@@ -120,6 +121,16 @@ void fragment() {
 	ROUGHNESS = (in_grid ? mix(0.14, 0.02, puddle) : mix(outside_rough, 0.06, puddle)) + fine * (in_grid ? 0.07 : 0.12);
 	METALLIC = in_grid ? mix(0.35, 0.6, puddle) : 0.25 * puddle;
 	SPECULAR = 0.7;
+	// lit shop windows smeared across the wet asphalt, strongest by the kerb
+	if (in_grid && (on_x || on_z) && p.x > shop_rect.x && p.x < shop_rect.y && p.y > shop_rect.z && p.y < shop_rect.w) {
+		float dc = half_road - ((on_x && !on_z) ? d.x : ((on_z && !on_x) ? d.y : min(d.x, d.y)));
+		float along = (on_x && !on_z) ? p.y : p.x;
+		float streak = smoothstep(0.3, 0.9, texture(noise_tex, vec2(along * 0.16, dc * 0.01)).r);
+		float shop = smoothstep(0.35, 0.7, texture(noise_tex, vec2(along * 0.021, 0.3)).r);
+		float fall = exp(-dc / 2.4);
+		vec3 warm = mix(vec3(1.0, 0.72, 0.36), vec3(1.0, 0.9, 0.75), streak);
+		EMISSION = warm * fall * (0.12 + 0.88 * streak) * (0.3 + 0.7 * shop) * 0.3 * (0.5 + 0.5 * puddle);
+	}
 }
 """
 	return sh

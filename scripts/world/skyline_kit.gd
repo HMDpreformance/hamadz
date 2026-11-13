@@ -60,6 +60,7 @@ const FACADES := {
 	"resi": ["city_resi", Vector2(21.0, 20.0), Vector2(6, 6), 0.3],
 	"glass": ["city_glass", Vector2(26.0, 28.0), Vector2(0, 0), 0.9],
 	"villa": ["city_villa", Vector2(7.0, 3.3), Vector2(0, 0), 0.05],
+	"mash": ["city_mash", Vector2(20.0, 18.0), Vector2(6, 5), 0.2],
 }
 const SHOPS := [["city_shops_a", Vector2(11.0, 6.0)], ["city_shops_b", Vector2(15.2, 6.0)]]
 
@@ -300,7 +301,7 @@ static func random_tower(r: RandomNumberGenerator, w: float, d: float, h: float)
 			tiers = [{"h": h, "s": 0.85, "twist": r.randf_range(0.6, 1.2) * (1.0 if r.randf() < 0.5 else -1.0)}]
 		_:  # stepped setbacks
 			tiers = [{"h": h * 0.5, "s": 1.0}, {"h": h * 0.3, "s": 0.78, "from": 0.78}, {"h": h * 0.2, "s": 0.55, "from": 0.55}]
-	var skins := ["office", "glass", "glass", "resi", "stone", "office"]
+	var skins := ["office", "glass", "glass", "resi", "mash", "office", "stone"]
 	var t := tower(kind, w, d, tiers, tints[r.randi() % tints.size()], bands[r.randi() % bands.size()], facade(skins[r.randi() % skins.size()]))
 	if h > 70.0 and r.randf() < 0.6:
 		spire(t, float(t.get_meta("height")), h * r.randf_range(0.12, 0.25), minf(w, d) * 0.06)
@@ -323,56 +324,23 @@ static func supertall(h := 420.0) -> Node3D:
 
 # ====================================================================== palms
 static func palm_mesh() -> ArrayMesh:
+	## Date palm as three crossed photo cards (textures/palm_card.png, cut from a
+	## generated photo): reads as a real tree from the street for ~12 triangles.
 	if _cache.has("palm"):
 		return _cache.palm
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var trunk := Color(0.32, 0.24, 0.16)
-	var frond := Color(0.16, 0.3, 0.1)
-	# trunk: 6-sided, slight lean, ringed by colour
-	var segs := 6
-	var hgt := 7.5
-	for k in 7:
-		var y0 := hgt * k / 7.0
-		var y1 := hgt * (k + 1) / 7.0
-		var r0 := lerpf(0.28, 0.18, float(k) / 7.0)
-		var r1 := lerpf(0.28, 0.18, float(k + 1) / 7.0)
-		var l0 := Vector3(0.05 * y0 * y0 / hgt, 0, 0)
-		var l1 := Vector3(0.05 * y1 * y1 / hgt, 0, 0)
-		for i in segs:
-			var a0 := TAU * i / segs
-			var a1 := TAU * (i + 1) / segs
-			var v := [l0 + Vector3(cos(a0) * r0, y0, sin(a0) * r0), l0 + Vector3(cos(a1) * r0, y0, sin(a1) * r0),
-				l1 + Vector3(cos(a1) * r1, y1, sin(a1) * r1), l1 + Vector3(cos(a0) * r1, y1, sin(a0) * r1)]
-			st.set_color(trunk * (0.8 + 0.2 * (k % 2)))
-			st.add_vertex(v[0]); st.add_vertex(v[2]); st.add_vertex(v[1])
-			st.add_vertex(v[0]); st.add_vertex(v[3]); st.add_vertex(v[2])
-	# fronds: drooping blades fanned around the crown
-	var top := Vector3(0.05 * hgt, hgt, 0)
-	var nf := 11
-	for f in nf:
-		var a := TAU * f / nf + (0.3 if f % 2 == 0 else 0.0)
-		var dir := Vector3(cos(a), 0, sin(a))
-		var side := Vector3(-dir.z, 0, dir.x)
-		var lift := 0.35 if f % 2 == 0 else 0.1
-		var len := 3.6 if f % 2 == 0 else 3.1
-		var prev_c := top
-		var prev_w := 0.05
-		for k in 6:
-			var t := float(k + 1) / 6.0
-			var c := top + dir * len * t + Vector3(0, lift * len * t - 1.9 * t * t, 0)
-			var w := 0.55 * sin(t * PI) + 0.05
-			var col := frond * (0.8 + 0.4 * t)
-			var p0 := prev_c - side * prev_w
-			var p1 := prev_c + side * prev_w
-			var q0 := c - side * w
-			var q1 := c + side * w
-			st.set_color(col)
-			st.add_vertex(p0); st.add_vertex(q1); st.add_vertex(p1)
-			st.add_vertex(p0); st.add_vertex(q0); st.add_vertex(q1)
-			prev_c = c
-			prev_w = w
-	st.generate_normals()
+	var h := 9.5
+	var w := h * 0.5
+	for k in 3:
+		var a := PI * k / 3.0
+		var d := Vector3(cos(a), 0, sin(a)) * w
+		var v := [-d, d, d + Vector3(0, h, 0), -d + Vector3(0, h, 0)]
+		var uv := [Vector2(0, 1), Vector2(1, 1), Vector2(1, 0), Vector2(0, 0)]
+		for idx in [0, 2, 1, 0, 3, 2]:
+			st.set_normal((Vector3(0, 1, 0) + Vector3(-sin(a), 0, cos(a)) * 0.4).normalized())
+			st.set_uv(uv[idx])
+			st.add_vertex(v[idx])
 	var m := st.commit()
 	_cache.palm = m
 	return m
@@ -381,8 +349,16 @@ static func palm_mesh() -> ArrayMesh:
 static func palm_material() -> StandardMaterial3D:
 	if not _cache.has("palm_mat"):
 		var m := StandardMaterial3D.new()
-		m.vertex_color_use_as_albedo = true
+		m.albedo_texture = load("res://textures/palm_card.png")
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+		m.alpha_scissor_threshold = 0.45
+		m.alpha_antialiasing_mode = BaseMaterial3D.ALPHA_ANTIALIASING_ALPHA_TO_COVERAGE
 		m.cull_mode = BaseMaterial3D.CULL_DISABLED
-		m.roughness = 0.8
+		m.roughness = 0.85
+		m.emission_enabled = true
+		m.emission_texture = m.albedo_texture
+		m.emission = Color(1, 1, 1)
+		m.emission_energy_multiplier = 0.06
+		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 		_cache.palm_mat = m
 	return _cache.palm_mat

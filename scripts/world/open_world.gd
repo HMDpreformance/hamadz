@@ -23,6 +23,11 @@ const UNLOAD_R := 380.0
 const EXIT_N := [2, 6, 10]    # grid roads with highway junctions (north side)
 const EXIT_WE := [1, 4]       # ... west and east sides
 const TUNNEL := [60.0, 262.0] # x range of the north tunnel
+const SHOP_SIGNS := [["CAFE", "مقهى"], ["SHAWARMA", "شاورما"], ["GOLD SOUK", "سوق الذهب"], ["KARAK TEA", "شاي كرك"],
+	["PERFUMES", "عطور"], ["PHARMACY", "صيدلية"], ["BAKERY", "مخبز"], ["AUTO PARTS", "قطع غيار"], ["EXCHANGE", "صرافة"],
+	["JEWELLERY", "مجوهرات"], ["MANDI HOUSE", "بيت المندي"], ["TAILOR", "خياط"], ["SUPERMARKET", "سوبرماركت"], ["LAUNDRY", "مغسلة"]]
+const TOWER_SIGNS := [["AL NOOR TOWER", "برج النور"], ["SAHRA BANK", "بنك الصحراء"], ["GULF STAR", "نجمة الخليج"], ["PEARL TOWER", "برج اللؤلؤة"],
+	["FALCON TOWER", "برج الصقر"], ["DESERT ROSE", "وردة الصحراء"], ["OASIS HOTEL", "فندق الواحة"], ["AL BARQ TELECOM", "اتصالات البرق"]]
 const SPECIAL := {
 	Vector2i(6, 4): "plaza", Vector2i(5, 2): "parking", Vector2i(7, 6): "parking",
 	Vector2i(3, 5): "gas", Vector2i(9, 2): "gas", Vector2i(2, 3): "park", Vector2i(1, 6): "park",
@@ -77,17 +82,17 @@ func district(b: Vector2i) -> String:
 
 func district_name(p: Vector3) -> String:
 	if on_highway(p):
-		return "SAHRA EXPRESSWAY"
+		return "SHEIKH ZAYED ROAD"
 	if p.z > z1 + ROAD * 0.5:
-		return "CORNICHE"
+		return "THE WALK"
 	var b := Vector2i(clampi(int(floor((p.x - x0) / PITCH)), 0, NX - 1), clampi(int(floor((p.z - z0) / PITCH)), 0, NZ - 1))
 	if b.y == NZ - 1:
-		return "MARINA WALK"
+		return "DUBAI MARINA"
 	if b.x <= 3:
-		return "OASIS VILLAS"
+		return "JUMEIRAH"
 	if b.x >= 9:
-		return "SAND YARDS"
-	return "SAHRA DOWNTOWN"
+		return "AL QUOZ"
+	return "DOWNTOWN"
 
 
 func build() -> void:
@@ -114,6 +119,7 @@ func build() -> void:
 	_promenade()
 	_needle()
 	_dunes()
+	_highway_signs()
 	set_process(true)
 
 
@@ -569,20 +575,45 @@ func _lamps_and_signals() -> void:
 					heads.append(Transform3D(ab, p + Vector3(0, 7.1, 0) + inward * 2.7))
 					pools.append(Transform3D(Basis.IDENTITY, p + Vector3(0, 0.03, 0) + inward * 3.4))
 					lamp_positions.append(p + Vector3(0, 6.6, 0) + inward * 3.0)
-	var pm := CylinderMesh.new()
-	pm.top_radius = 0.07
-	pm.bottom_radius = 0.12
-	pm.height = 7.2
-	pm.radial_segments = 6
-	pm.rings = 1
 	var metal := _mat("pole", func(): return EnvKit.solid(Color(0.08, 0.085, 0.09), 0.5, 0.7))
-	_mm(pm, metal, poles)
-	var am := BoxMesh.new()
-	am.size = Vector3(0.09, 0.09, 2.8)
-	_mm(am, metal, arms)
-	var hm := BoxMesh.new()
-	hm.size = Vector3(0.34, 0.1, 0.7)
-	_mm(hm, EnvKit.emissive(Color(1.0, 0.72, 0.38), 6.0), heads)
+	var lamp := _prop_mesh("res://props/lamp.glb")
+	if lamp.is_empty():
+		var pm := CylinderMesh.new()
+		pm.top_radius = 0.07
+		pm.bottom_radius = 0.12
+		pm.height = 7.2
+		pm.radial_segments = 6
+		pm.rings = 1
+		_mm(pm, metal, poles)
+		var am := BoxMesh.new()
+		am.size = Vector3(0.09, 0.09, 2.8)
+		_mm(am, metal, arms)
+		var hm := BoxMesh.new()
+		hm.size = Vector3(0.34, 0.1, 0.7)
+		_mm(hm, EnvKit.emissive(Color(1.0, 0.72, 0.38), 6.0), heads)
+	else:
+		# generated boulevard lamp (double arm, two lanterns), arms along the road
+		var box: AABB = lamp.aabb
+		var sc := 8.6 / box.size.y
+		var lx := []
+		var lan := []
+		for i in poles.size():
+			var pole_p: Vector3 = poles[i].origin - Vector3(0, 3.6 + CURB, 0)
+			var inward: Vector3 = -arms[i].basis.z
+			var along := Vector3(inward.z, 0, -inward.x)
+			var bas := Basis(along, Vector3.UP, along.cross(Vector3.UP)).scaled(Vector3.ONE * sc)
+			var org := pole_p + Vector3(0, CURB, 0) - bas * Vector3(box.get_center().x, box.position.y, box.get_center().z)
+			lx.append(Transform3D(bas, org))
+			for sg: float in [-1.0, 1.0]:
+				lan.append(Transform3D(Basis.IDENTITY, pole_p + Vector3(0, CURB + 8.6 * 0.9, 0) + along * sg * box.size.x * sc * 0.4))
+		var mi := _mm(lamp.mesh, lamp.mat, lx)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		var hm2 := SphereMesh.new()
+		hm2.radius = 0.32
+		hm2.height = 0.4
+		hm2.radial_segments = 8
+		hm2.rings = 3
+		_mm(hm2, EnvKit.emissive(Color(1.0, 0.82, 0.55), 7.0), lan)
 	var qm := PlaneMesh.new()
 	qm.size = Vector2(17, 17)
 	_mm(qm, EnvKit.glow_mat(Color(1.0, 0.6, 0.25), 0.16), pools)
@@ -971,13 +1002,29 @@ func _fill_downtown(c: Vector3, b: Vector2i) -> void:
 			spots = [[Vector2(-12, -10), 22.0, h], [Vector2(13, 12), 20.0, h * r.randf_range(0.5, 0.75)]]
 		_:
 			spots = [[Vector2(-13, 12), 18.0, h], [Vector2(13, 12), 18.0, h * r.randf_range(0.55, 0.8)], [Vector2(0, -13), 22.0, h * r.randf_range(0.4, 0.65)]]
+	var main_t: Node3D = null
 	for sp in spots:
 		var t := SkylineKit.random_tower(r, sp[1], sp[1] * r.randf_range(0.8, 1.1), sp[2])
+		if main_t == null:
+			main_t = t
 		t.position = Vector3(c.x + sp[0].x, CURB + 6.0, c.z + sp[0].y)
 		t.rotation.y = (PI * 0.5) * (r.randi() % 4) + (r.randf_range(-0.3, 0.3) if r.randf() < 0.3 else 0.0)
 		build_parent.add_child(t)
-	var txt: String = ["AL NOOR", "SKY MALL", "GOLD SOUK", "CAFE 24", "OASIS", "DATES + CO", "SAHRA BANK", "ZAFRAN"][r.randi() % 8]
-	add_sign(txt, Vector3(c.x, 7.0, c.z + lot * 0.5 + 0.3), 0.0, NEON[r.randi() % NEON.size()], 1.8)
+	for face in 4:
+		var ry := face * PI * 0.5
+		var out := Vector3(sin(ry), 0, cos(ry))
+		var side := Vector3(out.z, 0, -out.x)
+		for k in 2:
+			var shop: Array = SHOP_SIGNS[r.randi() % SHOP_SIGNS.size()]
+			add_sign2(shop[0], shop[1], Vector3(c.x, 7.4, c.z) + out * (lot * 0.5 + 0.3) + side * (-13.0 + k * 26.0), ry, NEON[r.randi() % NEON.size()], 0.85)
+	if (b.x * 3 + b.y) % 4 == 0:
+		_billboard(Vector3(c.x, CURB + 6.0, c.z + lot * 0.5 - 4.0), 0.0, (b.x + b.y) % 2)
+	# the main tower carries a big lit name board on its roof, facing both ways
+	var top: float = CURB + 6.0 + float(main_t.get_meta("height"))
+	var name_s: Array = TOWER_SIGNS[r.randi() % TOWER_SIGNS.size()]
+	var hs: float = clampf(top * 0.045, 3.5, 8.0)
+	for ry: float in [0.0, PI]:
+		add_sign2(name_s[0], name_s[1], Vector3(main_t.position.x, top + hs * 1.3, main_t.position.z) + Vector3(sin(ry), 0, cos(ry)) * 1.5, ry, NEON[r.randi() % NEON.size()], hs)
 	_block_collider(build_parent, c, lot, lot)
 	if (b.x + b.y) % 2 == 0:
 		_parked(build_parent, c, 2)
@@ -994,9 +1041,119 @@ func _fill_beach(c: Vector3, b: Vector2i) -> void:
 		var t := SkylineKit.random_tower(r, 20.0, 16.0, h)
 		t.position = Vector3(c.x + sx * 13.0, CURB + 6.0, c.z + r.randf_range(-6.0, 6.0))
 		build_parent.add_child(t)
-	var txt: String = ["MARINA", "BEACH CLUB", "YACHT BAR", "SEAFOOD", "HOTEL", "LOUNGE"][r.randi() % 6]
-	add_sign(txt, Vector3(c.x, 7.0, c.z + lot * 0.5 + 0.3), 0.0, NEON[r.randi() % NEON.size()], 2.0)
+	var bs: Array = [["MARINA HOTEL", "فندق المارينا"], ["BEACH CLUB", "نادي الشاطئ"], ["SEAFOOD", "مأكولات بحرية"], ["YACHT CLUB", "نادي اليخوت"], ["SHISHA LOUNGE", "صالة الشيشة"]][r.randi() % 5]
+	add_sign2(bs[0], bs[1], Vector3(c.x, 7.6, c.z + lot * 0.5 + 0.3), 0.0, NEON[r.randi() % NEON.size()], 1.1)
 	_block_collider(build_parent, c, lot, lot)
+
+
+const BILLBOARDS := [["bb_car", "DRIVE THE NIGHT", "قُد الليل", 2.67], ["bb_perfume", "OUD ROYALE", "عود رويال", 1.78]]
+
+
+## Lit billboard on two steel legs, with an English + Arabic tagline.
+func _billboard(base: Vector3, rot_y: float, kind: int) -> void:
+	var bb: Array = BILLBOARDS[kind % BILLBOARDS.size()]
+	var w := 22.0
+	var h := w / float(bb[3])
+	var lift := 7.0
+	var fwd := Vector3(sin(rot_y), 0, cos(rot_y))
+	var side := Vector3(fwd.z, 0, -fwd.x)
+	var steel := _mat("bb_steel", func(): return EnvKit.solid(Color(0.12, 0.12, 0.13), 0.4, 0.8))
+	for sg: float in [-1.0, 1.0]:
+		EnvKit.box(_tgt(), Vector3(0.6, lift, 0.6), base + side * sg * w * 0.3 + Vector3(0, lift * 0.5, 0) - fwd * 0.6, steel, Vector3(0, rot_y, 0))
+	EnvKit.box(_tgt(), Vector3(w + 0.8, h + 0.8, 0.5), base + Vector3(0, lift + h * 0.5, 0) - fwd * 0.35, steel, Vector3(0, rot_y, 0))
+	var face := MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(w, h)
+	face.mesh = qm
+	face.material_override = _mat("bb_" + str(kind), func():
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.albedo_texture = load("res://textures/%s.jpg" % bb[0])
+		m.albedo_color = Color(1.25, 1.25, 1.25)
+		return m)
+	face.position = base + Vector3(0, lift + h * 0.5, 0)
+	face.rotation.y = rot_y
+	face.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_tgt().add_child(face)
+	var tx := -w * 0.27 if kind % 2 == 0 else w * 0.27
+	for pair in [[bb[1], 1.3, -0.6, UI.title_font(true)], [bb[2], 1.5, 1.4, null]]:
+		var l := Label3D.new()
+		l.text = pair[0]
+		if pair[3]:
+			l.font = pair[3]
+		else:
+			if _ar_font == null:
+				_ar_font = load("res://fonts/notokufi_NotoKufiArabic-Bold.ttf")
+			l.font = _ar_font
+		l.font_size = 96
+		l.pixel_size = float(pair[1]) / 96.0 * 1.6
+		l.modulate = Color(1.4, 1.3, 1.1)
+		l.shaded = false
+		l.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+		l.position = base + Vector3(0, lift + h * 0.5 + float(pair[2]), 0) + side * tx + fwd * 0.05
+		l.rotation.y = rot_y
+		_tgt().add_child(l)
+
+
+const GANTRY := [["DOWNTOWN", "وسط المدينة"], ["JUMEIRAH", "جميرا"], ["DUBAI MARINA", "دبي مارينا"], ["AL QUOZ", "القوز"],
+	["SHEIKH ZAYED RD", "شارع الشيخ زايد"], ["DEIRA", "ديرة"], ["AIRPORT", "المطار"], ["ABU DHABI", "أبوظبي"]]
+
+
+## First mesh + material of a generated prop scene, with its bounds.
+func _prop_mesh(path: String) -> Dictionary:
+	if _mats.has(path):
+		return _mats[path]
+	var out := {}
+	if ResourceLoader.exists(path):
+		var ps: PackedScene = load(path)
+		var root := ps.instantiate()
+		var stack := [root]
+		while not stack.is_empty():
+			var nd: Node = stack.pop_back()
+			if nd is MeshInstance3D and (nd as MeshInstance3D).mesh:
+				var m: Mesh = (nd as MeshInstance3D).mesh
+				out = {"mesh": m, "mat": (nd as MeshInstance3D).get_active_material(0), "aabb": m.get_aabb()}
+				break
+			stack.append_array(nd.get_children())
+		root.free()
+	_mats[path] = out
+	return out
+
+
+func _highway_signs() -> void:
+	## Green overhead gantries across the expressway and billboards along its outer edge.
+	var n := hw_path.size()
+	if n < 8:
+		return
+	var steel := _mat("bb_steel", func(): return EnvKit.solid(Color(0.12, 0.12, 0.13), 0.4, 0.8))
+	var count := 0
+	var step := maxi(1, n / 10)
+	for i in range(0, n, step):
+		var a := hw_path[i]
+		var b := hw_path[(i + 1) % n]
+		if in_tunnel(a):
+			continue
+		var t := (b - a)
+		t.y = 0.0
+		if t.length() < 0.01:
+			continue
+		t = t.normalized()
+		var side := Vector3(-t.z, 0, t.x)
+		var ry := atan2(t.x, t.z)
+		var y0 := a.y
+		var span := HW_HALF + 1.5
+		if count % 2 == 0:
+			for sg: float in [-1.0, 1.0]:
+				EnvKit.box(self, Vector3(0.5, 8.0, 0.5), a + side * sg * span + Vector3(0, 4.0, 0), steel, Vector3(0, ry, 0))
+			EnvKit.box(self, Vector3(span * 2.0 + 0.6, 0.5, 0.6), a + Vector3(0, 7.8, 0), steel, Vector3(0, ry, 0))
+			for k in 2:
+				var g: Array = GANTRY[(count + k) % GANTRY.size()]
+				add_sign2(g[0], g[1], a + side * (-6.0 + k * 12.0) + Vector3(0, 6.4, 0), ry + PI, Color.WHITE, 0.9, true, Color(0.0, 0.32, 0.14))
+		else:
+			var out := Vector3(a.x - hw_c.x, 0, a.z - hw_c.y).normalized()
+			var face_ry := atan2(-out.x, -out.z)
+			_billboard(Vector3(a.x, y0, a.z) + out * (HW_HALF + 14.0), face_ry, count / 2)
+		count += 1
 
 
 func _fill_needle(n: Node3D, c: Vector3) -> void:
@@ -1068,8 +1225,7 @@ func _street_palms(n: Node3D, c: Vector3) -> void:
 		for v in [Vector3(t, CURB, e), Vector3(t, CURB, -e), Vector3(e, CURB, t), Vector3(-e, CURB, t)]:
 			var sc := 0.85 + fmod(absf(v.x * 13.1 + v.z * 7.7 + c.x), 0.35)
 			xf.append(Transform3D(Basis(Vector3.UP, fmod(c.x + v.x * 3.0 + v.z, TAU)).scaled(Vector3.ONE * sc), c + v))
-	var mi := _local_mm(n, SkylineKit.palm_mesh(), SkylineKit.palm_material(), xf)
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_local_mm(n, SkylineKit.palm_mesh(), SkylineKit.palm_material(), xf)
 
 
 func _fill_residential(n: Node3D, c: Vector3, b: Vector2i) -> void:

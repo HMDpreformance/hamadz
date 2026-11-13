@@ -64,11 +64,14 @@ func _ready() -> void:
 	we.environment = env
 	add_child(we)
 	var moon := DirectionalLight3D.new()
-	moon.rotation_degrees = Vector3(-48, 35, 0)
-	moon.light_color = Color(0.5, 0.6, 1.0)
-	moon.light_energy = 0.28
+	moon.rotation_degrees = Vector3(-38, 35, 0)
+	moon.light_color = Color(0.55, 0.62, 0.95)
+	moon.light_energy = 0.55
 	moon.shadow_enabled = GFX.p.shadows
-	moon.directional_shadow_max_distance = 60.0
+	moon.shadow_opacity = 0.85
+	moon.shadow_blur = 1.5
+	moon.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	moon.directional_shadow_max_distance = 90.0
 	add_child(moon)
 
 	city = OpenWorld.new()

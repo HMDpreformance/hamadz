@@ -272,6 +272,56 @@ func add_sign(text: String, pos: Vector3, rot_y: float, color: Color, height := 
 	_tgt().add_child(halo)
 
 
+static var _ar_font: Font
+
+
+## Bilingual sign: Arabic on top, English below, on a dark board with a glow.
+func add_sign2(en: String, ar: String, pos: Vector3, rot_y: float, color: Color, height := 2.2, board := true, board_col := Color(0.012, 0.014, 0.02)) -> void:
+	var road_sign := board_col.g > 0.1
+	if _ar_font == null:
+		_ar_font = load("res://fonts/notokufi_NotoKufiArabic-Bold.ttf")
+	var fwd := Vector3(sin(rot_y), 0, cos(rot_y))
+	var glow := Color(1.3, 1.3, 1.3) if road_sign else Color(color.r * 2.6 + 0.25, color.g * 2.6 + 0.25, color.b * 2.6 + 0.25)
+	var la := Label3D.new()
+	la.text = ar
+	la.font = _ar_font
+	la.font_size = 96
+	la.pixel_size = height * 0.9 / 96.0
+	la.modulate = Color(1.6, 1.55, 1.45) if board else glow
+	la.shaded = false
+	la.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+	la.position = pos + Vector3(0, height * 0.55, 0) + fwd * 0.02
+	la.rotation.y = rot_y
+	_tgt().add_child(la)
+	var le := Label3D.new()
+	le.text = en
+	le.font = UI.title_font(false)
+	le.font_size = 96
+	le.pixel_size = height * 0.75 / 96.0
+	le.modulate = glow
+	le.shaded = false
+	le.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+	le.position = pos - Vector3(0, height * 0.5, 0) + fwd * 0.02
+	le.rotation.y = rot_y
+	_tgt().add_child(le)
+	var w := maxf(height * 0.46 * float(en.length()), height * 0.42 * float(ar.length())) + height
+	var h := height * 2.4
+	if board:
+		EnvKit.box(_tgt(), Vector3(w, h, 0.25), pos - fwd * 0.16, EnvKit.solid(board_col, 0.35, 0.3) if not road_sign else EnvKit.emissive(board_col, 0.6), Vector3(0, rot_y, 0))
+		if road_sign:
+			return
+		var rim := EnvKit.box(_tgt(), Vector3(w + 0.3, 0.12, 0.3), pos + Vector3(0, h * 0.5, 0) - fwd * 0.1, EnvKit.emissive(color, 3.0), Vector3(0, rot_y, 0))
+		rim.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var halo := MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(w * 1.8, h * 1.8)
+	halo.mesh = qm
+	halo.material_override = EnvKit.glow_mat(color, 0.18)
+	halo.position = pos + fwd * 0.12
+	halo.rotation.y = rot_y
+	_tgt().add_child(halo)
+
+
 func _blocks() -> void:
 	var sidewalk := StandardMaterial3D.new()
 	sidewalk.albedo_color = Color(0.2, 0.2, 0.21)

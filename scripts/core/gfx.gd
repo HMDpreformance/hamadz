@@ -6,7 +6,7 @@ signal changed
 
 const PRESETS := [
 	{"name": "PERFORMANCE", "scale": 0.75, "msaa": 0, "glow": false, "shadows": false, "particles": 0.4, "mirror": false, "lights": 4, "fps": 60},
-	{"name": "BALANCED", "scale": 1.0, "msaa": 1, "glow": true, "shadows": false, "particles": 0.7, "mirror": true, "lights": 6, "fps": 60},
+	{"name": "BALANCED", "scale": 1.0, "msaa": 1, "glow": true, "shadows": true, "particles": 0.7, "mirror": true, "lights": 6, "fps": 60},
 	{"name": "QUALITY", "scale": 1.0, "msaa": 1, "glow": true, "shadows": true, "particles": 1.0, "mirror": true, "lights": 8, "fps": 60},
 ]
 

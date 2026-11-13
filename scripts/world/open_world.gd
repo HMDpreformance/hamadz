@@ -26,6 +26,7 @@ const TUNNEL := [60.0, 262.0] # x range of the north tunnel
 const SPECIAL := {
 	Vector2i(6, 4): "plaza", Vector2i(5, 2): "parking", Vector2i(7, 6): "parking",
 	Vector2i(3, 5): "gas", Vector2i(9, 2): "gas", Vector2i(2, 3): "park", Vector2i(1, 6): "park",
+	Vector2i(7, 3): "needle",
 	Vector2i(10, 4): "yard", Vector2i(10, 6): "yard", Vector2i(11, 1): "yard",
 }
 
@@ -76,17 +77,17 @@ func district(b: Vector2i) -> String:
 
 func district_name(p: Vector3) -> String:
 	if on_highway(p):
-		return "BAYSHORE EXPRESSWAY"
+		return "SAHRA EXPRESSWAY"
 	if p.z > z1 + ROAD * 0.5:
-		return "MARINA PROMENADE"
+		return "CORNICHE"
 	var b := Vector2i(clampi(int(floor((p.x - x0) / PITCH)), 0, NX - 1), clampi(int(floor((p.z - z0) / PITCH)), 0, NZ - 1))
 	if b.y == NZ - 1:
-		return "OCEAN STRIP"
+		return "MARINA WALK"
 	if b.x <= 3:
-		return "PALM HEIGHTS"
+		return "OASIS VILLAS"
 	if b.x >= 9:
-		return "IRONWORKS"
-	return "DOWNTOWN"
+		return "SAND YARDS"
+	return "SAHRA DOWNTOWN"
 
 
 func build() -> void:
@@ -111,6 +112,8 @@ func build() -> void:
 	_lod_blocks()
 	_far_shore()
 	_promenade()
+	_needle()
+	_dunes()
 	set_process(true)
 
 
@@ -178,7 +181,7 @@ func _world_ground() -> void:
 	m.set_shader_parameter("half_road", ROAD * 0.5)
 	m.set_shader_parameter("offset", Vector2(road_x(0), road_z(0)))
 	m.set_shader_parameter("extent", Vector2((x1 - x0) * 0.5, (z1 - z0) * 0.5))
-	m.set_shader_parameter("outside", Color(0.035, 0.05, 0.03))
+	m.set_shader_parameter("outside", Color(0.2, 0.15, 0.1))
 	m.set_shader_parameter("outside_rough", 0.95)
 	m.set_shader_parameter("noise_tex", EnvKit.noise_tex(3, 0.03))
 	m.set_shader_parameter("asphalt_tex", load("res://textures/asphalt.jpg"))
@@ -203,14 +206,14 @@ void fragment() {
 	float a = texture(noise_tex, p * 0.012 + vec2(TIME * 0.012, TIME * 0.02)).r;
 	float b = texture(noise_tex, p * 0.045 - vec2(TIME * 0.03, TIME * 0.011)).r;
 	float w = a * 0.6 + b * 0.4;
-	ALBEDO = vec3(0.004, 0.012, 0.022);
-	ROUGHNESS = 0.04 + 0.16 * w;
-	METALLIC = 0.55;
+	ALBEDO = vec3(0.0, 0.03, 0.04);
+	ROUGHNESS = 0.03 + 0.08 * w;
+	METALLIC = 0.4;
 	SPECULAR = 0.9;
 	NORMAL_MAP = vec3(0.5 + (a - 0.5) * 0.5, 0.5 + (b - 0.5) * 0.5, 1.0);
 	NORMAL_MAP_DEPTH = 0.55;
 	// faint shimmer of the city lights on the swell
-	EMISSION = vec3(0.9, 0.5, 0.25) * smoothstep(0.62, 0.9, w) * 0.05 * smoothstep(900.0, 40.0, p.y - 400.0);
+	EMISSION = vec3(0.0, 0.05, 0.06) + vec3(0.9, 0.75, 0.5) * smoothstep(0.62, 0.9, w) * 0.06 * smoothstep(900.0, 40.0, p.y - 400.0);
 }
 """
 	var m := ShaderMaterial.new()
@@ -678,10 +681,9 @@ func _lod_height(b: Vector2i) -> float:
 	r.seed = b.x * 977 + b.y * 131 + seed_v
 	match district(b):
 		"downtown":
-			var central := 1.0 - (absf(b.x - 6.0) / 4.0 + absf(b.y - 3.5) / 5.0) * 0.5
-			return 22.0 + clampf(central, 0.0, 1.0) * r.randf_range(20.0, 60.0)
+			return _tower_h(b, r)
 		"beach":
-			return r.randf_range(18.0, 34.0)
+			return r.randf_range(50.0, 110.0)
 		"industrial":
 			return r.randf_range(9.0, 14.0)
 		"residential":
@@ -701,14 +703,15 @@ func _lod_blocks() -> void:
 			var b := Vector2i(bi, bj)
 			var h := _lod_height(b)
 			var c := block_center(b)
-			var xf := Transform3D(Basis.IDENTITY.scaled(Vector3(BLOCK - 12.0, maxf(h, 0.01), BLOCK - 12.0)), c + Vector3(0, h * 0.5, 0))
+			var fw := BLOCK - 12.0 if h < 40.0 else 30.0
+			var xf := Transform3D(Basis.IDENTITY.scaled(Vector3(fw, maxf(h, 0.01), fw)), c + Vector3(0, h * 0.5, 0))
 			if h <= 0.0:
 				xf = Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * 0.001), c - Vector3(0, 50, 0))
 			_lod_xf[b] = xf
 			_lod_mm.set_instance_transform(bi * NZ + bj, xf)
 	var mi := MultiMeshInstance3D.new()
 	mi.multimesh = _lod_mm
-	mi.material_override = _lod_material()
+	mi.material_override = SkylineKit.glass()
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	# sidewalks for the whole grid are one multimesh too
@@ -752,9 +755,7 @@ func _far_shore() -> void:
 		xf.append(Transform3D(Basis.IDENTITY.scaled(Vector3(w, h, w)), p))
 	var bm := BoxMesh.new()
 	bm.size = Vector3(1, 1, 1)
-	var far_mat := _lod_material()
-	far_mat.set_shader_parameter("gain", 0.45)
-	var mi := _mm(bm, far_mat, xf)
+	var mi := _mm(bm, SkylineKit.glass(), xf)
 	mi.extra_cull_margin = 2000.0
 
 
@@ -908,6 +909,10 @@ func _build_block(b: Vector2i) -> void:
 			_fill_park(n, c)
 		"yard":
 			_fill_yard(n, c)
+		"needle":
+			_fill_needle(n, c)
+	if not district(b) in ["industrial", "yard", "park"]:
+		_street_palms(n, c)
 	if district(b) in ["downtown", "beach", "residential"]:
 		_pedestrians(n, c, 5 if district(b) == "residential" else 9)
 	build_parent = null
@@ -944,34 +949,125 @@ func _local_mm(n: Node3D, mesh: Mesh, mat: Material, xforms: Array, colors := []
 	return mi
 
 
+func _tower_h(b: Vector2i, r: RandomNumberGenerator) -> float:
+	var central := 1.0 - (absf(b.x - 7.0) / 4.0 + absf(b.y - 3.0) / 5.0) * 0.6
+	return 45.0 + clampf(central, 0.0, 1.0) * r.randf_range(60.0, 150.0)
+
+
 func _fill_downtown(c: Vector3, b: Vector2i) -> void:
-	var saved_blocks := blocks
-	# reuse the classic tower layouts; "central" scales heights towards the core
-	blocks = 5
-	var bi := clampi(int(round(2.0 + (b.x - 6.0) * 0.5)), 0, 4)
-	var bj := clampi(int(round(2.0 + (b.y - 3.5) * 0.5)), 0, 4)
-	var keep := with_colliders
-	with_colliders = false
-	_fill_block(c.x, c.z, bi, bj)
-	with_colliders = keep
-	blocks = saved_blocks
-	_block_collider(build_parent, c, BLOCK - 10.0, BLOCK - 10.0)
+	## Glass towers on a lit podium: one landmark tower or a cluster of two or three.
+	var r := RandomNumberGenerator.new()
+	r.seed = b.x * 977 + b.y * 131 + seed_v
+	var h := _tower_h(b, r)
+	var lot := BLOCK - 10.0
+	add_building(Vector3(c.x, CURB, c.z), Vector3(lot, 6.0, lot))
+	var spots := []
+	match r.randi() % 3:
+		0:
+			spots = [[Vector2.ZERO, 32.0, h]]
+		1:
+			spots = [[Vector2(-12, -10), 22.0, h], [Vector2(13, 12), 20.0, h * r.randf_range(0.5, 0.75)]]
+		_:
+			spots = [[Vector2(-13, 12), 18.0, h], [Vector2(13, 12), 18.0, h * r.randf_range(0.55, 0.8)], [Vector2(0, -13), 22.0, h * r.randf_range(0.4, 0.65)]]
+	for sp in spots:
+		var t := SkylineKit.random_tower(r, sp[1], sp[1] * r.randf_range(0.8, 1.1), sp[2])
+		t.position = Vector3(c.x + sp[0].x, CURB + 6.0, c.z + sp[0].y)
+		t.rotation.y = (PI * 0.5) * (r.randi() % 4) + (r.randf_range(-0.3, 0.3) if r.randf() < 0.3 else 0.0)
+		build_parent.add_child(t)
+	var txt: String = ["AL NOOR", "SKY MALL", "GOLD SOUK", "CAFE 24", "OASIS", "DATES + CO", "SAHRA BANK", "ZAFRAN"][r.randi() % 8]
+	add_sign(txt, Vector3(c.x, 4.6, c.z + lot * 0.5 + 0.3), 0.0, NEON[r.randi() % NEON.size()], 1.8)
+	_block_collider(build_parent, c, lot, lot)
 	if (b.x + b.y) % 2 == 0:
 		_parked(build_parent, c, 2)
 
 
-func _fill_beach(c: Vector3, _b: Vector2i) -> void:
-	## Hotel and club strip facing the water: mid-rise, heavy on neon.
+func _fill_beach(c: Vector3, b: Vector2i) -> void:
+	## Marina towers facing the water: slim, curved residential glass.
+	var r := RandomNumberGenerator.new()
+	r.seed = b.x * 311 + seed_v
 	var lot := BLOCK - 10.0
-	var w := lot * 0.5 - 2.0
+	add_building(Vector3(c.x, CURB, c.z), Vector3(lot, 5.0, lot))
 	for sx: float in [-1.0, 1.0]:
-		var h := _rng.randf_range(16.0, 34.0)
-		var p := Vector3(c.x + sx * (w * 0.5 + 2.0), CURB, c.z)
-		add_building(p, Vector3(w, h, lot))
-		var txt: String = ["HOTEL", "CLUB VOLT", "OCEAN", "CASINO", "PALMS", "LOUNGE", "SURF", "BAYVIEW"][_rng.randi() % 8]
-		add_sign(txt, Vector3(p.x, _rng.randf_range(7.0, 11.0), c.z + lot * 0.5 + 0.3), 0.0, NEON[_rng.randi() % NEON.size()], 2.8)
-		add_sign(txt, Vector3(p.x, h * 0.55 + 2.0, c.z - lot * 0.5 - 0.3), PI, NEON[_rng.randi() % NEON.size()], 2.0, true)
+		var h := r.randf_range(50.0, 110.0)
+		var t := SkylineKit.random_tower(r, 20.0, 16.0, h)
+		t.position = Vector3(c.x + sx * 13.0, CURB + 5.0, c.z + r.randf_range(-6.0, 6.0))
+		build_parent.add_child(t)
+	var txt: String = ["MARINA", "BEACH CLUB", "YACHT BAR", "SEAFOOD", "HOTEL", "LOUNGE"][r.randi() % 6]
+	add_sign(txt, Vector3(c.x, 4.0, c.z + lot * 0.5 + 0.3), 0.0, NEON[r.randi() % NEON.size()], 2.0)
 	_block_collider(build_parent, c, lot, lot)
+
+
+func _fill_needle(n: Node3D, c: Vector3) -> void:
+	## Ground around the supertall: reflecting pool and fountain jets.
+	var pm := StandardMaterial3D.new()
+	pm.albedo_color = Color(0.01, 0.03, 0.05)
+	pm.metallic = 0.8
+	pm.roughness = 0.03
+	for sg: float in [-1.0, 1.0]:
+		var pb := EnvKit.box(n, Vector3(BLOCK - 8.0, 0.05, 8.0), c + Vector3(0, CURB + 0.03, sg * 25.0), pm)
+		pb.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var jets := []
+	for k in 12:
+		for sg: float in [-1.0, 1.0]:
+			jets.append(Transform3D(Basis.IDENTITY, c + Vector3(-25.0 + k * 4.5, 2.2, sg * 25.0)))
+	var jm := CylinderMesh.new()
+	jm.top_radius = 0.05
+	jm.bottom_radius = 0.25
+	jm.height = 4.4
+	jm.radial_segments = 6
+	jm.rings = 1
+	_local_mm(n, jm, _mat("jet", func(): return EnvKit.emissive(Color(0.75, 0.9, 1.0), 1.6)), jets)
+	_block_collider(n, c, 46.0, 40.0, Vector3.ZERO, 30.0)
+	lamp_positions.append(c + Vector3(0, 6.0, 26.0))
+
+
+func _needle() -> void:
+	## The supertall is always built so it shows on the skyline from anywhere.
+	var t := SkylineKit.supertall(430.0)
+	t.position = block_center(Vector2i(7, 3)) + Vector3(0, CURB, 0)
+	t.scale = Vector3(0.62, 1.0, 0.62)
+	add_child(t)
+	for mi in t.get_children():
+		if mi is GeometryInstance3D:
+			mi.extra_cull_margin = 600.0
+
+
+func _dunes() -> void:
+	## Desert beyond the highway: long low sand dunes.
+	var r := RandomNumberGenerator.new()
+	r.seed = 515
+	var xf := []
+	for k in 70:
+		var a := r.randf_range(0.0, TAU)
+		var p := Vector3(hw_c.x + cos(a) * (hw_h.x + r.randf_range(120.0, 500.0)), -2.0, hw_c.y + sin(a) * (hw_h.y + r.randf_range(120.0, 500.0)))
+		if p.z > water_z - 20.0:
+			continue
+		var sx := r.randf_range(50.0, 140.0)
+		xf.append(Transform3D(Basis(Vector3.UP, r.randf_range(0, PI)).scaled(Vector3(sx, r.randf_range(8.0, 22.0), sx * r.randf_range(0.3, 0.6))), p))
+	var sm := SphereMesh.new()
+	sm.radius = 0.5
+	sm.height = 1.0
+	sm.radial_segments = 16
+	sm.rings = 6
+	sm.is_hemisphere = true
+	var sand := StandardMaterial3D.new()
+	sand.albedo_color = Color(0.36, 0.27, 0.17)
+	sand.roughness = 1.0
+	var mi := _mm(sm, sand, xf)
+	mi.extra_cull_margin = 800.0
+
+
+func _street_palms(n: Node3D, c: Vector3) -> void:
+	## Date palms down every sidewalk.
+	var xf := []
+	var e := BLOCK * 0.5 - 1.6
+	for k in 5:
+		var t := -BLOCK * 0.5 + 8.0 + k * 12.0
+		for v in [Vector3(t, CURB, e), Vector3(t, CURB, -e), Vector3(e, CURB, t), Vector3(-e, CURB, t)]:
+			var sc := 0.85 + fmod(absf(v.x * 13.1 + v.z * 7.7 + c.x), 0.35)
+			xf.append(Transform3D(Basis(Vector3.UP, fmod(c.x + v.x * 3.0 + v.z, TAU)).scaled(Vector3.ONE * sc), c + v))
+	var mi := _local_mm(n, SkylineKit.palm_mesh(), SkylineKit.palm_material(), xf)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 func _fill_residential(n: Node3D, c: Vector3, b: Vector2i) -> void:
@@ -983,8 +1079,9 @@ func _fill_residential(n: Node3D, c: Vector3, b: Vector2i) -> void:
 	var wins := []
 	var trunks := []
 	var crowns := []
-	var palette := [Color(0.5, 0.45, 0.38), Color(0.42, 0.46, 0.5), Color(0.55, 0.5, 0.42), Color(0.38, 0.42, 0.36), Color(0.5, 0.4, 0.38), Color(0.6, 0.58, 0.52)]
-	var roofp := [Color(0.16, 0.1, 0.08), Color(0.1, 0.11, 0.13), Color(0.2, 0.12, 0.1)]
+	# sand, cream and white villas with flat roofs and parapets
+	var palette := [Color(0.72, 0.62, 0.48), Color(0.8, 0.76, 0.68), Color(0.66, 0.55, 0.42), Color(0.85, 0.83, 0.78), Color(0.7, 0.6, 0.5), Color(0.6, 0.5, 0.38)]
+	var roofp := [Color(0.55, 0.48, 0.38), Color(0.62, 0.58, 0.52)]
 	# a shop row faces the avenue on some blocks
 	var shops := b.x == 3 or b.y == 4
 	for row: float in [-1.0, 1.0]:
@@ -997,18 +1094,16 @@ func _fill_residential(n: Node3D, c: Vector3, b: Vector2i) -> void:
 			var p := Vector3(c.x - 22.5 + k * 15.0, CURB, c.z + row * 15.5)
 			walls.append(Transform3D(Basis.IDENTITY.scaled(Vector3(w, h, d)), p + Vector3(0, h * 0.5, 0)))
 			wall_cols.append(palette[_rng.randi() % palette.size()])
-			roofs.append(Transform3D(Basis.IDENTITY.scaled(Vector3(w + 0.8, 2.4, d + 0.8)), p + Vector3(0, h + 1.2, 0)))
+			roofs.append(Transform3D(Basis.IDENTITY.scaled(Vector3(w + 0.4, 0.7, d + 0.4)), p + Vector3(0, h + 0.35, 0)))
 			roof_cols.append(roofp[_rng.randi() % roofp.size()])
 			if _rng.randf() < 0.75:
 				wins.append(Transform3D(Basis.IDENTITY, p + Vector3(_rng.randf_range(-2.5, 2.5), 1.7, row * (d * 0.5 + 0.03))))
 			if _rng.randf() < 0.4 and h > 4.0:
 				wins.append(Transform3D(Basis.IDENTITY, p + Vector3(_rng.randf_range(-2.5, 2.5), 4.6, row * (d * 0.5 + 0.03))))
 			_block_collider(n, p, w, d, Vector3.ZERO, 8.0)
-			if _rng.randf() < 0.7:
+			if _rng.randf() < 0.8:
 				var tp := p + Vector3(_rng.randf_range(-5.0, 5.0), 0, row * (d * 0.5 + 4.5))
-				trunks.append(Transform3D(Basis.IDENTITY, tp + Vector3(0, 1.6, 0)))
-				var s := _rng.randf_range(2.4, 3.6)
-				crowns.append(Transform3D(Basis.IDENTITY.scaled(Vector3(s, s * 1.1, s)), tp + Vector3(0, 4.4, 0)))
+				trunks.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * _rng.randf_range(0.7, 1.0)), tp))
 	if shops:
 		var p := Vector3(c.x, CURB, c.z + 16.0)
 		add_building(p, Vector3(BLOCK - 12.0, 7.0, 16.0))
@@ -1023,35 +1118,26 @@ func _fill_residential(n: Node3D, c: Vector3, b: Vector2i) -> void:
 		m.roughness = 0.85
 		return m)
 	_local_mm(n, unit, wm, walls, wall_cols)
-	var rm := PrismMesh.new()
-	rm.size = Vector3(1, 1, 1)
-	_local_mm(n, rm, wm, roofs, roof_cols)
+	_local_mm(n, unit, wm, roofs, roof_cols)
 	var qm := BoxMesh.new()
 	qm.size = Vector3(1.6, 1.2, 0.06)
 	_local_mm(n, qm, _mat("house_win", func(): return EnvKit.emissive(Color(1.0, 0.75, 0.42), 2.6)), wins)
-	_trees(n, trunks, crowns)
-	# lawn
-	var lawn := EnvKit.box(n, Vector3(BLOCK - 4.0, 0.04, BLOCK - 4.0), c + Vector3(0, CURB + 0.02, 0), _mat("lawn", func(): return EnvKit.solid(Color(0.045, 0.1, 0.04), 0.95)))
+	if not trunks.is_empty():
+		_local_mm(n, SkylineKit.palm_mesh(), SkylineKit.palm_material(), trunks)
+	# gravel and paving between the villas
+	var lawn := EnvKit.box(n, Vector3(BLOCK - 4.0, 0.04, BLOCK - 4.0), c + Vector3(0, CURB + 0.02, 0), _mat("lawn", func(): return EnvKit.solid(Color(0.26, 0.21, 0.15), 0.95)))
 	lawn.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_parked(n, c, 4)
 
 
-func _trees(n: Node3D, trunks: Array, crowns: Array) -> void:
+func _trees(n: Node3D, trunks: Array, _crowns: Array) -> void:
+	## Parks get date palms too (one palm per trunk position).
 	if trunks.is_empty():
 		return
-	var tm := CylinderMesh.new()
-	tm.top_radius = 0.14
-	tm.bottom_radius = 0.2
-	tm.height = 3.2
-	tm.radial_segments = 5
-	tm.rings = 1
-	_local_mm(n, tm, _mat("trunk", func(): return EnvKit.solid(Color(0.16, 0.12, 0.08), 0.9)), trunks)
-	var sm := SphereMesh.new()
-	sm.radius = 0.5
-	sm.height = 1.0
-	sm.radial_segments = 7
-	sm.rings = 4
-	_local_mm(n, sm, _mat("crown", func(): return EnvKit.solid(Color(0.04, 0.14, 0.05), 0.9)), crowns)
+	var xf := []
+	for t in trunks:
+		xf.append(Transform3D(Basis(Vector3.UP, fmod(t.origin.x * 1.7, TAU)), Vector3(t.origin.x, CURB, t.origin.z)))
+	_local_mm(n, SkylineKit.palm_mesh(), SkylineKit.palm_material(), xf)
 
 
 func _fill_industrial(n: Node3D, c: Vector3) -> void:

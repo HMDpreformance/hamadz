@@ -58,7 +58,7 @@ var _district := ""
 
 
 func _ready() -> void:
-	env = GFX.make_environment(Color(0.3, 0.34, 0.5), 0.55, Color(0.07, 0.05, 0.11), 0.0065, EnvKit.city_sky())
+	env = GFX.make_environment(Color(0.3, 0.34, 0.5), 0.55, Color(0.13, 0.085, 0.07), 0.0045, EnvKit.desert_sky())
 	env.background_mode = Environment.BG_SKY
 	var we := WorldEnvironment.new()
 	we.environment = env
@@ -97,14 +97,14 @@ func _ready() -> void:
 	cam = ChaseCamera.new()
 	cam.target = car
 	cam.fov = 62.0
-	cam.far = 600.0
+	cam.far = 1600.0
 	add_child(cam)
 	cam.make_current()
 
 	_race_holder = Node3D.new()
 	add_child(_race_holder)
 	_cine = Camera3D.new()
-	_cine.far = 600.0
+	_cine.far = 1600.0
 	_cine.fov = 50.0
 	add_child(_cine)
 	cam.doppler_tracking = Camera3D.DOPPLER_TRACKING_PHYSICS_STEP

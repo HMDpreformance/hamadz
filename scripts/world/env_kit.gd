@@ -80,6 +80,28 @@ static func city_sky() -> ImageTexture:
 	return t
 
 
+## Gulf night sky: deep blue overhead, warm dusty haze over the desert horizon, stars.
+static func desert_sky() -> ImageTexture:
+	if _cache.has("desert"):
+		return _cache["desert"]
+	var w := 512
+	var h := 256
+	var img := Image.create(w, h, false, Image.FORMAT_RGBAH)
+	for y in h:
+		var v := float(y) / h
+		for x in w:
+			var c := Color(0.012, 0.018, 0.05).lerp(Color(0.16, 0.09, 0.12), exp(-pow((v - 0.5) / 0.13, 2.0)))
+			c += Color(0.55, 0.3, 0.12) * exp(-pow((v - 0.5) / 0.035, 2.0)) * 0.55
+			if v >= 0.5:
+				c = Color(0.05, 0.035, 0.03)
+			if v < 0.42 and fposmod(sin(x * 91.7 + y * 47.3) * 9631.1, 1.0) > 0.9988:
+				c += Color(0.5, 0.5, 0.6) * (1.0 - v * 2.0)
+			img.set_pixel(x, y, c)
+	var t := ImageTexture.create_from_image(img)
+	_cache["desert"] = t
+	return t
+
+
 static func noise_tex(seed_v: int, freq: float, size := 256, as_normal := false, strength := 4.0) -> NoiseTexture2D:
 	var key := "n%d_%f_%d_%s" % [seed_v, freq, size, as_normal]
 	if _cache.has(key):

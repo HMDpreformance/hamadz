@@ -711,7 +711,7 @@ func _lod_blocks() -> void:
 			_lod_mm.set_instance_transform(bi * NZ + bj, xf)
 	var mi := MultiMeshInstance3D.new()
 	mi.multimesh = _lod_mm
-	mi.material_override = SkylineKit.glass()
+	mi.material_override = SkylineKit.facade("office")
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	# sidewalks for the whole grid are one multimesh too
@@ -722,11 +722,12 @@ func _lod_blocks() -> void:
 	var swm := BoxMesh.new()
 	swm.size = Vector3(BLOCK, CURB, BLOCK)
 	var sidewalk := StandardMaterial3D.new()
-	sidewalk.albedo_color = Color(0.2, 0.2, 0.21)
-	sidewalk.albedo_texture = EnvKit.noise_tex(8, 0.05)
+	sidewalk.albedo_color = Color(0.55, 0.55, 0.56)
+	sidewalk.albedo_texture = load("res://textures/city_paving.jpg")
 	sidewalk.uv1_triplanar = true
-	sidewalk.uv1_scale = Vector3(0.2, 0.2, 0.2)
-	sidewalk.roughness = 0.7
+	sidewalk.uv1_scale = Vector3(0.22, 0.22, 0.22)
+	sidewalk.roughness = 0.35
+	sidewalk.metallic = 0.15
 	_mm(swm, sidewalk, slabs)
 
 
@@ -755,7 +756,7 @@ func _far_shore() -> void:
 		xf.append(Transform3D(Basis.IDENTITY.scaled(Vector3(w, h, w)), p))
 	var bm := BoxMesh.new()
 	bm.size = Vector3(1, 1, 1)
-	var mi := _mm(bm, SkylineKit.glass(), xf)
+	var mi := _mm(bm, SkylineKit.facade("glass"), xf)
 	mi.extra_cull_margin = 2000.0
 
 
@@ -960,7 +961,7 @@ func _fill_downtown(c: Vector3, b: Vector2i) -> void:
 	r.seed = b.x * 977 + b.y * 131 + seed_v
 	var h := _tower_h(b, r)
 	var lot := BLOCK - 10.0
-	add_building(Vector3(c.x, CURB, c.z), Vector3(lot, 6.0, lot))
+	EnvKit.box(build_parent, Vector3(lot, 6.0, lot), Vector3(c.x, CURB + 3.0, c.z), SkylineKit.facade("stone", (b.x + b.y) % 2))
 	var spots := []
 	match r.randi() % 3:
 		0:
@@ -975,7 +976,7 @@ func _fill_downtown(c: Vector3, b: Vector2i) -> void:
 		t.rotation.y = (PI * 0.5) * (r.randi() % 4) + (r.randf_range(-0.3, 0.3) if r.randf() < 0.3 else 0.0)
 		build_parent.add_child(t)
 	var txt: String = ["AL NOOR", "SKY MALL", "GOLD SOUK", "CAFE 24", "OASIS", "DATES + CO", "SAHRA BANK", "ZAFRAN"][r.randi() % 8]
-	add_sign(txt, Vector3(c.x, 4.6, c.z + lot * 0.5 + 0.3), 0.0, NEON[r.randi() % NEON.size()], 1.8)
+	add_sign(txt, Vector3(c.x, 7.0, c.z + lot * 0.5 + 0.3), 0.0, NEON[r.randi() % NEON.size()], 1.8)
 	_block_collider(build_parent, c, lot, lot)
 	if (b.x + b.y) % 2 == 0:
 		_parked(build_parent, c, 2)
@@ -986,14 +987,14 @@ func _fill_beach(c: Vector3, b: Vector2i) -> void:
 	var r := RandomNumberGenerator.new()
 	r.seed = b.x * 311 + seed_v
 	var lot := BLOCK - 10.0
-	add_building(Vector3(c.x, CURB, c.z), Vector3(lot, 5.0, lot))
+	EnvKit.box(build_parent, Vector3(lot, 6.0, lot), Vector3(c.x, CURB + 3.0, c.z), SkylineKit.facade("resi", b.x % 2))
 	for sx: float in [-1.0, 1.0]:
 		var h := r.randf_range(50.0, 110.0)
 		var t := SkylineKit.random_tower(r, 20.0, 16.0, h)
-		t.position = Vector3(c.x + sx * 13.0, CURB + 5.0, c.z + r.randf_range(-6.0, 6.0))
+		t.position = Vector3(c.x + sx * 13.0, CURB + 6.0, c.z + r.randf_range(-6.0, 6.0))
 		build_parent.add_child(t)
 	var txt: String = ["MARINA", "BEACH CLUB", "YACHT BAR", "SEAFOOD", "HOTEL", "LOUNGE"][r.randi() % 6]
-	add_sign(txt, Vector3(c.x, 4.0, c.z + lot * 0.5 + 0.3), 0.0, NEON[r.randi() % NEON.size()], 2.0)
+	add_sign(txt, Vector3(c.x, 7.0, c.z + lot * 0.5 + 0.3), 0.0, NEON[r.randi() % NEON.size()], 2.0)
 	_block_collider(build_parent, c, lot, lot)
 
 
@@ -1117,7 +1118,7 @@ func _fill_residential(n: Node3D, c: Vector3, b: Vector2i) -> void:
 		m.vertex_color_use_as_albedo = true
 		m.roughness = 0.85
 		return m)
-	_local_mm(n, unit, wm, walls, wall_cols)
+	_local_mm(n, unit, SkylineKit.facade("villa"), walls)
 	_local_mm(n, unit, wm, roofs, roof_cols)
 	var qm := BoxMesh.new()
 	qm.size = Vector3(1.6, 1.2, 0.06)

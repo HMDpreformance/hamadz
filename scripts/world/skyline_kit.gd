@@ -53,6 +53,95 @@ void fragment() {
 	return m
 
 
+const FACADES := {
+	# kind: [texture, tile size in metres, window grid in one tile, gloss]
+	"stone": ["city_stone", Vector2(19.0, 17.5), Vector2(6, 5), 0.15],
+	"office": ["city_office", Vector2(24.0, 21.0), Vector2(8, 6), 0.7],
+	"resi": ["city_resi", Vector2(21.0, 20.0), Vector2(6, 6), 0.3],
+	"glass": ["city_glass", Vector2(26.0, 28.0), Vector2(0, 0), 0.9],
+	"villa": ["city_villa", Vector2(7.0, 3.3), Vector2(0, 0), 0.05],
+}
+const SHOPS := [["city_shops_a", Vector2(11.0, 6.0)], ["city_shops_b", Vector2(15.2, 6.0)]]
+
+
+## Photo facade mapped in world space. shop >= 0 adds a street-level shopfront strip.
+static func facade(kind: String, shop := -1) -> ShaderMaterial:
+	var key := "facade_%s_%d" % [kind, shop]
+	if _cache.has(key):
+		return _cache[key]
+	if not _cache.has("facade_shader"):
+		var sh := Shader.new()
+		sh.code = """
+shader_type spatial;
+uniform sampler2D tex : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
+uniform sampler2D shop_tex : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
+uniform vec2 tile = vec2(20.0);
+uniform vec2 grid = vec2(0.0);
+uniform vec2 shop_tile = vec2(11.0, 6.0);
+uniform float shop_h = 0.0;
+uniform float gloss = 0.3;
+uniform float gain = 2.4;
+uniform float wash = 0.2;
+varying vec3 wp;
+varying vec3 wn;
+varying float base_y;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+void vertex() {
+	wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	wn = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	base_y = 0.14;
+}
+void fragment() {
+	vec2 tn = wn.xz / max(length(wn.xz), 0.001);
+	float u = dot(wp.xz, vec2(-tn.y, tn.x));
+	float y = wp.y - base_y;
+	float wall = step(abs(wn.y), 0.6);
+	vec3 c;
+	float lit_keep = 1.0;
+	float g = gloss;
+	if (y < shop_h) {
+		c = texture(shop_tex, vec2(u / shop_tile.x, 1.0 - y / shop_tile.y)).rgb;
+		g = 0.25;
+	} else {
+		vec2 uv = vec2(u / tile.x, (y - shop_h) / tile.y);
+		c = texture(tex, vec2(uv.x, 1.0 - uv.y)).rgb;
+		if (grid.x > 0.5) {
+			vec2 cell = floor(uv * grid);
+			lit_keep = step(0.3, hash(cell + floor(tn * 3.0)));
+		}
+	}
+	float lum = max(c.r, max(c.g, c.b));
+	float glow = smoothstep(0.32, 0.7, lum);
+	vec3 night = c * mix(0.5, 0.16, glow * (1.0 - lit_keep));
+	ALBEDO = mix(vec3(0.03, 0.03, 0.035), night, wall);
+	// lit rooms glow; the rest of the facade keeps a soft dusk/street-light wash so it never goes black
+	EMISSION = (c * glow * lit_keep * gain + c * wash * (1.0 - glow)) * wall;
+	float glassy = (1.0 - glow * lit_keep) * g;
+	METALLIC = glassy * 0.9 * wall;
+	ROUGHNESS = mix(0.75, 0.06, glassy * wall);
+	SPECULAR = 0.6;
+}
+"""
+		_cache["facade_shader"] = sh
+	var f: Array = FACADES[kind]
+	var m := ShaderMaterial.new()
+	m.shader = _cache["facade_shader"]
+	m.set_shader_parameter("tex", load("res://textures/%s.jpg" % f[0]))
+	m.set_shader_parameter("tile", f[1])
+	m.set_shader_parameter("grid", f[2])
+	m.set_shader_parameter("gloss", f[3])
+	if kind == "villa":
+		m.set_shader_parameter("gain", 0.3)
+		m.set_shader_parameter("wash", 0.06)
+	if shop >= 0:
+		var sp: Array = SHOPS[shop % SHOPS.size()]
+		m.set_shader_parameter("shop_tex", load("res://textures/%s.jpg" % sp[0]))
+		m.set_shader_parameter("shop_tile", sp[1])
+		m.set_shader_parameter("shop_h", 6.0)
+	_cache[key] = m
+	return m
+
+
 static func led(color: Color, energy := 4.0) -> StandardMaterial3D:
 	var k := "led_%s_%s" % [color.to_html(), energy]
 	if not _cache.has(k):
@@ -104,7 +193,7 @@ static func plan(kind: String, n := 0) -> PackedVector2Array:
 
 # ====================================================================== towers
 ## tiers: Array of {h, s (scale at top of tier), twist (radians over the tier)}
-static func tower(kind: String, w: float, d: float, tiers: Array, tint: Color, band: Color) -> Node3D:
+static func tower(kind: String, w: float, d: float, tiers: Array, tint: Color, band: Color, mat: Material = null) -> Node3D:
 	var root := Node3D.new()
 	var pl := plan(kind)
 	var st := SurfaceTool.new()
@@ -133,7 +222,7 @@ static func tower(kind: String, w: float, d: float, tiers: Array, tint: Color, b
 	st.generate_normals()
 	var mi := MeshInstance3D.new()
 	mi.mesh = st.commit()
-	mi.material_override = glass()
+	mi.material_override = mat if mat else glass()
 	root.add_child(mi)
 	var bm := MeshInstance3D.new()
 	bm.mesh = bands.commit()
@@ -211,7 +300,8 @@ static func random_tower(r: RandomNumberGenerator, w: float, d: float, h: float)
 			tiers = [{"h": h, "s": 0.85, "twist": r.randf_range(0.6, 1.2) * (1.0 if r.randf() < 0.5 else -1.0)}]
 		_:  # stepped setbacks
 			tiers = [{"h": h * 0.5, "s": 1.0}, {"h": h * 0.3, "s": 0.78, "from": 0.78}, {"h": h * 0.2, "s": 0.55, "from": 0.55}]
-	var t := tower(kind, w, d, tiers, tints[r.randi() % tints.size()], bands[r.randi() % bands.size()])
+	var skins := ["office", "glass", "glass", "resi", "stone", "office"]
+	var t := tower(kind, w, d, tiers, tints[r.randi() % tints.size()], bands[r.randi() % bands.size()], facade(skins[r.randi() % skins.size()]))
 	if h > 70.0 and r.randf() < 0.6:
 		spire(t, float(t.get_meta("height")), h * r.randf_range(0.12, 0.25), minf(w, d) * 0.06)
 	return t
@@ -226,7 +316,7 @@ static func supertall(h := 420.0) -> Node3D:
 		var ns := s * 0.84
 		tiers.append({"h": h * 0.78 / n, "s": s, "from": ns})
 		s = ns
-	var t := tower("tri", 74.0, 74.0, tiers, Color(0.62, 0.68, 0.76), Color(0.75, 0.88, 1.0))
+	var t := tower("tri", 74.0, 74.0, tiers, Color(0.62, 0.68, 0.76), Color(0.75, 0.88, 1.0), facade("glass"))
 	spire(t, float(t.get_meta("height")), h * 0.22, 4.0)
 	return t
 

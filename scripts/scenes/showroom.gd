@@ -4,7 +4,6 @@ extends Node3D
 ## re-projected in 3D so the car can reflect in it. Bold chrome HUD on top:
 ## car carousel with class letters, price, three stat bars, paint changer.
 
-const BACKDROP := "res://textures/showroom_backdrop.jpg"
 const CLASS_COLORS := {"D": Color(1.0, 0.78, 0.2), "C": Color(0.35, 0.9, 1.0), "B": Color(0.45, 1.0, 0.45), "A": Color(1.0, 0.45, 0.2), "S": Color(1.0, 0.25, 0.6)}
 const CATEGORY := {"tuner": "TUNERS", "rotary": "TUNERS", "muscle": "MUSCLE", "classic": "LOWRIDERS", "sedan": "LUXURY", "suv": "LUXURY", "euro": "EXOTICS", "exotic": "EXOTICS"}
 const BAR_COLORS := [Color(0.95, 0.08, 0.06), Color(1.0, 0.45, 0.05), Color(1.0, 0.85, 0.1)]
@@ -15,9 +14,7 @@ var car: CarVisual
 var car_mirror: CarVisual
 var cam: Camera3D
 var env: Environment
-var floor_mat: ShaderMaterial
-var bg: TextureRect
-var bg_tex: Texture2D
+var stage: PhotoStage
 
 var index := 0                   # position in CarDB.CAR_ORDER
 var paint := 0                   # paint shown on the car
@@ -48,13 +45,10 @@ var _toast: Label
 
 func _ready() -> void:
 	_from = Nav.args.get("from", "menu") if Nav.args is Dictionary else "menu"
-	bg_tex = load(BACKDROP)
 	_build_world()
 	_build_ui()
 	index = maxi(CarDB.CAR_ORDER.find(Game.current_car()), 0)
 	_show(index, false)
-	get_viewport().size_changed.connect(_fit_floor)
-	_fit_floor()
 	Audio.music_state("garage")
 	Audio.play_ambience("garage", -6.0)
 	Game.money_changed.connect(func(_m): _cash.text = CarDB.money(Game.money()))
@@ -71,130 +65,23 @@ func _exit_tree() -> void:
 
 # ====================================================================== world
 func _build_world() -> void:
-	# backdrop photo behind everything 3D
-	var bl := CanvasLayer.new()
-	bl.layer = -10
-	add_child(bl)
-	bg = TextureRect.new()
-	bg.texture = bg_tex
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bl.add_child(bg)
-
-	env = GFX.make_environment(Color(0.3, 0.32, 0.36), 0.5, Color.BLACK, 0.0)
-	env.background_mode = Environment.BG_CANVAS
-	env.background_canvas_max_layer = -1
-	env.sky = EnvKit.photo_sky()
-	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.55
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.0
-	env.tonemap_white = 5.0
-	env.glow_intensity = 0.35
-	env.adjustment_contrast = 1.05
-	env.adjustment_saturation = 1.08
-	var we := WorldEnvironment.new()
-	we.environment = env
-	add_child(we)
-
+	stage = PhotoStage.new()
+	add_child(stage)
+	stage.build()
+	env = stage.env
 	cam = Camera3D.new()
-	cam.fov = 34.0
-	cam.position = Vector3(0.0, 1.55, 10.2)
-	cam.rotation_degrees = Vector3(-6.5, 0, 0)
+	cam.fov = PhotoStage.CAM_FOV
+	cam.position = PhotoStage.CAM_POS
+	cam.rotation_degrees = Vector3(PhotoStage.CAM_PITCH, 0, 0)
 	add_child(cam)
 	cam.make_current()
-
-	# floor: shows the backdrop's own floor, slightly see-through so the
-	# mirrored car underneath reads as a wet-concrete reflection
-	var fl := MeshInstance3D.new()
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(60, 60)
-	fl.mesh = plane
-	var sh := Shader.new()
-	sh.code = """
-shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
-uniform sampler2D backdrop : source_color, filter_linear;
-uniform vec4 map = vec4(1.0, 1.0, 0.0, 0.0);
-uniform float reflect = 0.8;
-uniform vec4 car = vec4(0.0, 0.0, 1.0, 2.4);   // yaw, unused, half width, half length
-varying vec3 wp;
-void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
-void fragment() {
-	vec2 uv = SCREEN_UV * map.xy + map.zw;
-	vec3 col = texture(backdrop, uv).rgb;
-	float c = cos(car.x), s = sin(car.x);
-	vec2 lp = vec2(c * wp.x - s * wp.z, s * wp.x + c * wp.z);
-	vec2 q = abs(lp) / (car.zw + vec2(0.25, 0.35));
-	float e = length(max(q - vec2(0.55), 0.0)) / 0.45;
-	float shadow = 1.0 - smoothstep(0.0, 1.0, e);
-	vec2 q2 = abs(lp) / (car.zw + vec2(0.04, 0.0));
-	float core = 1.0 - smoothstep(0.75, 1.0, max(q2.x, q2.y));
-	col *= 1.0 - shadow * 0.55 - core * 0.3;
-	ALBEDO = col;
-	float fade = smoothstep(0.5, 6.0, length(wp.xz));
-	ALPHA = clamp(1.0 - reflect * (1.0 - fade * 0.8) * (1.0 - core * 0.6), 0.0, 1.0);
-}
-"""
-	floor_mat = ShaderMaterial.new()
-	floor_mat.shader = sh
-	floor_mat.set_shader_parameter("backdrop", bg_tex)
-	floor_mat.render_priority = -2
-	fl.material_override = floor_mat
-	fl.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(fl)
-
 	car = CarVisual.new()
 	add_child(car)
+	stage.tracked = car
 	if GFX.p.mirror:
-		var mroot := Node3D.new()
-		mroot.scale = Vector3(1, -1, 1)
-		add_child(mroot)
 		car_mirror = CarVisual.new()
 		car_mirror.is_reflection = true
-		mroot.add_child(car_mirror)
-
-	# lighting that matches the photo: warm overhead tubes, cyan neon behind
-	var key := SpotLight3D.new()
-	key.position = Vector3(1.2, 4.6, 3.2)
-	key.look_at_from_position(key.position, Vector3(0, 0.4, 0))
-	key.spot_range = 12.0
-	key.spot_angle = 42.0
-	key.light_energy = 5.0
-	key.light_color = Color(1.0, 0.93, 0.82)
-	key.shadow_enabled = GFX.p.shadows
-	add_child(key)
-	var top := OmniLight3D.new()
-	top.position = Vector3(-1.5, 4.2, -0.5)
-	top.light_color = Color(1.0, 0.86, 0.66)
-	top.light_energy = 2.2
-	top.omni_range = 9.0
-	add_child(top)
-	var rim := OmniLight3D.new()
-	rim.position = Vector3(0.6, 2.4, -4.5)
-	rim.light_color = Color(0.2, 0.85, 1.0)
-	rim.light_energy = 3.0
-	rim.omni_range = 9.0
-	add_child(rim)
-	var fill := OmniLight3D.new()
-	fill.position = Vector3(-4.5, 1.2, 4.0)
-	fill.light_color = Color(0.75, 0.82, 1.0)
-	fill.light_energy = 0.9
-	fill.omni_range = 10.0
-	add_child(fill)
-
-
-func _fit_floor() -> void:
-	## Maps screen UV -> backdrop UV exactly like STRETCH_KEEP_ASPECT_COVERED.
-	var vp := get_viewport().get_visible_rect().size
-	var isz := Vector2(bg_tex.get_width(), bg_tex.get_height())
-	var s := maxf(vp.x / isz.x, vp.y / isz.y)
-	var disp := isz * s
-	var off := (vp - disp) * 0.5
-	floor_mat.set_shader_parameter("map", Vector4(vp.x / disp.x, vp.y / disp.y, -off.x / disp.x, -off.y / disp.y))
+		stage.mirror_root.add_child(car_mirror)
 
 
 func _process(delta: float) -> void:
@@ -207,7 +94,6 @@ func _process(delta: float) -> void:
 	car.rotation.y = base + _yaw
 	if car_mirror:
 		car_mirror.rotation.y = car.rotation.y
-	floor_mat.set_shader_parameter("car", Vector4(car.rotation.y, 0.0, car.half_width(), car.length() * 0.5))
 	# slow breathing camera
 	cam.position.x = sin(_t * 0.23) * 0.18
 	cam.position.y = 1.55 + sin(_t * 0.31) * 0.04
@@ -286,8 +172,8 @@ func _show(i: int, animate := true) -> void:
 		var tw := create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 		tw.tween_property(car, "position:x", 0.0, 0.45)
 		if car_mirror:
-			car_mirror.get_parent().position.x = -0.6
-			create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT).tween_property(car_mirror.get_parent(), "position:x", 0.0, 0.45)
+			car_mirror.position.x = -0.6
+			create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT).tween_property(car_mirror, "position:x", 0.0, 0.45)
 	_confirm_t = 0.0
 	_refresh()
 
@@ -925,5 +811,5 @@ class HintButton extends Button:
 
 
 func dev_reflect(v: String) -> void:
-	floor_mat.set_shader_parameter("reflect", float(v))
+	stage.floor_mat.set_shader_parameter("reflect", float(v))
 	print("mirror: ", car_mirror, " visible ", car_mirror.is_visible_in_tree() if car_mirror else false)

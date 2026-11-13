@@ -3,7 +3,7 @@ extends Node3D
 ## Flow: pick a group -> slot tab -> option card (previews on the car) ->
 ## BUY / INSTALL commits it through Game (which saves automatically).
 
-var room: GarageRoom
+var stage: PhotoStage
 var cam: OrbitCamera
 var car: CarVisual
 var car_mirror: CarVisual
@@ -50,23 +50,29 @@ var _turn := 0.0
 
 
 func _ready() -> void:
-	env = GFX.make_environment(Color(0.3, 0.32, 0.4), 0.35, Color.BLACK, 0.0)
-	var we := WorldEnvironment.new()
-	we.environment = env
-	add_child(we)
-	room = GarageRoom.new()
-	add_child(room)
-	room.build_photo(env)
+	# same photographic workshop as the Car Lot; the car turns, not the camera
+	stage = PhotoStage.new()
+	add_child(stage)
+	stage.build()
+	env = stage.env
+	var turn := Node3D.new()
+	add_child(turn)
+	var mturn := Node3D.new()
+	stage.mirror_root.add_child(mturn)
 	cam = OrbitCamera.new()
+	cam.turntable = [turn, mturn]
+	cam.min_pitch = 2.0
+	cam.max_pitch = 24.0
 	add_child(cam)
 	cam.snap("showcase")
 	cam.focus("default", 1.6)
 	car = CarVisual.new()
-	add_child(car)
+	turn.add_child(car)
+	stage.tracked = car
 	if GFX.p.mirror:
 		car_mirror = CarVisual.new()
 		car_mirror.is_reflection = true
-		room.mirror_root.add_child(car_mirror)
+		mturn.add_child(car_mirror)
 	_build_ui()
 	_show_car(Game.current_car(), false)
 	_select_group("")

@@ -25,6 +25,11 @@ var max_pitch := 55.0
 var auto_rotate := 4.0          # deg/s after idle
 var idle_delay := 5.0
 var enabled := true
+## Turntable mode (photo stage): the camera stays on the side the backdrop
+## photo was taken from and these nodes rotate instead, so the background
+## never has to move.
+var turntable: Array = []
+var turn_base := 180.0
 
 var _yaw := 35.0
 var _pitch := 11.0
@@ -119,8 +124,16 @@ func _process(delta: float) -> void:
 
 func _apply() -> void:
 	var y := deg_to_rad(_yaw)
+	var t := _target
+	if not turntable.is_empty():
+		var r := deg_to_rad(_yaw - turn_base)
+		for n in turntable:
+			if is_instance_valid(n):
+				n.rotation.y = r
+		y = deg_to_rad(turn_base)
+		t = _target.rotated(Vector3.UP, r)     # focus points live on the turning car
 	var p := deg_to_rad(_pitch)
-	position = _target + Vector3(sin(y) * cos(p), sin(p), -cos(y) * cos(p)) * _dist
+	position = t + Vector3(sin(y) * cos(p), sin(p), -cos(y) * cos(p)) * _dist
 	if position.y < 0.12:
 		position.y = 0.12
-	look_at(_target, Vector3.UP)
+	look_at(t, Vector3.UP)

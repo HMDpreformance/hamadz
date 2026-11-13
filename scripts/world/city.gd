@@ -115,10 +115,11 @@ void fragment() {
 		col = outside * (0.6 + 0.8 * fine) * (0.8 + 0.4 * n);
 		puddle *= 1.0 - step(0.6, outside_rough);
 	}
-	ALBEDO = col * (1.0 - puddle * 0.5);
-	ROUGHNESS = (in_grid ? mix(0.24, 0.04, puddle) : mix(outside_rough, 0.06, puddle)) + fine * 0.12;
-	METALLIC = 0.25 * puddle;
-	SPECULAR = 0.6;
+	// rain-wet street: a thin film everywhere, standing water in the low spots
+	ALBEDO = col * (in_grid ? 0.75 : 1.0) * (1.0 - puddle * 0.45);
+	ROUGHNESS = (in_grid ? mix(0.14, 0.02, puddle) : mix(outside_rough, 0.06, puddle)) + fine * (in_grid ? 0.07 : 0.12);
+	METALLIC = in_grid ? mix(0.35, 0.6, puddle) : 0.25 * puddle;
+	SPECULAR = 0.7;
 }
 """
 	return sh
@@ -443,8 +444,8 @@ func _street_lights() -> void:
 	for i in count:
 		var l := OmniLight3D.new()
 		l.light_color = Color(1.0, 0.72, 0.42)
-		l.light_energy = 3.0
-		l.omni_range = 19.0
+		l.light_energy = 4.2
+		l.omni_range = 24.0
 		l.omni_attenuation = 1.1
 		l.shadow_enabled = false
 		add_child(l)

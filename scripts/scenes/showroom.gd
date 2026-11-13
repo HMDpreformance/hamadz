@@ -76,11 +76,13 @@ func _build_world() -> void:
 	add_child(cam)
 	cam.make_current()
 	car = CarVisual.new()
+	car.position.z = 2.0           # a touch closer so the roof clears the plate above
 	add_child(car)
 	stage.tracked = car
 	if GFX.p.mirror:
 		car_mirror = CarVisual.new()
 		car_mirror.is_reflection = true
+		car_mirror.position.z = 2.0
 		stage.mirror_root.add_child(car_mirror)
 
 

@@ -28,6 +28,8 @@ var _cards: HBoxContainer
 var _scroll: ScrollContainer
 var _strip: Control
 var _action: NeonButton
+var home: GarageHome
+var _work: Control
 var _sel_name: Label
 var _sel_price: Label
 var _toast: Label
@@ -95,6 +97,8 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	cam.handle_input(event)
+	if home.visible and home.handle_key(event):
+		return
 	if event.is_action_pressed("ui_cancel"):
 		_on_back()
 
@@ -280,12 +284,19 @@ func _build_ui() -> void:
 	ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(ui)
 	ui.add_child(UI.crt_overlay())
+	_work = UI.full(Control.new())
+	_work.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui.add_child(_work)
+	home = GarageHome.new()
+	ui.add_child(home)
+	home.activated.connect(_on_home)
+	home.back_pressed.connect(func(): Nav.goto("menu"))
 
 	# ---- top bar
 	var top := UI.rect(Color(0, 0, 0, 0.0))
 	top.anchor_right = 1.0
 	top.offset_bottom = 84
-	ui.add_child(top)
+	_work.add_child(top)
 	var top_grad := TextureRect.new()
 	top_grad.texture = UI.gradient_tex([Color(0, 0, 0, 0.85), Color(0, 0, 0, 0.0)], [0.0, 1.0])
 	top_grad.anchor_right = 1.0
@@ -293,24 +304,24 @@ func _build_ui() -> void:
 	top_grad.stretch_mode = TextureRect.STRETCH_SCALE
 	top_grad.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	top_grad.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ui.add_child(top_grad)
+	_work.add_child(top_grad)
 	var back := NeonButton.make("BACK", Vector2(150, 46), UI.AMBER, 22)
 	back.click_sound = "ui_back"
 	back.position = Vector2(22, 18)
 	back.pressed.connect(_on_back)
-	ui.add_child(back)
+	_work.add_child(back)
 	var title := UI.label("GARAGE", 44, Color.WHITE, true)
 	UI.chrome(title, Color(1, 1, 1), Color(1.0, 0.75, 0.1), Color(0.8, 0.25, 0.0), 54.0)
 	title.position = Vector2(196, 10)
-	ui.add_child(title)
+	_work.add_child(title)
 	var sub := UI.label("SYNDICATE TUNING  //  BAY 01", 16, UI.DIM)
 	sub.position = Vector2(200, 62)
-	ui.add_child(sub)
+	_work.add_child(sub)
 	# money
 	var mp := Control.new()
 	mp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	UI.place(mp, Vector2(1, 0), Vector2(-300, 16), Vector2(280, 54))
-	ui.add_child(mp)
+	_work.add_child(mp)
 	var mbg := UI.panel(Color(0.03, 0.04, 0.06, 0.85), Color(1.0, 0.69, 0.0, 0.7), 0.25)
 	UI.full(mbg)
 	mp.add_child(mbg)
@@ -335,20 +346,20 @@ func _build_ui() -> void:
 			b.pressed.connect(func(): Nav.goto("showroom", {"from": "garage"}, "CAR LOT"))
 		else:
 			b.pressed.connect(_select_group.bind(d[0]))
-		ui.add_child(b)
+		_work.add_child(b)
 		_group_buttons[d[0]] = b
 		UI.pop(b, 0.05 * _group_buttons.size())
 		y += 49.0
 	_hint = UI.label("DRAG TO ROTATE  •  PINCH TO ZOOM", 16, Color(1, 1, 1, 0.45))
 	UI.place(_hint, Vector2(0.5, 0), Vector2(-200, 92), Vector2(400, 22))
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ui.add_child(_hint)
+	_work.add_child(_hint)
 
 	# ---- right: car info + stats
 	var info := Control.new()
 	info.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	UI.place(info, Vector2(1, 0), Vector2(-330, 92), Vector2(310, 390))
-	ui.add_child(info)
+	_work.add_child(info)
 	var ibg := UI.panel(Color(0.03, 0.04, 0.065, 0.8), Color(1, 1, 1, 0.1))
 	UI.full(ibg)
 	info.add_child(ibg)
@@ -388,7 +399,7 @@ func _build_ui() -> void:
 	var act := Control.new()
 	act.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	UI.place(act, Vector2(1, 1), Vector2(-330, -226), Vector2(310, 120))
-	ui.add_child(act)
+	_work.add_child(act)
 	_sel_name = UI.label("", 20, Color.WHITE)
 	_sel_name.size = Vector2(310, 26)
 	_sel_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -419,7 +430,7 @@ func _build_ui() -> void:
 	_strip.offset_right = -350
 	_strip.offset_left = 22
 	_strip.offset_bottom = -14
-	ui.add_child(_strip)
+	_work.add_child(_strip)
 	_tabs = HBoxContainer.new()
 	_tabs.add_theme_constant_override("separation", 4)
 	_tabs.position = Vector2(0, 0)
@@ -439,10 +450,10 @@ func _build_ui() -> void:
 	# ---- hold to rev the engine with whatever is fitted or being previewed
 	var rk := TouchKey.make("garage_rev", "REV", UI.RED, Vector2(104, 104))
 	rk.position = Vector2(64, 436)
-	ui.add_child(rk)
+	_work.add_child(rk)
 	var rl := UI.label("HOLD TO REV", 14, Color(1, 1, 1, 0.5))
 	rl.position = Vector2(70, 542)
-	ui.add_child(rl)
+	_work.add_child(rl)
 
 	# ---- test drive
 	_drive = NeonButton.make("TEST DRIVE", Vector2(310, 76), UI.CYAN, 34)
@@ -450,7 +461,7 @@ func _build_ui() -> void:
 	_drive.filled = true
 	UI.place(_drive, Vector2(1, 1), Vector2(-330, -94), Vector2(310, 76))
 	_drive.pressed.connect(_on_drive)
-	ui.add_child(_drive)
+	_work.add_child(_drive)
 
 	_toast = UI.label("", 30, Color.WHITE, true)
 	UI.outline(_toast, 8)
@@ -516,6 +527,8 @@ func _clear(box: Node) -> void:
 
 
 func _on_money(amount: int) -> void:
+	if home:
+		home.set_info(CarDB.CARS[view_car].name if CarDB.CARS.has(view_car) else "", amount)
 	_money.text = CarDB.money(amount)
 	var tw := create_tween()
 	tw.tween_property(_money, "modulate", Color(2, 2, 2), 0.08)
@@ -570,6 +583,7 @@ func _select_group(id: String) -> void:
 		preview = Game.config(view_car).duplicate()
 		_apply_preview()
 	group_id = id
+	_set_home(id == "")
 	for k in _group_buttons:
 		_group_buttons[k].selected = (k == id)
 	_clear(_tabs)
@@ -769,10 +783,30 @@ func _on_drive() -> void:
 
 
 func _on_back() -> void:
-	if group_id != "":
+	if not home.visible:
 		_select_group("")
 		return
 	Nav.goto("menu")
+
+
+func _set_home(on: bool) -> void:
+	home.visible = on
+	_work.visible = not on
+	home.set_info(CarDB.CARS[view_car].name if CarDB.CARS.has(view_car) else "", Game.money())
+
+
+func _on_home(id: String) -> void:
+	match id:
+		"custom": _select_group("paint")
+		"wheels": _select_group("wheels")
+		"perf": _select_group("perf")
+		"cars": _select_group("cars")
+		"drive": _on_drive()
+		"lot": Nav.goto("showroom", {"from": "garage"}, "CAR LOT")
+
+
+func dev_home(id: String) -> void:
+	home.select(id)
 
 
 # ====================================================================== dev hooks

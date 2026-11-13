@@ -67,6 +67,8 @@ func setup(id: String, config: Dictionary) -> void:
 	_wheel_root = Node3D.new()
 	_wheel_root.name = "Wheels"
 	add_child(_wheel_root)
+	if model and not bool(_model_cfg.get("wheels", true)):
+		_wheel_root.visible = false
 	if not is_reflection:
 		_shadow = MeshInstance3D.new()
 		var q := PlaneMesh.new()
@@ -115,10 +117,17 @@ func set_lights(on: bool) -> void:
 	_lights_on = on
 	mats["head"].emission_energy_multiplier = _head_e if on else 0.15
 	mats["tail"].emission_energy_multiplier = _tail_e if on else 0.2
+	_model_tail(_tail_e if on else 0.2)
+
+
+func _model_tail(e: float) -> void:
+	for sm in _paint_mats:
+		sm.set_shader_parameter("tail_e", e)
 
 
 func set_brake(on: bool) -> void:
 	mats["tail"].emission_energy_multiplier = _tail_e * 3.2 if on else (_tail_e if _lights_on else 0.2)
+	_model_tail(_tail_e * 3.2 if on else (_tail_e if _lights_on else 0.2))
 
 
 ## Colour of the light the headlamps throw (used by the beam on the road).
@@ -1216,6 +1225,7 @@ uniform float hue_tol = 0.09;
 uniform float paint_metal = 0.5;
 uniform float paint_rough = 0.17;
 uniform float coat = 1.0;
+uniform float tail_e = 1.4;
 vec3 rgb2hsv(vec3 c) {
 	vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
 	vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
@@ -1237,6 +1247,9 @@ void fragment() {
 	CLEARCOAT = coat * m;
 	CLEARCOAT_ROUGHNESS = 0.02;
 	SPECULAR = 0.5;
+	float rh = min(h.x, 1.0 - h.x);
+	float red = (1.0 - smoothstep(0.03, 0.07, rh)) * smoothstep(0.45, 0.65, h.y) * smoothstep(0.25, 0.45, h.z) * (1.0 - m);
+	EMISSION = c * red * tail_e;
 }
 """
 

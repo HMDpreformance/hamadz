@@ -3,7 +3,7 @@ extends Camera3D
 ## Smooth orbit camera with touch-drag rotate, pinch zoom and named focus presets.
 
 const PRESETS := {
-	"default": {"yaw": 35.0, "pitch": 11.0, "dist": 6.6, "target": Vector3(0, 0.62, 0)},
+	"default": {"yaw": 35.0, "pitch": 11.0, "dist": 6.6, "target": Vector3(0, 0.95, 0)},
 	"side": {"yaw": 88.0, "pitch": 7.0, "dist": 6.4, "target": Vector3(0, 0.6, 0)},
 	"front": {"yaw": 22.0, "pitch": 9.0, "dist": 5.4, "target": Vector3(0, 0.5, -0.9)},
 	"rear": {"yaw": 157.0, "pitch": 15.0, "dist": 5.8, "target": Vector3(0, 0.7, 0.9)},
@@ -11,7 +11,7 @@ const PRESETS := {
 	"wheel": {"yaw": 62.0, "pitch": 4.0, "dist": 3.1, "target": Vector3(0.7, 0.36, -1.1)},
 	"low": {"yaw": 72.0, "pitch": 2.0, "dist": 5.2, "target": Vector3(0, 0.3, 0)},
 	"badge": {"yaw": 70.0, "pitch": 8.0, "dist": 2.9, "target": Vector3(0.7, 0.6, -0.6)},
-	"showcase": {"yaw": -40.0, "pitch": 9.0, "dist": 7.2, "target": Vector3(0, 0.6, 0)},
+	"showcase": {"yaw": -40.0, "pitch": 9.0, "dist": 7.2, "target": Vector3(0, 0.95, 0)},
 }
 
 var yaw := 35.0

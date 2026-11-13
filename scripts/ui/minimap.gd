@@ -11,6 +11,7 @@ var scale_px := 0.42          # pixels per metre
 var markers: Array = []       # [{pos: Vector3, color: Color, kind: String}]
 var target = null             # Vector3 or null: current checkpoint / destination
 var route: PackedVector3Array = []
+var round_frame := false      # drawn inside a circular mask with its own ring
 var _t := 0.0
 
 
@@ -29,7 +30,7 @@ func _draw() -> void:
 		return
 	var c := size * 0.5
 	var r := size.x * 0.5
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.02, 0.03, 0.05, 0.78))
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.02, 0.03, 0.05, 0.78) if not round_frame else Color(0.04, 0.045, 0.05, 0.92))
 	var pp := player.global_position
 	var yaw := player.rotation.y
 	var cs := cos(yaw)
@@ -46,7 +47,7 @@ func _draw() -> void:
 			to_map.call(Vector3(pp.x + reach * 2, 0, world.water_z + reach * 3)), to_map.call(Vector3(pp.x - reach * 2, 0, world.water_z + reach * 3))])
 		draw_colored_polygon(pts, Color(0.03, 0.1, 0.2, 0.9))
 	# streets
-	var road_col := Color(0.5, 0.52, 0.58, 0.85)
+	var road_col := Color(0.5, 0.52, 0.58, 0.85) if not round_frame else Color(0.86, 0.87, 0.9, 0.9)
 	var w := maxf(City.ROAD * scale_px * 0.55, 2.0)
 	for i in OpenWorld.NX + 1:
 		var x := world.road_x(i)
@@ -91,7 +92,8 @@ func _draw() -> void:
 	draw_colored_polygon(tri, Color(1.0, 0.75, 0.1))
 	draw_polyline(PackedVector2Array([tri[0], tri[1], tri[2], tri[3], tri[0]]), Color(0, 0, 0, 0.8), 1.5)
 	# frame + north tick
-	draw_rect(Rect2(Vector2.ZERO, size), Color(1.0, 0.69, 0.0, 0.7), false, 2.0)
+	if not round_frame:
+		draw_rect(Rect2(Vector2.ZERO, size), Color(1.0, 0.69, 0.0, 0.7), false, 2.0)
 	var north := c + Vector2(-sn, -cs).rotated(0.0) * (r - 9.0)
 	north = c + Vector2(0, -1).rotated(-yaw) * (r - 9.0)
 	draw_string(UI.title_font(), north - Vector2(5, -5), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 1, 1, 0.9))
@@ -102,7 +104,11 @@ func _pin(m: Vector2, col: Color, kind: String) -> void:
 	var lim := size.x * 0.5 - 8.0
 	var d := m - c
 	var out := absf(d.x) > lim or absf(d.y) > lim
-	if out:
+	if round_frame:
+		out = d.length() > lim
+		if out:
+			m = c + d.normalized() * lim
+	elif out:
 		var k := lim / maxf(absf(d.x), absf(d.y))
 		m = c + d * k
 	var pulse := 1.0 + 0.2 * sin(_t * 5.0)

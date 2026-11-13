@@ -1,4 +1,6 @@
-# After Hours: Street Syndicate
+# HMDnight Club
+
+(Formerly "After Hours: Street Syndicate". The package id is unchanged so new builds install over old ones.)
 
 A vertical-slice street racing demo for Android in the spirit of early-2000s
 PS2 tuner games: cinematic intro, animated main menu, a fully interactive
@@ -21,6 +23,15 @@ GDScript, and all music and sound effects are synthesized by
 | Test drive | Night city with traffic, traffic lights, neon, wet roads. Arcade handling, handbrake drifts, nitro, chase and hood cameras, speedometer and tach, tyre smoke, a 12-checkpoint timed run that pays cash |
 | Options | 3 graphics presets, music and SFX volume, button or tilt steering, FPS counter, save reset |
 | Saving | Cars, parts, cash, best time and settings are saved automatically to `user://save.json` |
+
+## 0.9.0: photo-real look
+
+- **Car Lot** (main menu > CAR LOT, or GARAGE > VEHICLES): buy and pick cars in a photographic workshop. Car carousel with class letters (D/C/B/A/S from the performance rating), price, acceleration / top speed / handling bars, change colour (new cars: pick the factory colour for free; owned cars: cycle the colours you own), cash, chrome frame.
+- **Garage** is now a photographic 360 workshop (generated panorama) with a reflective concrete floor instead of the modelled room.
+- **Cars**: deeper clearcoat paint, curved body sides and crowned panels, reflections from the workshop panorama.
+- **Race HUD**: big race timer and position, round chrome minimap, tall side arcs (left = race progress, right = speed), yellow speedometer with tach and gear badge, yellow checkpoint chevron.
+- **Streets**: photo asphalt texture, wetter roads, sparks when you scrape walls or cars, stronger speed blur.
+- Generated images (original, no brands): `textures/` (see `docs/TEXTURES.md`).
 
 ## Install the APK
 

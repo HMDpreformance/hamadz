@@ -8,6 +8,8 @@ var _flames: Array[GPUParticles3D] = []
 var _bf := 0.0
 var _beam: SpotLight3D
 var _flare: MeshInstance3D
+var _sparks: GPUParticles3D
+var _spark_t := 0.0
 
 
 func attach(c: PlayerCar) -> void:
@@ -42,6 +44,9 @@ func attach(c: PlayerCar) -> void:
 	_flare.material_override = EnvKit.glow_mat(Color(0.8, 0.88, 1.0), 0.2)
 	_flare.position = Vector3(0, 0.03, -v.length() * 0.5 - 5.5)
 	add_child(_flare)
+	_sparks = _make_sparks(int(90 * float(GFX.p.particles)))
+	add_child(_sparks)
+	c.scraped.connect(sparks)
 
 
 func _make_smoke(amount: int) -> GPUParticles3D:
@@ -136,8 +141,60 @@ func _process(_dt: float) -> void:
 	for p in _smoke:
 		p.emitting = smoking
 	_bf = maxf(_bf - _dt, 0.0)
+	if _spark_t > 0.0:
+		_spark_t -= _dt
+		if _spark_t <= 0.0:
+			_sparks.emitting = false
 	for f in _flames:
 		f.emitting = car.using_nitro or _bf > 0.0
+
+
+func _make_sparks(amount: int) -> GPUParticles3D:
+	var p := GPUParticles3D.new()
+	p.amount = maxi(amount, 24)
+	p.lifetime = 0.55
+	p.emitting = false
+	p.local_coords = false
+	p.top_level = true
+	var pm := ParticleProcessMaterial.new()
+	pm.direction = Vector3(0, 0.6, 1)
+	pm.spread = 55.0
+	pm.initial_velocity_min = 4.0
+	pm.initial_velocity_max = 11.0
+	pm.gravity = Vector3(0, -14.0, 0)
+	pm.collision_mode = ParticleProcessMaterial.COLLISION_DISABLED
+	var g := Gradient.new()
+	g.colors = PackedColorArray([Color(4.0, 3.2, 1.6, 1.0), Color(3.0, 1.2, 0.2, 1.0), Color(1.0, 0.2, 0.0, 0.0)])
+	g.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+	var gt := GradientTexture1D.new()
+	gt.gradient = g
+	pm.color_ramp = gt
+	p.process_material = pm
+	var q := QuadMesh.new()
+	q.size = Vector2(0.035, 0.22)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.vertex_color_use_as_albedo = true
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.billboard_keep_scale = true
+	q.material = m
+	p.draw_pass_1 = q
+	pm.particle_flag_align_y = true
+	return p
+
+
+## Sparks where the car scrapes a wall or another car.
+func sparks(at: Vector3, force: float) -> void:
+	if _sparks == null or force < 0.8:
+		return
+	_sparks.global_position = at + Vector3(0, 0.25, 0)
+	var back := -car.forward() if car.speed >= 0.0 else car.forward()
+	_sparks.global_basis = Basis.looking_at(-back, Vector3.UP)
+	_sparks.amount_ratio = clampf(force / 6.0, 0.3, 1.0)
+	_sparks.emitting = true
+	_spark_t = 0.18
 
 
 ## Short flame burst from the tailpipes (backfire on a hard shift).

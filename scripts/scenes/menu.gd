@@ -5,6 +5,7 @@ extends Node3D
 const ITEMS := [
 	["HIT THE STREETS", "streets"],
 	["CAREER MODE", "career"],
+	["CAR LOT", "lot"],
 	["GARAGE", "garage"],
 	["OPTIONS", "options"],
 	["CREDITS", "credits"],
@@ -14,7 +15,7 @@ const SOON := {
 	"career": ["CAREER MODE", "Rise through the Syndicate. Take on crew leaders across four districts, win their pink slips and unlock sponsored parts.", ["12 story races across 4 districts", "Rival crews and boss battles", "Pink-slip races and sponsor unlocks"]],
 	"arcade": ["ARCADE MODE", "Jump straight into circuit, sprint and drift events against seven rivals, with any car you own.", ["Circuit, Sprint and Drift events", "7 AI rivals with rubber-band tuning", "Split-screen and ghost replays"]],
 }
-const CREDITS := """AFTER HOURS: STREET SYNDICATE
+const CREDITS := """HMDNIGHT CLUB
 Vertical Slice Demo
 
 GAME DESIGN  •  PROGRAMMING  •  VEHICLE MODELLING
@@ -174,12 +175,12 @@ func _build_ui() -> void:
 	_menu_root = UI.full(Control.new())
 	_menu_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui.add_child(_menu_root)
-	_logo = UI.label("AFTER HOURS", 68, Color.WHITE, true)
+	_logo = UI.label("HMDNIGHT", 68, Color.WHITE, true)
 	UI.chrome(_logo, Color(1, 1, 1), Color(1.0, 0.78, 0.12), Color(0.85, 0.22, 0.0), 82.0)
 	UI.outline(_logo, 10, Color(0, 0, 0, 0.9))
 	_logo.position = Vector2(44, 30)
 	_menu_root.add_child(_logo)
-	var sub := UI.label("STREET  SYNDICATE", 26, UI.CYAN, true)
+	var sub := UI.label("C L U B", 26, UI.CYAN, true)
 	UI.outline(sub, 6)
 	sub.position = Vector2(52, 108)
 	_menu_root.add_child(sub)
@@ -216,7 +217,7 @@ func _build_ui() -> void:
 	var l3 := UI.label("CASH  " + CarDB.money(Game.money()), 20, UI.AMBER)
 	l3.position = Vector2(30, 62)
 	info.add_child(l3)
-	var ver := UI.label("BUILD 0.6  •  VERTICAL SLICE", 14, Color(1, 1, 1, 0.4))
+	var ver := UI.label("BUILD 0.13  •  VERTICAL SLICE", 14, Color(1, 1, 1, 0.4))
 	UI.place(ver, Vector2(0, 1), Vector2(48, -30), Vector2(400, 20))
 	_menu_root.add_child(ver)
 
@@ -231,6 +232,8 @@ func _on_item(id: String) -> void:
 	match id:
 		"garage":
 			Nav.goto("garage", {}, "ENTERING GARAGE")
+		"lot":
+			Nav.goto("showroom", {"from": "menu"}, "CAR LOT")
 		"streets":
 			Nav.goto("drive", {}, "HITTING THE STREETS")
 		"career", "arcade":

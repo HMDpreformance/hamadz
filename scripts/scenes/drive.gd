@@ -18,12 +18,18 @@ var _events := {}              # id -> {ev, pos, yaw, node}
 var _near_event := ""
 var _card: Control
 var _pos_label: Label
+var _pos_of: Label
+var _pos_head: Label
+var _map_holder: Control
+var _lead_pos := 0              # race position at the last lead call
+var _lead_t := -9.0             # race time of the last lead call
 var _radio_toast: Label
 var _radio_btn: NeonButton
 var _toast_tw: Tween
 var _fade: ColorRect
 var _bars: Array = []
 var _cine: Camera3D
+var _rain: Rain
 var _cine_t := 0.0
 var _cine_center := Vector3.ZERO
 var _race_holder: Node3D
@@ -53,17 +59,24 @@ var _district := ""
 
 
 func _ready() -> void:
-	env = GFX.make_environment(Color(0.3, 0.34, 0.5), 0.55, Color(0.07, 0.05, 0.11), 0.0065, EnvKit.city_sky())
+	env = GFX.make_environment(Color(0.4, 0.38, 0.62), 0.66, Color(0.16, 0.08, 0.14), 0.004, EnvKit.desert_sky())
+	env.adjustment_saturation = 1.32
+	env.adjustment_contrast = 1.12
+	env.glow_intensity = 0.8
+	env.glow_hdr_threshold = 0.95
 	env.background_mode = Environment.BG_SKY
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 	var moon := DirectionalLight3D.new()
-	moon.rotation_degrees = Vector3(-48, 35, 0)
-	moon.light_color = Color(0.5, 0.6, 1.0)
-	moon.light_energy = 0.28
+	moon.rotation_degrees = Vector3(-38, 35, 0)
+	moon.light_color = Color(0.62, 0.6, 1.0)
+	moon.light_energy = 0.75
 	moon.shadow_enabled = GFX.p.shadows
-	moon.directional_shadow_max_distance = 60.0
+	moon.shadow_opacity = 0.85
+	moon.shadow_blur = 1.5
+	moon.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	moon.directional_shadow_max_distance = 90.0
 	add_child(moon)
 
 	city = OpenWorld.new()
@@ -92,14 +105,16 @@ func _ready() -> void:
 	cam = ChaseCamera.new()
 	cam.target = car
 	cam.fov = 62.0
-	cam.far = 600.0
+	cam.far = 1600.0
 	add_child(cam)
 	cam.make_current()
 
 	_race_holder = Node3D.new()
 	add_child(_race_holder)
+	_rain = Rain.new()
+	add_child(_rain)
 	_cine = Camera3D.new()
-	_cine.far = 600.0
+	_cine.far = 1600.0
 	_cine.fov = 50.0
 	add_child(_cine)
 	cam.doppler_tracking = Camera3D.DOPPLER_TRACKING_PHYSICS_STEP
@@ -110,6 +125,7 @@ func _ready() -> void:
 	_set_state("roam")
 	Audio.play_ambience("city", -10.0)
 	Audio.music_state("roam", 1.5)
+	get_tree().create_timer(5.0).timeout.connect(func(): Audio.dj_break(true))
 	GFX.changed.connect(func(): GFX.apply_environment(env))
 
 
@@ -302,7 +318,9 @@ func _start_event(id: String) -> void:
 	var tw2 := create_tween()
 	tw2.tween_property(_fade, "color:a", 0.0, 0.4)
 	tw2.parallel().tween_property(_title_card, "modulate:a", 1.0, 0.4)
-	tw2.tween_interval(2.3)
+	# the starter briefs the event; the card stays up until the line is over
+	Audio.voice("brief_" + str(ev.type), 1.0)
+	tw2.tween_interval(maxf(2.3, Audio.voice_remaining() + 0.1))
 	tw2.tween_property(_title_card, "modulate:a", 0.0, 0.3)
 	await tw2.finished
 	if race == null:
@@ -339,6 +357,7 @@ func _on_countdown(n: int) -> void:
 
 func _on_go() -> void:
 	_set_state("race")
+	_lead_pos = 0
 	Audio.sfx("beep_hi", -4.0 if Audio.voice("go", 3.0) else 0.0)
 	Audio.music_state("race", 0.3)
 	Audio.music_filter(20000.0)
@@ -356,14 +375,20 @@ func _on_checkpoint(index: int, total: int) -> void:
 func _on_lap(lap: int, laps: int) -> void:
 	Audio.sfx("checkpoint", 0.0, 1.25)
 	_show_banner("FINAL LAP" if lap == laps - 1 else "LAP %d" % (lap + 1), 1.0)
+	if lap == laps - 1:
+		Audio.voice("final_lap", 2.0, 2)
 	_place_marker(race.next_checkpoint(), "1", UI.CYAN)
 
 
 func _on_race_finished(res: Dictionary) -> void:
 	_set_state("done")
 	Audio.sting(res.place == 1 or (res.medal != "" and res.place <= 3))
-	Audio.voice("win" if res.place == 1 else ("podium" if res.place <= 3 else "lose"), 2.0)
+	# "podium" only when there was somebody left to beat (a duel has a winner and a loser)
+	var on_podium: bool = res.place <= 3 and (res.medal != "" or res.place < race.field_size())
+	Audio.voice("win" if res.place == 1 else ("podium" if on_podium else "lose"), 2.0, 3)
 	_pos_label.text = ""
+	_pos_of.text = ""
+	_pos_head.text = ""
 	(_info.get_parent() as Control).visible = false
 	Audio.sfx("finish")
 	car.input_enabled = false
@@ -488,6 +513,7 @@ func _spawn_traffic() -> void:
 # ====================================================================== state
 func _set_state(st: String) -> void:
 	state = st
+	Audio.dj_ok = st == "roam"
 	if st != "done":
 		(_info.get_parent() as Control).visible = true
 	match st:
@@ -495,6 +521,8 @@ func _set_state(st: String) -> void:
 			_info.text = "FREE ROAM  •  " + city.district_name(car.global_position)
 			_timer.text = ""
 			_pos_label.text = ""
+			_pos_of.text = ""
+			_pos_head.text = ""
 			_best.text = "REP %d   •   %s" % [Game.rep(), CarDB.money(Game.money())]
 		"intro", "countdown":
 			_card.visible = false
@@ -524,9 +552,24 @@ func _process(_dt: float) -> void:
 		_timer.text = _fmt(race.time)
 		if race.ev.type == "trial":
 			_pos_label.text = ""
+			_pos_of.text = ""
+			_pos_head.text = ""
 			_best.text = "GOLD %s   SILVER %s   BRONZE %s" % [_fmt(race.trial_times[0]), _fmt(race.trial_times[1]), _fmt(race.trial_times[2])]
 		else:
-			_pos_label.text = "%s / %d" % [_place_name(race.position()), race.field_size()]
+			var pos := race.position()
+			_pos_label.text = str(pos)
+			_pos_of.text = "/%d" % race.field_size()
+			_pos_head.text = "POS"
+			# the starter calls it when the lead changes hands (not in the opening scramble)
+			if race.time > 6.0 and race.time - _lead_t > 9.0:
+				if _lead_pos > 1 and pos == 1 and Audio.voice("lead_taken", 1.0, 1):
+					_lead_t = race.time
+				elif _lead_pos == 1 and pos > 1 and Audio.voice("lead_lost", 1.0, 1):
+					_lead_t = race.time
+				_lead_pos = pos
+			elif race.time <= 6.0:
+				_lead_pos = pos
+				_lead_t = -9.0
 	# cinematic camera: slow orbit around the grid / the finished car
 	if _cine.current:
 		_cine_t += _dt
@@ -603,7 +646,11 @@ func _build_hud() -> void:
 	_hud = UI.full(Control.new())
 	_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(_hud)
-	_hud.add_child(UI.crt_overlay())
+	var film := UI.crt_overlay()            # soft vignette only: no scanlines or grain while driving
+	(film.material as ShaderMaterial).set_shader_parameter("scan", 0.0)
+	(film.material as ShaderMaterial).set_shader_parameter("grain", 0.008)
+	(film.material as ShaderMaterial).set_shader_parameter("vignette", 0.35)
+	_hud.add_child(film)
 
 	# --- top centre info
 	var top := Control.new()
@@ -618,15 +665,15 @@ func _build_hud() -> void:
 	_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_info.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	top.add_child(_info)
-	_timer = UI.label("", 44, Color.WHITE, true)
-	UI.outline(_timer, 8)
-	_timer.position = Vector2(0, 34)
-	_timer.size = Vector2(520, 52)
-	_timer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	top.add_child(_timer)
+	_timer = UI.label("", 58, Color.WHITE, true, false)
+	UI.chrome(_timer, Color(1.0, 0.97, 0.6), Color(1.0, 0.85, 0.1), Color(0.9, 0.55, 0.0), 66.0)
+	UI.outline(_timer, 10)
+	UI.place(_timer, Vector2(1, 0), Vector2(-420, 6), Vector2(400, 66))
+	_timer.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_hud.add_child(_timer)
 	_best = UI.label("", 16, UI.DIM)
 	UI.outline(_best, 5)
-	_best.position = Vector2(0, 84)
+	_best.position = Vector2(0, 38)
 	_best.size = Vector2(520, 22)
 	_best.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	top.add_child(_best)
@@ -660,7 +707,7 @@ func _build_hud() -> void:
 	# "now playing" toast under the position readout
 	_radio_toast = UI.label("", 17, Color.WHITE)
 	UI.outline(_radio_toast, 6)
-	_radio_toast.position = Vector2(24, 152)
+	_radio_toast.position = Vector2(24, 92)
 	_radio_toast.size = Vector2(520, 48)
 	_radio_toast.modulate.a = 0.0
 	_hud.add_child(_radio_toast)
@@ -669,15 +716,33 @@ func _build_hud() -> void:
 	# --- top right: checkpoint arrow
 	_arrow = _Arrow.new()
 	_arrow.scene = self
-	UI.place(_arrow, Vector2(1, 0), Vector2(-150, 14), Vector2(130, 130))
+	UI.place(_arrow, Vector2(0.5, 0), Vector2(-65, 58), Vector2(130, 130))
 	_hud.add_child(_arrow)
 
 	# --- minimap under the checkpoint arrow
+	_map_holder = Control.new()
+	_map_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	UI.place(_map_holder, Vector2(0, 0), Vector2(22, 180), Vector2(196, 196))
+	_hud.add_child(_map_holder)
+	var mask := TextureRect.new()
+	mask.texture = _circle_tex()
+	mask.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	mask.stretch_mode = TextureRect.STRETCH_SCALE
+	mask.clip_children = CanvasItem.CLIP_CHILDREN_ONLY
+	mask.position = Vector2(8, 8)
+	mask.size = Vector2(180, 180)
+	mask.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_map_holder.add_child(mask)
 	minimap = MiniMap.new()
 	minimap.world = city
 	minimap.player = car
-	UI.place(minimap, Vector2(1, 0), Vector2(-196, 168), Vector2(176, 176))
-	_hud.add_child(minimap)
+	minimap.round_frame = true
+	minimap.position = Vector2.ZERO
+	minimap.size = Vector2(180, 180)
+	mask.add_child(minimap)
+	var ring := _ChromeRing.new()
+	ring.size = Vector2(196, 196)
+	_map_holder.add_child(ring)
 
 	# --- driving controls
 	var left := TouchKey.make("steer_left", "<", UI.TEXT, Vector2(124, 124))
@@ -703,7 +768,8 @@ func _build_hud() -> void:
 	# --- gauge
 	_gauge = _Gauge.new()
 	_gauge.car = car
-	UI.place(_gauge, Vector2(0, 1), Vector2(304, -228), Vector2(240, 200))
+	UI.place(_gauge, Vector2(0, 1), Vector2(300, -214), Vector2(360, 240))
+	_gauge.scale = Vector2(0.86, 0.86)
 	_hud.add_child(_gauge)
 
 	_banner = UI.label("", 84, Color.WHITE, true)
@@ -715,12 +781,21 @@ func _build_hud() -> void:
 	_hud.add_child(_banner)
 
 	# --- race position (top left, under the pause button)
-	_pos_label = UI.label("", 46, Color.WHITE, true)
-	UI.chrome(_pos_label, Color(1, 1, 1), Color(1.0, 0.8, 0.15), Color(0.85, 0.25, 0.0), 54.0)
-	UI.outline(_pos_label, 9)
-	_pos_label.position = Vector2(22, 90)
-	_pos_label.size = Vector2(260, 56)
+	_pos_head = UI.label("", 32, Color.WHITE, true, false)
+	UI.outline(_pos_head, 7)
+	UI.place(_pos_head, Vector2(1, 0), Vector2(-230, 70), Vector2(120, 36))
+	_pos_head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hud.add_child(_pos_head)
+	_pos_label = UI.label("", 96, Color.WHITE, true)
+	UI.chrome(_pos_label, Color(1.0, 0.97, 0.6), Color(1.0, 0.85, 0.1), Color(0.9, 0.55, 0.0), 104.0)
+	UI.outline(_pos_label, 12)
+	UI.place(_pos_label, Vector2(1, 0), Vector2(-300, 92), Vector2(200, 110))
+	_pos_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_hud.add_child(_pos_label)
+	_pos_of = UI.label("", 40, Color.WHITE, true)
+	UI.outline(_pos_of, 8)
+	UI.place(_pos_of, Vector2(1, 0), Vector2(-100, 100), Vector2(90, 50))
+	_hud.add_child(_pos_of)
 
 	# --- event card (shown when parked on an event marker)
 	_card = Control.new()
@@ -779,7 +854,12 @@ func _build_hud() -> void:
 	_fade = UI.full(UI.rect(Color(0, 0, 0, 0)))
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(_fade)
-	_drive_ui = [left, right, gas, brk, nos, hb, _gauge, minimap, _arrow, pk, ck]
+	var arcs := _SideArcs.new()
+	arcs.scene = self
+	UI.full(arcs)
+	_hud.add_child(arcs)
+	_hud.move_child(arcs, 1)
+	_drive_ui = [left, right, gas, brk, nos, hb, _gauge, _map_holder, _arrow, pk, ck, arcs]
 
 	_build_pause(layer)
 	_build_result(layer)
@@ -930,58 +1010,167 @@ func _leave(dest: String) -> void:
 
 # ====================================================================== HUD widgets
 class _Gauge extends Control:
+	## Dash cluster: big yellow speedometer with chrome bezel, a black tach
+	## overlapping its shoulder, gear badge and a nitro arc.
 	var car: PlayerCar
-	var _nitro_flash := 0.0
+	var _spd := 0.0
 
-	func _process(_d: float) -> void:
+	func _process(d: float) -> void:
+		if car:
+			_spd = lerpf(_spd, absf(car.speed_mph()), 1.0 - exp(-d * 10.0))
 		queue_redraw()
+
+	func _bezel(c: Vector2, r: float, face: Color) -> void:
+		draw_circle(c, r + 9.0, Color(0, 0, 0, 0.55))
+		draw_circle(c, r + 7.0, Color(0.32, 0.33, 0.36))
+		draw_arc(c, r + 5.5, PI * 1.05, PI * 1.95, 24, Color(1, 1, 1, 0.85), 3.0, true)
+		draw_arc(c, r + 5.5, PI * 0.1, PI * 0.9, 24, Color(0.12, 0.12, 0.14), 3.0, true)
+		draw_circle(c, r + 2.0, Color(0.72, 0.74, 0.78))
+		draw_circle(c, r, face)
+		draw_circle(c + Vector2(0, -r * 0.35), r * 0.62, Color(1, 1, 1, 0.06))
+
+	func _needle(c: Vector2, a: float, len: float, col: Color, w := 4.0) -> void:
+		var d := Vector2(cos(a), sin(a))
+		var n := Vector2(-d.y, d.x)
+		draw_colored_polygon(PackedVector2Array([c - d * len * 0.16 + n * w, c + d * len, c - d * len * 0.16 - n * w]), col)
+		draw_circle(c, w * 2.2, Color(0.08, 0.08, 0.09))
+		draw_arc(c, w * 2.2, 0, TAU, 16, Color(0.75, 0.76, 0.8), 2.0, true)
 
 	func _draw() -> void:
 		if car == null:
 			return
-		var c := Vector2(size.x * 0.5, size.y * 0.58)
-		var r := 96.0
+		var tf := UI.title_font()
+		var tfu := UI.title_font(false)
 		var a0 := PI * 0.75
 		var a1 := PI * 2.25
-		draw_circle(c, r + 6, Color(0.02, 0.025, 0.04, 0.72))
-		draw_arc(c, r + 6, 0, TAU, 64, Color(1, 1, 1, 0.14), 2.0, true)
-		# rpm ticks
-		var ticks := 9
-		var f := UI.body_font(true)
-		for i in ticks:
-			var t := float(i) / (ticks - 1)
+		# ---- tach (left, behind)
+		var tc := Vector2(74, 92)
+		var tr := 64.0
+		_bezel(tc, tr, Color(0.03, 0.03, 0.035))
+		for i in 7:
+			var t := float(i) / 6.0
 			var a := lerpf(a0, a1, t)
 			var d := Vector2(cos(a), sin(a))
-			var col := UI.RED if i >= ticks - 2 else Color(1, 1, 1, 0.8)
-			draw_line(c + d * (r - 12), c + d * r, col, 3.0, true)
-			draw_string(f, c + d * (r - 26) - Vector2(5, -5), str(i), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, col)
-		draw_arc(c, r - 2, lerpf(a0, a1, 0.78), a1, 16, Color(1, 0.2, 0.15, 0.8), 5.0, true)
-		# rpm sweep + needle
-		var ra := lerpf(a0, a1, clampf(car.rpm, 0.0, 1.0))
-		draw_arc(c, r - 6, a0, ra, 32, Color(UI.AMBER.r, UI.AMBER.g, UI.AMBER.b, 0.35), 12.0, true)
-		var nd := Vector2(cos(ra), sin(ra))
-		draw_line(c - nd * 14, c + nd * (r - 8), UI.RED, 4.0, true)
-		draw_circle(c, 9, Color(0.1, 0.1, 0.12))
-		draw_arc(c, 9, 0, TAU, 20, UI.RED, 2.0, true)
-		# speed + gear
-		var tf := UI.title_font()
-		var spd := str(int(round(car.speed_mph())))
-		var w := tf.get_string_size(spd, HORIZONTAL_ALIGNMENT_LEFT, -1, 46).x
-		draw_string_outline(tf, Vector2(c.x - w * 0.5, c.y + 56), spd, HORIZONTAL_ALIGNMENT_LEFT, -1, 46, 8, Color(0, 0, 0, 0.9))
-		draw_string(tf, Vector2(c.x - w * 0.5, c.y + 56), spd, HORIZONTAL_ALIGNMENT_LEFT, -1, 46, Color.WHITE)
-		draw_string(f, Vector2(c.x - 14, c.y + 74), "MPH", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, UI.DIM)
-		var g := "R" if car.speed < -0.5 else str(car.gear + 1)
-		draw_string(tf, Vector2(c.x + 34, c.y - 22), g, HORIZONTAL_ALIGNMENT_LEFT, -1, 30, UI.AMBER)
-		# nitro bar (arc under the gauge)
-		var na0 := PI * 0.25 + 0.15
-		var na1 := PI * 0.75 - 0.15
-		draw_arc(c, r + 14, na0, na1, 16, Color(1, 1, 1, 0.15), 7.0, true)
-		var ncol := UI.CYAN if not car.using_nitro else Color(1, 1, 1)
-		draw_arc(c, r + 14, lerpf(na1, na0, car.nitro), na1, 16, ncol, 7.0, true)
-		draw_string(f, Vector2(c.x - 14, c.y + r + 34), "N2O", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, UI.CYAN)
+			var col := Color(1, 0.25, 0.2) if i >= 6 else Color(1, 1, 1, 0.9)
+			draw_line(tc + d * (tr - 9), tc + d * tr, col, 2.5, true)
+			var s := str(i)
+			var w := tfu.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+			draw_string(tfu, tc + d * (tr - 20) + Vector2(-w * 0.5, 6), s, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, col)
+		draw_arc(tc, tr - 4, lerpf(a0, a1, 0.83), a1, 10, Color(1, 0.15, 0.1, 0.9), 4.0, true)
+		draw_arc(tc, tr * 0.42, a0, lerpf(a0, a1, clampf(car.rpm, 0.0, 1.0)), 20, Color(1.0, 0.72, 0.1, 0.9), 4.0, true)
+		draw_string(tfu, tc + Vector2(-18, tr * 0.62), "RPM", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 1, 1, 0.8))
+		_needle(tc, lerpf(a0, a1, clampf(car.rpm, 0.0, 1.0)), tr - 8, Color(1.0, 0.2, 0.15), 3.0)
+		# ---- speedometer (right, front)
+		var c := Vector2(218, 128)
+		var r := 104.0
+		_bezel(c, r, Color(0.98, 0.78, 0.05))
+		draw_circle(c, r * 0.5, Color(0.93, 0.7, 0.03))
+		for i in 41:
+			var t := float(i) / 40.0
+			var a := lerpf(a0, a1, t)
+			var d := Vector2(cos(a), sin(a))
+			var big := i % 5 == 0
+			draw_line(c + d * (r - (12.0 if big else 6.0)), c + d * (r - 1), Color(0.05, 0.05, 0.05), 2.5 if big else 1.2, true)
+			if big:
+				var s := str(i * 5)
+				var w := tf.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, 19).x
+				draw_string(tf, c + d * (r - 28) + Vector2(-w * 0.5, 7), s, HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color(0.04, 0.04, 0.04))
+		draw_arc(c, r - 3, lerpf(a0, a1, 0.875), a1, 10, Color(0.75, 0.05, 0.02), 5.0, true)
+		var mw := tf.get_string_size("MPH", HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+		draw_string(tf, c + Vector2(-mw * 0.5, r * 0.72), "MPH", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(0.05, 0.05, 0.05))
+		var spd := str(int(round(_spd)))
+		var sw := tfu.get_string_size(spd, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x
+		draw_rect(Rect2(c + Vector2(-34, r * 0.24), Vector2(68, 28)), Color(0.05, 0.05, 0.05, 0.9))
+		draw_string(tfu, c + Vector2(-sw * 0.5, r * 0.24 + 23), spd, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(1.0, 0.85, 0.2))
+		_needle(c, lerpf(a0, a1, clampf(_spd / 200.0, 0.0, 1.0)), r - 10, Color(0.08, 0.08, 0.08), 4.5)
+		# ---- gear badge
+		var gc := Vector2(c.x + r + 12, c.y - r * 0.5)
+		draw_circle(gc, 27, Color(0, 0, 0, 0.6))
+		draw_circle(gc, 25, Color(0.72, 0.74, 0.78))
+		draw_circle(gc, 22, Color(0.98, 0.78, 0.05))
+		var g := "R" if car.speed < -0.5 else ("N" if absf(car.speed) < 0.3 and car.gear == 0 and car.rpm < 0.2 else str(car.gear + 1))
+		var gw := tf.get_string_size(g, HORIZONTAL_ALIGNMENT_LEFT, -1, 34).x
+		draw_string(tf, gc + Vector2(-gw * 0.5 - 1, 12), g, HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color(0.04, 0.04, 0.04))
+		# ---- nitro arc hugging the speedo
+		var na0 := PI * 0.02
+		var na1 := PI * 0.42
+		draw_arc(c, r + 18, na0, na1, 20, Color(0, 0, 0, 0.5), 9.0, true)
+		var ncol := Color(0.2, 0.9, 1.0) if not car.using_nitro else Color(1, 1, 1)
+		draw_arc(c, r + 18, lerpf(na1, na0, clampf(car.nitro, 0.0, 1.0)), na1, 20, ncol, 6.0, true)
+		draw_string(tfu, c + Vector2(r * 0.55, r + 30), "N2O", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.3, 0.9, 1.0))
+
+
+class _SideArcs extends Control:
+	## Tall chrome + yellow arcs framing the screen. Left fills with race
+	## progress, right with speed.
+	var scene: Node
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _process(_d: float) -> void:
+		queue_redraw()
+
+	func _arc(cx: float, rx: float, y0: float, y1: float, side: float, fill: float, segs: bool) -> void:
+		var n := 40
+		var white := PackedVector2Array()
+		var yel := PackedVector2Array()
+		for k in n + 1:
+			var t := float(k) / n
+			var y := lerpf(y0, y1, t)
+			var bulge := sin(t * PI)
+			white.append(Vector2(cx + side * (rx * bulge), y))
+			yel.append(Vector2(cx + side * (rx * bulge - 12.0), y))
+		draw_polyline(white, Color(0, 0, 0, 0.35), 5.0, true)
+		draw_polyline(white, Color(0.85, 0.87, 0.9, 0.75), 2.5, true)
+		var m := int(n * clampf(fill, 0.0, 1.0))
+		for k in range(n, n - m, -1):
+			if segs and k % 4 == 0:
+				continue
+			draw_line(yel[k], yel[k - 1], Color(1.0, 0.8, 0.05, 0.92), 7.0, true)
+
+	func _draw() -> void:
+		if scene == null:
+			return
+		var w := size.x
+		var h := size.y
+		var prog := 0.0
+		if scene.state == "race" and scene.race:
+			prog = float(scene.race.cp_index) / maxf(float(scene.race.cps.size()), 1.0)
+		_arc(70.0, 46.0, h * 0.2, h * 0.78, -1.0, prog, true)
+		var spd: float = absf(scene.car.speed_mph()) / 200.0
+		_arc(w - 70.0, 46.0, h * 0.2, h * 0.78, 1.0, spd, true)
+
+
+class _ChromeRing extends Control:
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var c := size * 0.5
+		var r := size.x * 0.5 - 8.0
+		draw_arc(c, r + 4.0, 0, TAU, 64, Color(0, 0, 0, 0.6), 6.0, true)
+		draw_arc(c, r + 2.5, 0, TAU, 64, Color(0.75, 0.76, 0.8), 4.0, true)
+		draw_arc(c, r + 2.5, PI * 1.1, PI * 1.9, 24, Color(1, 1, 1, 0.9), 2.0, true)
+		draw_arc(c, r + 0.5, 0, TAU, 64, Color(0.98, 0.78, 0.05, 0.9), 1.5, true)
+
+
+static func _circle_tex() -> GradientTexture2D:
+	var g := Gradient.new()
+	g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 1), Color(1, 1, 1, 0)])
+	g.offsets = PackedFloat32Array([0.0, 0.985, 1.0])
+	var t := GradientTexture2D.new()
+	t.gradient = g
+	t.width = 256
+	t.height = 256
+	t.fill = GradientTexture2D.FILL_RADIAL
+	t.fill_from = Vector2(0.5, 0.5)
+	t.fill_to = Vector2(1.0, 0.5)
+	return t
 
 
 class _Arrow extends Control:
+	## Floating yellow chevron pointing to the next checkpoint.
 	var scene: Node
 
 	func _process(_d: float) -> void:
@@ -995,19 +1184,27 @@ class _Arrow extends Control:
 		to.y = 0.0
 		var fwd := car.forward()
 		var ang := atan2(to.dot(car.global_transform.basis.x), to.dot(fwd))
-		var c := size * 0.5 - Vector2(0, 8)
-		var r := 46.0
-		draw_circle(c, r + 8, Color(0.02, 0.025, 0.04, 0.6))
-		draw_arc(c, r + 8, 0, TAU, 48, Color(1, 1, 1, 0.14), 2.0, true)
-		var col: Color = scene._marker_mat.albedo_color
+		var c := size * 0.5 - Vector2(0, 14)
+		var r := 40.0
 		var d := Vector2(sin(ang), -cos(ang))
 		var n := Vector2(-d.y, d.x)
-		draw_colored_polygon(PackedVector2Array([c + d * r, c - d * r * 0.5 + n * r * 0.55, c - d * r * 0.15, c - d * r * 0.5 - n * r * 0.55]), col)
+		var tip := c + d * r
+		var poly := PackedVector2Array([tip, c + n * r * 0.95 - d * r * 0.1, c + n * r * 0.42 - d * r * 0.1, c + n * r * 0.42 - d * r * 0.85,
+			c - n * r * 0.42 - d * r * 0.85, c - n * r * 0.42 - d * r * 0.1, c - n * r * 0.95 - d * r * 0.1])
+		var sh := PackedVector2Array()
+		for p in poly:
+			sh.append(p + Vector2(3, 4))
+		draw_colored_polygon(sh, Color(0, 0, 0, 0.5))
+		draw_colored_polygon(poly, Color(1.0, 0.82, 0.05))
+		var half := PackedVector2Array([tip, c + n * r * 0.95 - d * r * 0.1, c + n * r * 0.42 - d * r * 0.1, c + n * r * 0.42 - d * r * 0.85, c - d * r * 0.85])
+		draw_colored_polygon(half, Color(1.0, 0.95, 0.45, 0.6))
+		poly.append(poly[0])
+		draw_polyline(poly, Color(0.55, 0.38, 0.0), 2.0, true)
 		var dist := "%d M" % int(to.length())
-		var f := UI.body_font(true)
-		var w := f.get_string_size(dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
-		draw_string_outline(f, Vector2(c.x - w * 0.5, c.y + r + 30), dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, 5, Color(0, 0, 0, 0.9))
-		draw_string(f, Vector2(c.x - w * 0.5, c.y + r + 30), dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
+		var f := UI.title_font()
+		var w := f.get_string_size(dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+		draw_string_outline(f, Vector2(c.x - w * 0.5, c.y + r + 34), dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, 6, Color(0, 0, 0, 0.9))
+		draw_string(f, Vector2(c.x - w * 0.5, c.y + r + 34), dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color.WHITE)
 
 
 # ====================================================================== dev hooks

@@ -80,6 +80,30 @@ static func city_sky() -> ImageTexture:
 	return t
 
 
+## Gulf night sky: deep blue overhead, warm dusty haze over the desert horizon, stars.
+static func desert_sky() -> ImageTexture:
+	if _cache.has("desert"):
+		return _cache["desert"]
+	var w := 512
+	var h := 256
+	var img := Image.create(w, h, false, Image.FORMAT_RGBAH)
+	for y in h:
+		var v := float(y) / h
+		for x in w:
+			# deep violet night over a magenta and amber afterglow
+			var c := Color(0.02, 0.025, 0.09).lerp(Color(0.19, 0.07, 0.22), exp(-pow((v - 0.5) / 0.17, 2.0)))
+			c += Color(0.95, 0.42, 0.16) * exp(-pow((v - 0.5) / 0.04, 2.0)) * 0.6
+			c += Color(0.05, 0.16, 0.2) * exp(-pow((v - 0.3) / 0.12, 2.0)) * 0.5
+			if v >= 0.5:
+				c = Color(0.07, 0.04, 0.06)
+			if v < 0.42 and fposmod(sin(x * 91.7 + y * 47.3) * 9631.1, 1.0) > 0.9988:
+				c += Color(0.5, 0.5, 0.6) * (1.0 - v * 2.0)
+			img.set_pixel(x, y, c)
+	var t := ImageTexture.create_from_image(img)
+	_cache["desert"] = t
+	return t
+
+
 static func noise_tex(seed_v: int, freq: float, size := 256, as_normal := false, strength := 4.0) -> NoiseTexture2D:
 	var key := "n%d_%f_%d_%s" % [seed_v, freq, size, as_normal]
 	if _cache.has(key):
@@ -157,3 +181,39 @@ static func cyl(parent: Node, radius: float, height: float, pos: Vector3, mat: M
 	mi.rotation = rot
 	parent.add_child(mi)
 	return mi
+
+
+## Photographic workshop sky from the generated 360 panorama (LDR jpg).
+## Bright light tubes are boosted in the shader so they read as HDR light
+## sources in reflections and ambient light.
+static func photo_sky(boost := 14.0, gain := 1.0) -> Sky:
+	var key := "photo_sky%f%f" % [boost, gain]
+	if _cache.has(key):
+		return _cache[key]
+	var sh := Shader.new()
+	sh.code = """
+shader_type sky;
+uniform sampler2D pano : source_color, filter_linear, repeat_enable;
+uniform float boost = 14.0;
+uniform float gain = 1.0;
+void sky() {
+	vec2 uv = vec2(atan(EYEDIR.x, -EYEDIR.z) / 6.2831853 + 0.5, acos(clamp(EYEDIR.y, -1.0, 1.0)) / 3.1415927);
+	vec3 c = texture(pano, uv).rgb;
+	float l = dot(c, vec3(0.3333));
+	float b = clamp((l - 0.45) / 0.4, 0.0, 1.0);
+	c *= 1.0 + b * b * boost;
+	if (EYEDIR.y < -0.05) { c *= 0.8; }
+	COLOR = c * gain;
+}
+"""
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("pano", load("res://textures/garage_pano.jpg"))
+	m.set_shader_parameter("boost", boost)
+	m.set_shader_parameter("gain", gain)
+	var sky := Sky.new()
+	sky.sky_material = m
+	sky.radiance_size = Sky.RADIANCE_SIZE_256
+	sky.process_mode = Sky.PROCESS_MODE_QUALITY
+	_cache[key] = sky
+	return sky

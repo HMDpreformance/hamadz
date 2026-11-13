@@ -25,20 +25,39 @@ musician or vocalist performed. The tracks are instrumental.
   tracks, the pause menu turns it on or off, and the choice is saved.
 - To add a track: drop an `.ogg` in `audio/music/` and add a row to `TRACKS`.
 
-## Voice lines (hooks ready, no recordings yet)
+## Voice lines
 
-`Audio.voice(id)` plays `audio/voice/<id>.ogg` if the file exists and does
-nothing otherwise. Ids already called by the game: `count_3`, `count_2`,
-`count_1`, `go`, `win`, `podium`, `lose`, `garage_welcome`.
+`Audio.voice(id, db, priority)` plays `audio/voice/<id>.ogg`, or one of
+`<id>_2.ogg`, `<id>_3.ogg` ... when variants exist (never the same one twice in a
+row), on its own "Voice" bus. The music ducks by itself while a line plays
+(side-chain compressor on the Music bus). One voice talks at a time; a line only
+interrupts another when its priority is at least as high. A missing file is
+silently skipped, so a line can be removed by deleting its `.ogg`.
 
-## Generated audio (ElevenLabs / Higgsfield)
+| Speaker | Preset voice | Ids | When |
+|---|---|---|---|
+| Race starter | Knox | `count_3`, `count_2`, `count_1`, `go` | Countdown |
+| | | `brief_checkpoint`, `brief_duel`, `brief_trial`, `brief_circuit`, `brief_sprint` | Event title card (the card waits for the line) |
+| | | `final_lap`, `lead_taken`, `lead_lost` | During a race |
+| | | `win`, `win_2`, `podium`, `lose`, `lose_2` | Result |
+| | | `title` | Title screen |
+| Mechanic | Barrett | `garage_welcome` (3 takes), `garage_install` (2 takes), `garage_broke`, `garage_new_car` | Garage |
+| Syndicate FM DJ | Juno | `dj`, `dj_2`, `dj_3`, `dj_4` | Free roam only, shortly after arriving and after every second song |
 
-None is in the build yet. Before any generated voice or music ships:
+## Generated audio (Higgsfield)
 
-- Check that the account plan used for the generation grants commercial use
-  (free tiers usually do not) and keep a record of plan, date and prompt.
+The 29 voice lines were generated on 2026-11-12 with Higgsfield
+(`text2speech_v2`, engine ElevenLabs, preset voices above) on the account's Plus
+plan, about 0.15 credits per line. The scripts are original and name no real
+person. Each file was trimmed and levelled by `ffmpeg` + numpy (RMS of the
+speech to -18 dBFS, mono 44.1 kHz Vorbis).
+
+- **Not auditioned by ear.** Lengths and loudness were measured and the trigger
+  points were tested in headless runs, but nobody has listened to the takes yet.
+  Replace or delete any that sound wrong.
+- Before a store release, confirm that the Higgsfield plan in use grants
+  commercial rights to generated speech and keep this record.
 - Do not prompt for a named artist, a named song or a real person's voice.
-- Listen to every take for artifacts before it goes in.
 
 ## Commercial songs
 

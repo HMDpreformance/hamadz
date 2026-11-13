@@ -3,7 +3,7 @@ extends Camera3D
 ## Smooth orbit camera with touch-drag rotate, pinch zoom and named focus presets.
 
 const PRESETS := {
-	"default": {"yaw": 35.0, "pitch": 11.0, "dist": 6.6, "target": Vector3(0, 0.62, 0)},
+	"default": {"yaw": 35.0, "pitch": 11.0, "dist": 6.6, "target": Vector3(0, 0.95, 0)},
 	"side": {"yaw": 88.0, "pitch": 7.0, "dist": 6.4, "target": Vector3(0, 0.6, 0)},
 	"front": {"yaw": 22.0, "pitch": 9.0, "dist": 5.4, "target": Vector3(0, 0.5, -0.9)},
 	"rear": {"yaw": 157.0, "pitch": 15.0, "dist": 5.8, "target": Vector3(0, 0.7, 0.9)},
@@ -11,7 +11,7 @@ const PRESETS := {
 	"wheel": {"yaw": 62.0, "pitch": 4.0, "dist": 3.1, "target": Vector3(0.7, 0.36, -1.1)},
 	"low": {"yaw": 72.0, "pitch": 2.0, "dist": 5.2, "target": Vector3(0, 0.3, 0)},
 	"badge": {"yaw": 70.0, "pitch": 8.0, "dist": 2.9, "target": Vector3(0.7, 0.6, -0.6)},
-	"showcase": {"yaw": -40.0, "pitch": 9.0, "dist": 7.2, "target": Vector3(0, 0.6, 0)},
+	"showcase": {"yaw": -40.0, "pitch": 9.0, "dist": 7.2, "target": Vector3(0, 0.95, 0)},
 }
 
 var yaw := 35.0
@@ -25,6 +25,11 @@ var max_pitch := 55.0
 var auto_rotate := 4.0          # deg/s after idle
 var idle_delay := 5.0
 var enabled := true
+## Turntable mode (photo stage): the camera stays on the side the backdrop
+## photo was taken from and these nodes rotate instead, so the background
+## never has to move.
+var turntable: Array = []
+var turn_base := 180.0
 
 var _yaw := 35.0
 var _pitch := 11.0
@@ -119,8 +124,16 @@ func _process(delta: float) -> void:
 
 func _apply() -> void:
 	var y := deg_to_rad(_yaw)
+	var t := _target
+	if not turntable.is_empty():
+		var r := deg_to_rad(_yaw - turn_base)
+		for n in turntable:
+			if is_instance_valid(n):
+				n.rotation.y = r
+		y = deg_to_rad(turn_base)
+		t = _target.rotated(Vector3.UP, r)     # focus points live on the turning car
 	var p := deg_to_rad(_pitch)
-	position = _target + Vector3(sin(y) * cos(p), sin(p), -cos(y) * cos(p)) * _dist
+	position = t + Vector3(sin(y) * cos(p), sin(p), -cos(y) * cos(p)) * _dist
 	if position.y < 0.12:
 		position.y = 0.12
-	look_at(_target, Vector3.UP)
+	look_at(t, Vector3.UP)

@@ -7,19 +7,19 @@ class_name Soundtrack
 ## docs/AUDIO.md for where each file came from). Commercial songs must not be
 ## added without sync + master-use + distribution licences.
 
-const STATION := "SYNDICATE FM 99.1"
+const STATION := "NIGHT RIDE FM 99.1"
 
 const TRACKS := [
-	{"id": "main_theme", "title": "After Hours", "artist": "Syndicate Sound", "radio": true},
-	{"id": "night_shift", "title": "Night Shift", "artist": "Low Tide", "radio": true},
-	{"id": "redline", "title": "Redline", "artist": "Kanji Kid", "radio": true},
-	{"id": "halcyon", "title": "Halcyon Nights", "artist": "DJ Bayside", "radio": true},
-	{"id": "overpass", "title": "Overpass", "artist": "Kanji Kid", "radio": true},
-	{"id": "chrome_heart", "title": "Chrome Heart", "artist": "Low Tide", "radio": true},
+	# v0.13: generated full songs (ElevenLabs Music via Higgsfield, approved by Hamad 2026-11-13)
+	{"id": "midnight_cruise", "title": "Midnight Cruise", "artist": "Big Rel & The Night Crew", "radio": true},
+	{"id": "break_point", "title": "Break Point", "artist": "DJ Static", "radio": true},
+	{"id": "desert_highway", "title": "Desert Highway", "artist": "Sahra Kings", "radio": true},
+	# older synth loop, off the radio
+	{"id": "main_theme", "title": "After Hours", "artist": "Syndicate Sound", "radio": false},
 ]
 
 ## Which track each fixed state plays (free roam and races use the radio rotation).
-const STATE_TRACK := {"intro": "main_theme", "menu": "main_theme"}
+const STATE_TRACK := {"intro": "midnight_cruise", "menu": "midnight_cruise"}
 
 
 static func path(id: String) -> String:

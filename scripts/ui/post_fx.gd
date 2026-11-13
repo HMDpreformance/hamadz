@@ -24,7 +24,7 @@ void fragment() {
 	vec3 col = vec3(0.0);
 	float a = 0.0;
 	if (blur > 0.5) {
-		float k = amount * 0.07 * smoothstep(0.08, 0.6, r);
+		float k = amount * 0.1 * smoothstep(0.08, 0.6, r);
 		vec3 acc = vec3(0.0);
 		for (int i = 0; i < 6; i++) {
 			acc += texture(screen_tex, SCREEN_UV - c * k * float(i) / 5.0).rgb;

@@ -46,11 +46,11 @@ func _floor(mirror: bool) -> void:
 	pm.size = Vector2(HX * 2, HZ * 2)
 	fl.mesh = pm
 	var m := StandardMaterial3D.new()
-	m.albedo_color = Color(0.2, 0.21, 0.23, 0.74 if mirror else 1.0)
-	m.albedo_texture = EnvKit.noise_tex(9, 0.012)
-	m.uv1_scale = Vector3(3, 3, 1)
-	m.roughness = 0.16
-	m.metallic = 0.35
+	m.albedo_color = Color(0.62, 0.62, 0.64, 0.74 if mirror else 1.0)
+	m.albedo_texture = load("res://textures/concrete.jpg")
+	m.uv1_scale = Vector3(4, 3, 1)
+	m.roughness = 0.14
+	m.metallic = 0.2
 	if mirror:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_floor_mat = m
@@ -92,8 +92,18 @@ func _floor(mirror: bool) -> void:
 		EnvKit.box(self, Vector3(0.22, 0.004, 0.75), Vector3(-3.2 + k * 0.5, 0.003, -HZ + 0.6), hz_y, Vector3(0, 0.6, 0))
 
 
+func _brick() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = load("res://textures/brick.jpg")
+	m.albedo_color = Color(0.85, 0.82, 0.8)
+	m.roughness = 0.85
+	m.uv1_triplanar = true
+	m.uv1_scale = Vector3(0.38, 0.38, 0.38)
+	return m
+
+
 func _walls() -> void:
-	var wall := _concrete(Color(0.34, 0.35, 0.37))
+	var wall := _brick()
 	var dark := _concrete(Color(0.12, 0.125, 0.14))
 	var stripe := EnvKit.emissive(Color(1.0, 0.62, 0.05), 0.9)
 	# back (+z), front (-z), left (-x), right (+x)
@@ -366,3 +376,85 @@ func _lights() -> void:
 	probe.intensity = 1.0
 	probe.max_distance = 30.0
 	add_child(probe)
+
+
+# ---------------------------------------------------------------- photo mode
+## Photographic workshop: the generated 360 panorama is the visible background
+## (and the reflection source), with a real 3D concrete floor so the car sits
+## on it, casts a contact shadow and reflects. Cheaper than the modelled room.
+func build_photo(env: Environment) -> void:
+	env.sky = EnvKit.photo_sky()
+	env.background_mode = Environment.BG_SKY
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_energy = 0.6
+	env.sky_rotation = Vector3(0, deg_to_rad(150.0), 0)
+	mirror_root = Node3D.new()
+	mirror_root.scale = Vector3(1, -1, 1)
+	add_child(mirror_root)
+	var mirror: bool = GFX.p.mirror
+	var fl := MeshInstance3D.new()
+	var disc := CylinderMesh.new()
+	disc.top_radius = 14.0
+	disc.bottom_radius = 14.0
+	disc.height = 0.01
+	disc.radial_segments = 48
+	fl.mesh = disc
+	fl.position.y = -0.005
+	var sh := Shader.new()
+	sh.code = """
+shader_type spatial;
+render_mode blend_mix, depth_draw_opaque, cull_back;
+uniform sampler2D tex : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
+uniform float reflect = 0.0;
+varying vec3 wp;
+void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment() {
+	vec3 c = texture(tex, wp.xz * 0.2).rgb * 0.62;
+	float r = length(wp.xz);
+	ALBEDO = c;
+	ROUGHNESS = 0.16;
+	METALLIC = 0.15;
+	SPECULAR = 0.6;
+	// fade into the panorama's own floor at the edge of the disc
+	ALPHA = (1.0 - smoothstep(6.0, 13.5, r)) * (1.0 - reflect * (1.0 - smoothstep(1.0, 7.0, r) * 0.7));
+}
+"""
+	_floor_mat = null
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("tex", load("res://textures/concrete.jpg"))
+	m.set_shader_parameter("reflect", 0.55 if mirror else 0.0)
+	m.render_priority = -2
+	fl.material_override = m
+	fl.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(fl)
+	# subtle bay ring so the turntable still reads as "your bay"
+	var ring := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 3.3
+	tm.outer_radius = 3.36
+	tm.rings = 64
+	tm.ring_segments = 4
+	ring.mesh = tm
+	ring.scale = Vector3(1, 0.04, 1)
+	ring.material_override = EnvKit.emissive(Color(1.0, 0.65, 0.1), 0.7)
+	ring.position.y = 0.004
+	add_child(ring)
+	key_light = SpotLight3D.new()
+	key_light.position = Vector3(0.6, 4.6, -1.2)
+	key_light.rotation_degrees = Vector3(-84, 10, 0)
+	key_light.spot_range = 9.0
+	key_light.spot_angle = 55.0
+	key_light.spot_attenuation = 0.7
+	key_light.light_energy = 2.6
+	key_light.light_color = Color(1.0, 0.95, 0.88)
+	key_light.shadow_enabled = GFX.p.shadows
+	add_child(key_light)
+	for d in [[Vector3(-4.0, 3.5, 2.0), Color(1.0, 0.9, 0.75), 1.4], [Vector3(4.0, 3.0, -3.0), Color(0.3, 0.85, 1.0), 1.2]]:
+		var o := OmniLight3D.new()
+		o.position = d[0]
+		o.light_color = d[1]
+		o.light_energy = d[2]
+		o.omni_range = 10.0
+		add_child(o)

@@ -68,7 +68,9 @@ uniform vec2 offset = vec2(0.0);
 uniform vec2 extent = vec2(205.0);
 uniform vec3 outside : source_color = vec3(0.035, 0.036, 0.04);
 uniform float outside_rough = 0.5;
+uniform vec4 shop_rect = vec4(0.0);   // xmin, xmax, zmin, zmax of the streets lined with lit shopfronts
 uniform sampler2D noise_tex : repeat_enable, filter_linear_mipmap;
+uniform sampler2D asphalt_tex : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
 varying vec3 wp;
 void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 float lane(float d, float along) {
@@ -104,19 +106,42 @@ void fragment() {
 	float n = texture(noise_tex, p * 0.035).r;
 	float n2 = texture(noise_tex, p * 0.011 + 0.37).r;
 	float fine = texture(noise_tex, p * 0.6).r;
-	vec3 asphalt = vec3(0.035, 0.036, 0.04) * (0.7 + 0.6 * fine);
+	vec3 tex = texture(asphalt_tex, p * 0.22).rgb;
+	vec3 asphalt = tex * 0.32 * (0.8 + 0.4 * n);
 	float wear = 0.55 + 0.45 * n;
 	vec3 col = mix(asphalt, vec3(0.62, 0.62, 0.6), clamp(white, 0.0, 1.0) * wear);
 	col = mix(col, vec3(0.7, 0.5, 0.05), clamp(yellow, 0.0, 1.0) * wear);
-	float puddle = smoothstep(0.52, 0.66, n2);
+	float puddle = smoothstep(0.42, 0.6, n2);
 	if (!in_grid) {
 		col = outside * (0.6 + 0.8 * fine) * (0.8 + 0.4 * n);
 		puddle *= 1.0 - step(0.6, outside_rough);
 	}
-	ALBEDO = col * (1.0 - puddle * 0.45);
-	ROUGHNESS = (in_grid ? mix(0.42, 0.06, puddle) : mix(outside_rough, 0.06, puddle)) + fine * 0.12;
-	METALLIC = 0.25 * puddle;
-	SPECULAR = 0.6;
+	// rain-wet street: a thin film everywhere, standing water in the low spots
+	ALBEDO = col * (in_grid ? 0.75 : 1.0) * (1.0 - puddle * 0.45);
+	ROUGHNESS = (in_grid ? mix(0.14, 0.02, puddle) : mix(outside_rough, 0.06, puddle)) + fine * (in_grid ? 0.07 : 0.12);
+	METALLIC = in_grid ? mix(0.35, 0.6, puddle) : 0.25 * puddle;
+	SPECULAR = 0.7;
+	// falling rain: small rings flicker on the standing water
+	vec2 rc = floor(p * 2.2);
+	float rh = fract(sin(dot(rc, vec2(127.1, 311.7))) * 43758.5453);
+	float rt = fract(TIME * 1.3 + rh * 7.0);
+	float ring = smoothstep(0.08, 0.0, abs(length(fract(p * 2.2) - 0.5) - rt * 0.45)) * (1.0 - rt) * step(0.55, rh);
+	ROUGHNESS = clamp(ROUGHNESS + ring * 0.25 * (in_grid ? 1.0 : 0.0), 0.0, 1.0);
+	// neon and shop light smeared across the wet asphalt, strongest by the kerb
+	if (in_grid && (on_x || on_z)) {
+		bool shops = p.x > shop_rect.x && p.x < shop_rect.y && p.y > shop_rect.z && p.y < shop_rect.w;
+		float dc = half_road - ((on_x && !on_z) ? d.x : ((on_z && !on_x) ? d.y : min(d.x, d.y)));
+		float along = (on_x && !on_z) ? p.y : p.x;
+		float streak = smoothstep(0.3, 0.9, texture(noise_tex, vec2(along * 0.16, dc * 0.01)).r);
+		float shop = smoothstep(0.35, 0.7, texture(noise_tex, vec2(along * 0.021, 0.3)).r);
+		float fall = exp(-dc / 3.2);
+		vec3 warm = mix(vec3(1.0, 0.72, 0.36), vec3(1.0, 0.9, 0.75), streak);
+		float hue = texture(noise_tex, vec2(along * 0.045 + 0.7, 0.61)).r;
+		vec3 neon = hue < 0.38 ? vec3(1.0, 0.12, 0.55) : (hue < 0.5 ? vec3(0.1, 0.85, 1.0) : (hue < 0.62 ? vec3(0.6, 0.25, 1.0) : warm));
+		vec3 lightc = mix(warm, neon, 0.75);
+		float amt = shops ? 0.5 : 0.16;
+		EMISSION = lightc * fall * (0.12 + 0.88 * streak) * (0.3 + 0.7 * shop) * amt * (0.55 + 0.45 * puddle) * (1.0 + ring);
+	}
 }
 """
 	return sh
@@ -130,6 +155,7 @@ func _ground() -> void:
 	m.set_shader_parameter("offset", Vector2(road(0), road(0)))
 	m.set_shader_parameter("extent", Vector2(half, half))
 	m.set_shader_parameter("noise_tex", EnvKit.noise_tex(3, 0.03))
+	m.set_shader_parameter("asphalt_tex", load("res://textures/asphalt.jpg"))
 	var mi := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(half * 2 + 140, half * 2 + 140)
@@ -252,6 +278,56 @@ func add_sign(text: String, pos: Vector3, rot_y: float, color: Color, height := 
 	qm.size = Vector2(w * 2.2, h * 2.2)
 	halo.mesh = qm
 	halo.material_override = EnvKit.glow_mat(color, 0.22)
+	halo.position = pos + fwd * 0.12
+	halo.rotation.y = rot_y
+	_tgt().add_child(halo)
+
+
+static var _ar_font: Font
+
+
+## Bilingual sign: Arabic on top, English below, on a dark board with a glow.
+func add_sign2(en: String, ar: String, pos: Vector3, rot_y: float, color: Color, height := 2.2, board := true, board_col := Color(0.012, 0.014, 0.02)) -> void:
+	var road_sign := board_col.g > 0.1
+	if _ar_font == null:
+		_ar_font = load("res://fonts/notokufi_NotoKufiArabic-Bold.ttf")
+	var fwd := Vector3(sin(rot_y), 0, cos(rot_y))
+	var glow := Color(1.3, 1.3, 1.3) if road_sign else Color(color.r * 2.6 + 0.25, color.g * 2.6 + 0.25, color.b * 2.6 + 0.25)
+	var la := Label3D.new()
+	la.text = ar
+	la.font = _ar_font
+	la.font_size = 96
+	la.pixel_size = height * 0.9 / 96.0
+	la.modulate = Color(1.6, 1.55, 1.45) if board else glow
+	la.shaded = false
+	la.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+	la.position = pos + Vector3(0, height * 0.55, 0) + fwd * 0.02
+	la.rotation.y = rot_y
+	_tgt().add_child(la)
+	var le := Label3D.new()
+	le.text = en
+	le.font = UI.title_font(false)
+	le.font_size = 96
+	le.pixel_size = height * 0.75 / 96.0
+	le.modulate = glow
+	le.shaded = false
+	le.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+	le.position = pos - Vector3(0, height * 0.5, 0) + fwd * 0.02
+	le.rotation.y = rot_y
+	_tgt().add_child(le)
+	var w := maxf(height * 0.46 * float(en.length()), height * 0.42 * float(ar.length())) + height
+	var h := height * 2.4
+	if board:
+		EnvKit.box(_tgt(), Vector3(w, h, 0.25), pos - fwd * 0.16, EnvKit.solid(board_col, 0.35, 0.3) if not road_sign else EnvKit.emissive(board_col, 0.6), Vector3(0, rot_y, 0))
+		if road_sign:
+			return
+		var rim := EnvKit.box(_tgt(), Vector3(w + 0.3, 0.12, 0.3), pos + Vector3(0, h * 0.5, 0) - fwd * 0.1, EnvKit.emissive(color, 3.0), Vector3(0, rot_y, 0))
+		rim.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var halo := MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(w * 1.8, h * 1.8)
+	halo.mesh = qm
+	halo.material_override = EnvKit.glow_mat(color, 0.18)
 	halo.position = pos + fwd * 0.12
 	halo.rotation.y = rot_y
 	_tgt().add_child(halo)
@@ -440,8 +516,8 @@ func _street_lights() -> void:
 	for i in count:
 		var l := OmniLight3D.new()
 		l.light_color = Color(1.0, 0.72, 0.42)
-		l.light_energy = 3.0
-		l.omni_range = 19.0
+		l.light_energy = 4.2
+		l.omni_range = 24.0
 		l.omni_attenuation = 1.1
 		l.shadow_enabled = false
 		add_child(l)

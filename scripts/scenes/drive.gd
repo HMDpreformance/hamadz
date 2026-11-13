@@ -29,6 +29,7 @@ var _toast_tw: Tween
 var _fade: ColorRect
 var _bars: Array = []
 var _cine: Camera3D
+var _rain: Rain
 var _cine_t := 0.0
 var _cine_center := Vector3.ZERO
 var _race_holder: Node3D
@@ -58,15 +59,19 @@ var _district := ""
 
 
 func _ready() -> void:
-	env = GFX.make_environment(Color(0.3, 0.34, 0.5), 0.55, Color(0.13, 0.085, 0.07), 0.0045, EnvKit.desert_sky())
+	env = GFX.make_environment(Color(0.4, 0.38, 0.62), 0.66, Color(0.16, 0.08, 0.14), 0.004, EnvKit.desert_sky())
+	env.adjustment_saturation = 1.32
+	env.adjustment_contrast = 1.12
+	env.glow_intensity = 0.8
+	env.glow_hdr_threshold = 0.95
 	env.background_mode = Environment.BG_SKY
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 	var moon := DirectionalLight3D.new()
 	moon.rotation_degrees = Vector3(-38, 35, 0)
-	moon.light_color = Color(0.55, 0.62, 0.95)
-	moon.light_energy = 0.55
+	moon.light_color = Color(0.62, 0.6, 1.0)
+	moon.light_energy = 0.75
 	moon.shadow_enabled = GFX.p.shadows
 	moon.shadow_opacity = 0.85
 	moon.shadow_blur = 1.5
@@ -106,6 +111,8 @@ func _ready() -> void:
 
 	_race_holder = Node3D.new()
 	add_child(_race_holder)
+	_rain = Rain.new()
+	add_child(_rain)
 	_cine = Camera3D.new()
 	_cine.far = 1600.0
 	_cine.fov = 50.0

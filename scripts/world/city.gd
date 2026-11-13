@@ -121,15 +121,26 @@ void fragment() {
 	ROUGHNESS = (in_grid ? mix(0.14, 0.02, puddle) : mix(outside_rough, 0.06, puddle)) + fine * (in_grid ? 0.07 : 0.12);
 	METALLIC = in_grid ? mix(0.35, 0.6, puddle) : 0.25 * puddle;
 	SPECULAR = 0.7;
-	// lit shop windows smeared across the wet asphalt, strongest by the kerb
-	if (in_grid && (on_x || on_z) && p.x > shop_rect.x && p.x < shop_rect.y && p.y > shop_rect.z && p.y < shop_rect.w) {
+	// falling rain: small rings flicker on the standing water
+	vec2 rc = floor(p * 2.2);
+	float rh = fract(sin(dot(rc, vec2(127.1, 311.7))) * 43758.5453);
+	float rt = fract(TIME * 1.3 + rh * 7.0);
+	float ring = smoothstep(0.08, 0.0, abs(length(fract(p * 2.2) - 0.5) - rt * 0.45)) * (1.0 - rt) * step(0.55, rh);
+	ROUGHNESS = clamp(ROUGHNESS + ring * 0.25 * (in_grid ? 1.0 : 0.0), 0.0, 1.0);
+	// neon and shop light smeared across the wet asphalt, strongest by the kerb
+	if (in_grid && (on_x || on_z)) {
+		bool shops = p.x > shop_rect.x && p.x < shop_rect.y && p.y > shop_rect.z && p.y < shop_rect.w;
 		float dc = half_road - ((on_x && !on_z) ? d.x : ((on_z && !on_x) ? d.y : min(d.x, d.y)));
 		float along = (on_x && !on_z) ? p.y : p.x;
 		float streak = smoothstep(0.3, 0.9, texture(noise_tex, vec2(along * 0.16, dc * 0.01)).r);
 		float shop = smoothstep(0.35, 0.7, texture(noise_tex, vec2(along * 0.021, 0.3)).r);
-		float fall = exp(-dc / 2.4);
+		float fall = exp(-dc / 3.2);
 		vec3 warm = mix(vec3(1.0, 0.72, 0.36), vec3(1.0, 0.9, 0.75), streak);
-		EMISSION = warm * fall * (0.12 + 0.88 * streak) * (0.3 + 0.7 * shop) * 0.3 * (0.5 + 0.5 * puddle);
+		float hue = texture(noise_tex, vec2(along * 0.045 + 0.7, 0.61)).r;
+		vec3 neon = hue < 0.38 ? vec3(1.0, 0.12, 0.55) : (hue < 0.5 ? vec3(0.1, 0.85, 1.0) : (hue < 0.62 ? vec3(0.6, 0.25, 1.0) : warm));
+		vec3 lightc = mix(warm, neon, 0.75);
+		float amt = shops ? 0.5 : 0.16;
+		EMISSION = lightc * fall * (0.12 + 0.88 * streak) * (0.3 + 0.7 * shop) * amt * (0.55 + 0.45 * puddle) * (1.0 + ring);
 	}
 }
 """

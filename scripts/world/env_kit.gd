@@ -90,10 +90,12 @@ static func desert_sky() -> ImageTexture:
 	for y in h:
 		var v := float(y) / h
 		for x in w:
-			var c := Color(0.012, 0.018, 0.05).lerp(Color(0.16, 0.09, 0.12), exp(-pow((v - 0.5) / 0.13, 2.0)))
-			c += Color(0.55, 0.3, 0.12) * exp(-pow((v - 0.5) / 0.035, 2.0)) * 0.55
+			# deep violet night over a magenta and amber afterglow
+			var c := Color(0.02, 0.025, 0.09).lerp(Color(0.19, 0.07, 0.22), exp(-pow((v - 0.5) / 0.17, 2.0)))
+			c += Color(0.95, 0.42, 0.16) * exp(-pow((v - 0.5) / 0.04, 2.0)) * 0.6
+			c += Color(0.05, 0.16, 0.2) * exp(-pow((v - 0.3) / 0.12, 2.0)) * 0.5
 			if v >= 0.5:
-				c = Color(0.05, 0.035, 0.03)
+				c = Color(0.07, 0.04, 0.06)
 			if v < 0.42 and fposmod(sin(x * 91.7 + y * 47.3) * 9631.1, 1.0) > 0.9988:
 				c += Color(0.5, 0.5, 0.6) * (1.0 - v * 2.0)
 			img.set_pixel(x, y, c)

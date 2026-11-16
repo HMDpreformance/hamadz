@@ -67,7 +67,7 @@ Still to do in the city:
 | C3 | Highway, bridge, tunnel, promenade: still the old look | TODO |
 | C4 | Special blocks (gas station, parking, park, yard, plaza) still old | TODO |
 | C5 | Distant skyline shapes, billboards, landmark | TODO |
-| C6 | Marker text reflects in the road (should not) | TODO |
+| C6 | Marker text reflects in the road (should not) | FIXED |
 | C7 | Phone performance of the new city is NOT measured yet (cannot test on a phone from the cloud). Needs Hamad's FPS reading; presets will be tuned. | TODO |
 | C8 | Blocks are built on the main thread (15-100 ms each on a PC); needs to move to a worker thread to avoid hitches on a phone. | TODO |
 
@@ -113,9 +113,9 @@ shutter door on arrival and drives out through it on leaving.
 
 | # | Problem | Status |
 |---|---|---|
-| F1 | Engine sounds are synthesised tones, not real recordings | TODO: real engine loops per engine type (idle, low, mid, high, off-throttle), turbo, backfire |
+| F1 | Engine sounds are synthesised tones, not real recordings | BLOCKED: AI generators (Higgsfield SFX, ElevenLabs SFX) only give a low rumble or an unsteady clip, not a clean pitched loop. Needs real recordings (Hamad's shop) or stays synthesised |
 | F2 | Tyre, wind, collision sounds are thin | TODO |
-| F3 | Music: 8 generated tracks; needs a stronger, larger street soundtrack and better radio mixing | TODO |
+| F3 | Music: needs a stronger, larger street soundtrack and better radio mixing | DOING: 4 harder tracks added (trap, drum and bass, rock, techno), 15 on the radio now; nobody has listened to them yet |
 | F4 | Voice lines were never listened to, only measured | TODO: audition and redo weak ones |
 
 ## G. Game feel and UI (from the walkthrough)

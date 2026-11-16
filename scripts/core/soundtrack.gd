@@ -23,6 +23,11 @@ const TRACKS := [
 	{"id": "full_throttle", "title": "Full Throttle", "artist": "Gearhead", "radio": true, "station": "rock"},
 	{"id": "tyre_smoke", "title": "Tyre Smoke", "artist": "Driftking", "radio": true, "station": "rock"},
 	{"id": "getaway", "title": "Getaway", "artist": "The Pursuit", "radio": true, "station": "rock"},
+	# v1.0: harder street set (ElevenLabs Music v2.5 via Higgsfield, 2026-11-16)
+	{"id": "block_shaker", "title": "Block Shaker", "artist": "808 Mob", "radio": true, "station": "night"},
+	{"id": "wet_neon", "title": "Wet Neon", "artist": "Deep Sector", "radio": true, "station": "night"},
+	{"id": "overdrive", "title": "Overdrive", "artist": "Breakstate", "radio": true, "station": "rock"},
+	{"id": "burnout", "title": "Burnout", "artist": "Gearhead", "radio": true, "station": "rock"},
 	# older synth loop, off the radio
 	{"id": "main_theme", "title": "After Hours", "artist": "Syndicate Sound", "radio": false},
 ]

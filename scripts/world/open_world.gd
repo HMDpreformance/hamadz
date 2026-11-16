@@ -603,8 +603,9 @@ func _lamps_and_signals() -> void:
 			lx.append(Transform3D(bas, org))
 			for sg: float in [-1.0, 1.0]:
 				lan.append(Transform3D(Basis.IDENTITY, pole_p + Vector3(0, CURB + 8.6 * 0.9, 0) + along * sg * box.size.x * sc * 0.4))
-		var mi := _mm(lamp.mesh, lamp.mat, lx)
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		# one multimesh per neighbourhood, so lamps behind the camera or far away are not drawn
+		# (a single city-wide multimesh drew all ~470 lamps, 1.3 million triangles, every frame)
+		_mm_chunked(lamp.mesh, lamp.mat, lx, PITCH * 2.0, 300.0)      # thin poles: no moon shadow needed
 		var hm2 := SphereMesh.new()
 		hm2.radius = 0.32
 		hm2.height = 0.4
@@ -956,6 +957,24 @@ func _block_collider(n: Node3D, c: Vector3, sx: float, sz: float, off := Vector3
 	sb.add_child(cs)
 	sb.position = c + off + Vector3(0, h * 0.5, 0)
 	n.add_child(sb)
+
+
+## Like City._mm, but split into square cells so the renderer can cull them, and
+## hidden beyond `far` metres.
+func _mm_chunked(mesh: Mesh, mat: Material, xforms: Array, cell: float, far: float) -> Array:
+	var groups := {}
+	for xf: Transform3D in xforms:
+		var k := Vector2i(int(floor(xf.origin.x / cell)), int(floor(xf.origin.z / cell)))
+		if not groups.has(k):
+			groups[k] = []
+		groups[k].append(xf)
+	var out := []
+	for k in groups:
+		var mi := _mm(mesh, mat, groups[k])
+		mi.visibility_range_end = far
+		mi.visibility_range_end_margin = 20.0
+		out.append(mi)
+	return out
 
 
 func _local_mm(n: Node3D, mesh: Mesh, mat: Material, xforms: Array, colors := []) -> MultiMeshInstance3D:

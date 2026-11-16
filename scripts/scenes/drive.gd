@@ -2032,3 +2032,76 @@ func dev_nohud() -> void:
 			(c as CanvasLayer).visible = false
 	if Nav.get("_fps"):
 		Nav._fps.visible = false
+
+
+func dev_perf(tag := "") -> void:
+	print("PERF %s objects=%d prims=%d draws=%d loaded=%d" % [tag,
+		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME),
+		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME),
+		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
+		city.loaded_count()])
+
+
+func dev_tris() -> void:
+	var agg := {}
+	var stack: Array[Node] = [get_tree().root]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		for c in n.get_children():
+			stack.append(c)
+		var mesh: Mesh = null
+		var count := 1
+		if n is MeshInstance3D and (n as MeshInstance3D).is_visible_in_tree():
+			mesh = (n as MeshInstance3D).mesh
+		elif n is MultiMeshInstance3D and (n as MultiMeshInstance3D).is_visible_in_tree() and (n as MultiMeshInstance3D).multimesh:
+			mesh = (n as MultiMeshInstance3D).multimesh.mesh
+			count = (n as MultiMeshInstance3D).multimesh.instance_count
+			if (n as MultiMeshInstance3D).multimesh.visible_instance_count >= 0:
+				count = (n as MultiMeshInstance3D).multimesh.visible_instance_count
+		if mesh == null:
+			continue
+		var t := 0
+		for si in mesh.get_surface_count():
+			var il := 0
+			if mesh is ArrayMesh:
+				il = (mesh as ArrayMesh).surface_get_array_index_len(si)
+				if il == 0:
+					il = (mesh as ArrayMesh).surface_get_array_len(si)
+			else:
+				var arr := mesh.surface_get_arrays(si)
+				il = (arr[Mesh.ARRAY_INDEX] as PackedInt32Array).size() if arr[Mesh.ARRAY_INDEX] != null else (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+			t += il / 3
+		var path := str(n.get_path()).split("/")
+		var key := ""
+		for i in range(3, mini(path.size(), 6)):
+			var nm := path[i]
+			if nm.begins_with("Block_"):
+				nm = "Block"
+			if nm.begins_with("@"):
+				nm = nm.get_slice("@", 1)
+			key += "/" + nm
+		key += " [" + n.get_class().substr(0, 5) + (":" + mesh.resource_path.get_file() if mesh.resource_path != "" else "") + "]"
+		var e: Array = agg.get(key, [0, 0, 0])
+		e[0] += t * count
+		e[1] += count
+		e[2] += 1
+		agg[key] = e
+	var keys := agg.keys()
+	keys.sort_custom(func(a, b): return agg[a][0] > agg[b][0])
+	var total := 0
+	for k in keys:
+		total += agg[k][0]
+	print("TRIS total=%d" % total)
+	for i in mini(keys.size(), 30):
+		print("TRIS %9d inst=%d nodes=%d %s" % [agg[keys[i]][0], agg[keys[i]][1], agg[keys[i]][2], keys[i]])
+
+
+func dev_toggle(what: String) -> void:
+	match what:
+		"mirror":
+			if _mirror:
+				_mirror._vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		"shadow":
+			for n in get_children():
+				if n is DirectionalLight3D:
+					(n as DirectionalLight3D).shadow_enabled = false

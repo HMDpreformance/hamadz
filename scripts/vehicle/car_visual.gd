@@ -1337,7 +1337,8 @@ func _load_model(id: String) -> bool:
 		if not (_fit.has("front") and _fit.has("rear")):
 			_fit = {}
 	for mi in _meshes(model):
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		# the shadow comes from the light 6,000-triangle body below, not from all 80,000 triangles
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		for i in mi.mesh.get_surface_count():
 			var src: Material = mi.get_active_material(i)
 			var sm := ShaderMaterial.new()
@@ -1353,6 +1354,15 @@ func _load_model(id: String) -> bool:
 					sm.set_shader_parameter("cut_f" if k == "front" else "cut_r", Vector4(f.z, f.y, f.r * 1.03, f.x - CUT_DEPTH))
 			mi.set_surface_override_material(i, sm)
 			_paint_mats.append(sm)
+	var sl := _lod_instance()
+	if sl:
+		sl.name = "ShadowLod"
+		sl.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+		sl.visibility_range_end = 70.0
+		body.add_child(sl)
+	else:
+		for mi in _meshes(model):
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	# dark wheel wells behind the cut-outs, so the arches are not see-through
 	if not _fit.is_empty():
 		var wm := StandardMaterial3D.new()
@@ -1374,6 +1384,69 @@ func _load_model(id: String) -> bool:
 				well.position = Vector3(sx * (f.x - CUT_DEPTH - 0.02), f.y, f.z)
 				body.add_child(well)
 	return true
+
+
+## Traffic and rival cars: the full ~80,000-triangle body is only drawn up close.
+## Beyond `dist` metres a 6,000-triangle version of the same model, with the same
+## paint, takes over (w3d/cars_lod, built by tools/make_car_lod.py).
+func enable_lod(dist := 26.0) -> void:
+	if model == null or _paint_mats.is_empty():
+		return
+	var near: Array = []
+	for root in [body, _wheel_root]:
+		var stack: Array[Node] = [root]
+		while not stack.is_empty():
+			var n: Node = stack.pop_back()
+			for ch in n.get_children():
+				stack.append(ch)
+			if n is GeometryInstance3D and n.name != "ShadowLod":
+				near.append(n)
+	var mi := _lod_instance()
+	if mi == null:
+		return
+	for g: GeometryInstance3D in near:
+		g.visibility_range_end = dist
+		g.visibility_range_end_margin = 3.0
+	mi.name = "Lod"
+	var sm := ShaderMaterial.new()
+	sm.shader = _model_shader()
+	var src := mi.mesh.surface_get_material(0)
+	if src is BaseMaterial3D:
+		sm.set_shader_parameter("tex", (src as BaseMaterial3D).albedo_texture)
+	var first: ShaderMaterial = _paint_mats[0]
+	for u in ["paint", "key", "hue_tol", "paint_metal", "paint_rough", "coat", "tail_e"]:
+		var v = first.get_shader_parameter(u)
+		if v != null:
+			sm.set_shader_parameter(u, v)
+	mi.material_override = sm
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.visibility_range_begin = dist
+	mi.visibility_range_begin_margin = 3.0
+	body.add_child(mi)
+	_paint_mats.append(sm)
+
+
+## The 6,000-triangle version of this car's body, placed like the full model.
+func _lod_instance() -> MeshInstance3D:
+	var p := "res://w3d/cars_lod/%s.glb" % car_id
+	if not ResourceLoader.exists(p):
+		return null
+	if not _model_cache.has("lod_" + car_id):
+		var r: Node = (load(p) as PackedScene).instantiate()
+		_model_cache["lod_" + car_id] = ParkedCars._find(r, Transform3D.IDENTITY)
+		r.free()
+	var found: Array = _model_cache["lod_" + car_id]
+	if found.is_empty():
+		return null
+	var mesh: Mesh = found[0]
+	var xf: Transform3D = Transform3D(Basis(Vector3.UP, deg_to_rad(float(_model_cfg.get("yaw", 0.0)))), Vector3.ZERO) * (found[1] as Transform3D)
+	var box: AABB = xf * mesh.get_aabb()
+	var s: float = _L / maxf(box.size.z, 0.01)
+	var c := box.get_center()
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.transform = Transform3D(Basis.from_scale(Vector3.ONE * s), Vector3(-c.x * s, -box.position.y * s + float(_model_cfg.get("lift", 0.0)), -c.z * s)) * xf
+	return mi
 
 
 const CUT_DEPTH := 0.34     # how far in from the wheel face the baked wheel is removed

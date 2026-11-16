@@ -36,6 +36,7 @@ func setup(id: String, paint: int) -> void:
 	visual = CarVisual.new()
 	add_child(visual)
 	visual.setup(id, cfg)
+	visual.enable_lod()
 	var cs := CollisionShape3D.new()
 	var bs := BoxShape3D.new()
 	bs.size = Vector3(visual.half_width() * 2.0, 1.2, visual.length())

@@ -5,7 +5,9 @@ class_name MeshBatch
 
 var _gen := {}      # Material -> SurfaceTool (generated quads)
 var _imp := {}      # Material -> SurfaceTool (appended imported meshes)
+var _small := {}    # Material -> SurfaceTool (small props: near-only, not mirrored)
 var cast_shadows := false
+const SMALL_RANGE := 95.0
 
 
 func _tool(d: Dictionary, mat: Material) -> SurfaceTool:
@@ -28,8 +30,24 @@ func add_mesh(mesh: Mesh, xf: Transform3D, remap := {}) -> void:
 
 
 func add_prop(p: Dictionary, xf: Transform3D, remap := {}) -> void:
+	# street furniture (bins, hydrants, boxes...) goes into its own mesh that is only
+	# drawn near the camera and is left out of the road mirror
+	if not p.has("_small"):
+		var big := 0.0
+		for part in p.parts:
+			var bb: AABB = (part.xf as Transform3D) * (part.mesh as Mesh).get_aabb()
+			big = maxf(big, bb.size[bb.get_longest_axis_index()])
+		p["_small"] = big < 3.2
 	for part in p.parts:
-		add_mesh(part.mesh, xf * part.xf, remap)
+		if p["_small"]:
+			var mesh: Mesh = part.mesh
+			for si in mesh.get_surface_count():
+				var mat := mesh.surface_get_material(si)
+				if remap.has(mat):
+					mat = remap[mat]
+				_tool(_small, mat).append_from(mesh, si, xf * part.xf)
+		else:
+			add_mesh(part.mesh, xf * part.xf, remap)
 
 
 ## Quad a-b-c-d (counter-clockwise seen from the front), UVs in metres.
@@ -88,7 +106,7 @@ func box(mat: Material, xf: Transform3D, size: Vector3, faces := 31, uv_off := V
 
 
 func is_empty() -> bool:
-	return _gen.is_empty() and _imp.is_empty()
+	return _gen.is_empty() and _imp.is_empty() and _small.is_empty()
 
 
 func commit(parent: Node, shadows := false) -> MeshInstance3D:
@@ -109,6 +127,24 @@ func commit(parent: Node, shadows := false) -> MeshInstance3D:
 	mi.mesh = mesh
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(mi)
+	if not _small.is_empty():
+		var sm := ArrayMesh.new()
+		for mat in _small:
+			(_small[mat] as SurfaceTool).commit(sm)
+			sm.surface_set_material(sm.get_surface_count() - 1, mat)
+		var pi := MeshInstance3D.new()
+		pi.mesh = sm
+		pi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		pi.layers = PlanarReflection.LAYER_NO_REFLECT
+		pi.visibility_range_end = SMALL_RANGE
+		pi.visibility_range_end_margin = 10.0
+		parent.add_child(pi)
+		if OS.get_environment("AH_BENCH") != "":
+			var pt := 0
+			for si in sm.get_surface_count():
+				pt += sm.surface_get_array_index_len(si) / 3
+			print("  props tris=%d" % pt)
+		_small.clear()
 	_gen.clear()
 	_imp.clear()
 	return mi

@@ -179,7 +179,8 @@ func _ready() -> void:
 	get_tree().create_timer(5.0).timeout.connect(func(): Audio.dj_break(true))
 	GFX.changed.connect(func(): GFX.apply_environment(env))
 	_garage_prompt = UI.label("▲   ENTER  LSXMOTORSPORT   ▲", 24, UI.CYAN, true)
-	UI.place(_garage_prompt, Vector2(0.5, 1), Vector2(-260, -150), Vector2(520, 36))
+	UI.place(_garage_prompt, Vector2(0.5, 1), Vector2(-260, -250), Vector2(520, 36))
+	UI.outline(_garage_prompt)
 	_garage_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_garage_prompt.visible = false
 	_hud.add_child(_garage_prompt)
@@ -1411,7 +1412,7 @@ func _update_garage() -> void:
 	_garage_cool = maxf(_garage_cool - get_process_delta_time(), 0.0)
 	_garage_near = d < 9.5 and _garage.is_open() and car.input_enabled
 	if _garage_prompt:
-		_garage_prompt.visible = d < 30.0 and car.input_enabled and state == "roam"
+		_garage_prompt.visible = d < 30.0 and car.input_enabled and state == "roam" and _garage_cool <= 0.0
 		_garage_prompt.text = "DRIVE IN TO ENTER LSXMOTORSPORT" if not _garage_near else "ENTERING LSXMOTORSPORT"
 	# touch screens have no "accept" key: rolling onto the pad at walking pace is the way in
 	if _garage_near and state == "roam" and _garage_cool <= 0.0 and absf(car.speed) < 14.0:

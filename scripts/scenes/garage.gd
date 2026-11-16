@@ -3,7 +3,15 @@ extends Node3D
 ## Flow: pick a group -> slot tab -> option card (previews on the car) ->
 ## BUY / INSTALL commits it through Game (which saves automatically).
 
-var stage: PhotoStage
+var stage: LsxWorkshop
+var dyno: GarageDyno
+var dyno_on := false
+var mover: Node3D             # slides the car around the room (drive-in, dyno)
+var mmover: Node3D
+var turn_node: Node3D
+var mturn_node: Node3D
+var _rolling := false
+var _roll_last := Vector3.ZERO
 var cam: OrbitCamera
 var car: CarVisual
 var car_mirror: CarVisual
@@ -52,15 +60,21 @@ var _turn := 0.0
 
 
 func _ready() -> void:
-	# same photographic workshop as the Car Lot; the car turns, not the camera
-	stage = PhotoStage.new()
+	# the LSXmotorsport workshop, a real room; the car turns, not the camera
+	stage = LsxWorkshop.new()
 	add_child(stage)
 	stage.build()
 	env = stage.env
+	mover = Node3D.new()
+	add_child(mover)
 	var turn := Node3D.new()
-	add_child(turn)
+	mover.add_child(turn)
+	turn_node = turn
+	mmover = Node3D.new()
+	stage.mirror_root.add_child(mmover)
 	var mturn := Node3D.new()
-	stage.mirror_root.add_child(mturn)
+	mmover.add_child(mturn)
+	mturn_node = mturn
 	cam = OrbitCamera.new()
 	cam.turntable = [turn, mturn]
 	cam.min_pitch = 2.0
@@ -93,9 +107,79 @@ func _ready() -> void:
 	Audio.set_space("garage")
 	_sync_voice()
 	_sync_induction()
+	var screen := DynoScreen.new()
+	screen.size = Vector2(1024, 576)
+	stage.tv_view.add_child(screen)
+	screen.setup(view_car, preview)
+	dyno = GarageDyno.new()
+	dyno.g = self
+	dyno.stage = stage
+	dyno.screen = screen
+	add_child(dyno)
+	_roll_in()
+
+
+## Arrival: the shutter is up, the car rolls in from the street and parks on the
+## bay, the shutter comes down behind it.
+func _roll_in() -> void:
+	_rolling = true
+	ui.visible = false
+	cam.enabled = false
+	cam.snap("default")
+	var end_xf := cam.global_transform
+	cam.set_process(false)
+	var r0: float = turn_node.rotation.y
+	var from := Vector3(-LsxWorkshop.HX + 1.6, 0, LsxWorkshop.DOOR_Z)
+	for n in [mover, mmover]:
+		n.position = from
+		n.rotation.y = -PI * 0.5 - r0
+	_roll_last = from
+	stage.set_door(1.0)
+	car.set_lights(true)
+	var p0 := Vector3(5.2, 1.25, 7.4)
+	var a0 := Vector3(-5.5, 0.9, 2.2)
+	var a1 := Vector3(0, 0.95, 0)
+	cam.look_at_from_position(p0, a0, Vector3.UP)
+	Audio.sfx("whoosh", -8.0)
+	var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	for n in [mover, mmover]:
+		tw.tween_property(n, "position", Vector3.ZERO, 3.2).set_delay(0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(n, "rotation:y", 0.0, 2.4).set_delay(1.2)
+	tw.tween_method(func(k: float): stage.set_door(1.0 - k), 0.0, 1.0, 1.3).set_delay(2.4).set_trans(Tween.TRANS_SINE)
+	tw.tween_method(func(k: float):
+		cam.look_at_from_position(p0.lerp(end_xf.origin, k), a0.lerp(a1, k), Vector3.UP), 0.0, 1.0, 2.4).set_delay(1.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	await tw.finished
+	cam.set_process(true)
+	cam.enabled = true
+	ui.visible = true
+	_rolling = false
+
+
+## Leaving: the shutter rolls up and the car drives out to the street.
+func _roll_out(then: Callable) -> void:
+	if _rolling:
+		return
+	_rolling = true
+	ui.visible = false
+	cam.enabled = false
+	cam.set_process(false)
+	_engine_start()
+	var r0: float = turn_node.rotation.y
+	var to := Vector3(-LsxWorkshop.HX + 0.5, 0, LsxWorkshop.DOOR_Z)
+	_roll_last = mover.position
+	var target := wrapf(PI * 0.5 - r0, -PI, PI)
+	var tw := create_tween().set_parallel(true)
+	tw.tween_method(func(k: float): stage.set_door(k), 0.0, 1.0, 0.9).set_trans(Tween.TRANS_SINE)
+	for n in [mover, mmover]:
+		tw.tween_property(n, "rotation:y", target, 1.3).set_delay(0.3).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tw.tween_property(n, "position", to, 2.0).set_delay(0.6).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	await tw.finished
+	then.call()
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if dyno_on or _rolling:
+		return
 	cam.handle_input(event)
 	if home.visible and home.handle_key(event):
 		return
@@ -105,7 +189,14 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	_turn += delta
-	if _voice:
+	if _rolling:
+		# wheels turn with the distance rolled
+		var d := mover.position.distance_to(_roll_last)
+		_roll_last = mover.position
+		for cv in [car, car_mirror]:
+			if cv:
+				cv.spin_wheels(d / maxf(car.wheel_radius, 0.2))
+	if _voice and not dyno_on:
 		_engine_process(delta)
 
 
@@ -783,7 +874,7 @@ func _on_drive() -> void:
 		return
 	if view_car != Game.current_car():
 		Game.select_car(view_car)
-	Nav.goto("drive", {"from": "garage"}, "HITTING THE STREETS")
+	_roll_out(func(): Nav.goto("drive", {"from": "garage"}, "HITTING THE STREETS"))
 
 
 func _on_back() -> void:
@@ -792,7 +883,7 @@ func _on_back() -> void:
 		return
 	# if we drove in from the streets, roll back out; otherwise return to the menu
 	if Nav.args.get("from", "") == "drive":
-		Nav.goto("drive", {"from": "garage"}, "LEAVING LSXMOTORSPORT")
+		_roll_out(func(): Nav.goto("drive", {"from": "garage"}, "LEAVING LSXMOTORSPORT"))
 	else:
 		Nav.goto("menu")
 
@@ -815,10 +906,23 @@ func _on_home(id: String) -> void:
 
 
 func _open_dyno() -> void:
-	var dp := DynoPanel.new()
-	ui.add_child(dp)
-	dp.closed.connect(func(): dp.queue_free())
-	dp.setup(view_car, Game.config(view_car))
+	dyno.start()
+
+
+func dev_dyno() -> void:
+	dyno.start()
+
+
+func dev_tv() -> void:
+	dyno._toggle_zoom()
+
+
+func dev_done() -> void:
+	dyno.finish()
+
+
+func dev_out() -> void:
+	_on_drive()
 
 
 func dev_home(id: String) -> void:

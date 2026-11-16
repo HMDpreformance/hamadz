@@ -24,7 +24,15 @@ func build() -> void:
 	var dz := D * face
 	entry_pos = global_position + Vector3(0, 0, (D + 6.0) * face)
 
-	var wall := _mat(Color(0.12, 0.125, 0.14), 0.85)
+	# cream corrugated steel over a black band, like the real LSX workshop
+	var wall := W3D.pbr("corrugated_iron", 2.4, Color(1.0, 0.95, 0.82), 0.95).duplicate() as StandardMaterial3D
+	wall.uv1_triplanar = true
+	wall.uv1_world_triplanar = true
+	wall.uv1_scale = Vector3(1.0 / 2.4, 1.0 / 2.4, 1.0 / 2.4)
+	var band := _mat(Color(0.03, 0.03, 0.035), 0.7)
+	EnvKit.box(self, Vector3(W * 2 + 0.5, 1.25, 0.5), Vector3(0, 0.625, -dz), band)
+	EnvKit.box(self, Vector3(0.5, 1.25, D * 2 + 0.1), Vector3(-W, 0.625, 0), band)
+	EnvKit.box(self, Vector3(0.5, 1.25, D * 2 + 0.1), Vector3(W, 0.625, 0), band)
 	var trim := EnvKit.solid(Color(0.05, 0.05, 0.06), 0.5, 0.4)
 	var steel := EnvKit.solid(Color(0.3, 0.31, 0.34), 0.35, 0.85)
 
@@ -36,10 +44,12 @@ func build() -> void:
 	# front wall: lintel above the door + narrow jambs beside it
 	EnvKit.box(self, Vector3(W * 2, HGT - DOOR_H, 0.4), Vector3(0, DOOR_H + (HGT - DOOR_H) * 0.5, dz), wall)
 	var jamb := (W * 2 - DOOR_W) * 0.5
+	EnvKit.box(self, Vector3(jamb + 0.05, 1.25, 0.5), Vector3(-(DOOR_W + jamb) * 0.5, 0.625, dz), band)
+	EnvKit.box(self, Vector3(jamb + 0.05, 1.25, 0.5), Vector3((DOOR_W + jamb) * 0.5, 0.625, dz), band)
 	EnvKit.box(self, Vector3(jamb, DOOR_H, 0.4), Vector3(-(DOOR_W + jamb) * 0.5, DOOR_H * 0.5, dz), wall)
 	EnvKit.box(self, Vector3(jamb, DOOR_H, 0.4), Vector3((DOOR_W + jamb) * 0.5, DOOR_H * 0.5, dz), wall)
 	# hazard frame around the opening
-	var frame := EnvKit.solid(Color(0.95, 0.7, 0.05), 0.5)
+	var frame := EnvKit.solid(Color(0.03, 0.03, 0.035), 0.5, 0.4)
 	EnvKit.box(self, Vector3(0.28, DOOR_H + 0.3, 0.5), Vector3(-DOOR_W * 0.5 - 0.1, DOOR_H * 0.5, dz + 0.05 * face), frame)
 	EnvKit.box(self, Vector3(0.28, DOOR_H + 0.3, 0.5), Vector3(DOOR_W * 0.5 + 0.1, DOOR_H * 0.5, dz + 0.05 * face), frame)
 	EnvKit.box(self, Vector3(DOOR_W + 0.6, 0.3, 0.5), Vector3(0, DOOR_H + 0.15, dz + 0.05 * face), frame)
@@ -68,33 +78,24 @@ func _build_door(dz: float) -> void:
 
 
 func _build_sign(dz: float) -> void:
-	# backing board over the door
-	EnvKit.box(self, Vector3(W * 1.7, 1.15, 0.12), Vector3(0, DOOR_H + 0.95, dz + 0.12 * face), EnvKit.solid(Color(0.03, 0.03, 0.04), 0.4, 0.5))
-	var l := Label3D.new()
-	l.text = "LSXMOTORSPORT"
-	l.font = UI.title_font()
-	l.font_size = 128
-	l.pixel_size = 1.02 / 128.0
-	l.modulate = Color(0.4, 2.6, 3.4)      # cyan neon, HDR for bloom
-	l.outline_size = 0
-	l.shaded = false
-	l.position = Vector3(0, DOOR_H + 0.95, dz + 0.2 * face)
-	l.rotation.y = 0.0 if face > 0.0 else PI
-	l.alpha_cut = Label3D.ALPHA_CUT_DISCARD
-	add_child(l)
-	var sub := Label3D.new()
-	sub.text = "TUNING  •  DYNO  •  CAR SALES"
-	sub.font = UI.body_font(true)
-	sub.font_size = 96
-	sub.pixel_size = 0.3 / 96.0
-	sub.modulate = Color(2.4, 0.6, 1.4)
-	sub.shaded = false
-	sub.position = Vector3(0, DOOR_H + 0.42, dz + 0.2 * face)
-	sub.rotation.y = 0.0 if face > 0.0 else PI
-	sub.alpha_cut = Label3D.ALPHA_CUT_DISCARD
-	add_child(sub)
+	# backing board over the door with the real LSXmotorsport logo, lit
+	EnvKit.box(self, Vector3(7.4, 2.9, 0.16), Vector3(0, DOOR_H + 1.85, dz + 0.12 * face), EnvKit.solid(Color(0.03, 0.03, 0.04), 0.4, 0.5))
+	var logo := MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(7.0, 7.0 * 384.0 / 1024.0)
+	logo.mesh = qm
+	var lm := StandardMaterial3D.new()
+	lm.albedo_texture = load("res://w3d/gen/lsx_sign.jpg")
+	lm.emission_enabled = true
+	lm.emission_texture = lm.albedo_texture
+	lm.emission_energy_multiplier = 1.6
+	lm.roughness = 0.5
+	logo.material_override = lm
+	logo.position = Vector3(0, DOOR_H + 1.85, dz + 0.22 * face)
+	logo.rotation.y = 0.0 if face > 0.0 else PI
+	add_child(logo)
 	# neon tube underline
-	EnvKit.box(self, Vector3(W * 1.6, 0.05, 0.05), Vector3(0, DOOR_H + 0.28, dz + 0.22 * face), EnvKit.emissive(Color(1.0, 0.15, 0.55), 3.0))
+	EnvKit.box(self, Vector3(W * 1.9, 0.06, 0.06), Vector3(0, DOOR_H + 0.3, dz + 0.26 * face), EnvKit.emissive(Color(1.0, 0.1, 0.08), 3.0))
 
 
 func _interior_glimpse() -> void:
@@ -110,19 +111,20 @@ func _interior_glimpse() -> void:
 	back.omni_range = 11.0
 	add_child(back)
 	# workbench strip
-	EnvKit.box(self, Vector3(0.05, 1.4, D * 1.4), Vector3(-W + 0.1, 2.3, 0.0), EnvKit.emissive(Color(0.1, 0.8, 1.0), 2.0))
+	EnvKit.box(self, Vector3(0.05, 1.4, D * 1.4), Vector3(-W + 0.1, 2.3, 0.0), EnvKit.emissive(Color(0.9, 0.95, 1.0), 2.0))
 
 
 func _forecourt() -> void:
 	# glowing entry pad on the ground in front of the door
 	_pad = MeshInstance3D.new()
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 3.4
-	cyl.bottom_radius = 3.4
-	cyl.height = 0.04
-	cyl.radial_segments = 40
+	var cyl := TorusMesh.new()
+	cyl.inner_radius = 3.0
+	cyl.outer_radius = 3.25
+	cyl.rings = 48
+	cyl.ring_segments = 4
 	_pad.mesh = cyl
-	_pad_mat = EnvKit.emissive(Color(0.1, 1.0, 0.4), 1.4)
+	_pad.scale = Vector3(1, 0.06, 1)
+	_pad_mat = EnvKit.emissive(Color(1.0, 0.12, 0.1), 1.4)
 	_pad.material_override = _pad_mat
 	_pad.position = to_local(entry_pos) + Vector3(0, 0.05, 0)
 	add_child(_pad)
@@ -137,17 +139,17 @@ func _lights(dz: float) -> void:
 	for sx in [-W * 0.6, W * 0.6]:
 		var o := OmniLight3D.new()
 		o.position = Vector3(sx, DOOR_H + 1.0, dz + 1.2 * face)
-		o.light_color = Color(0.5, 0.9, 1.0)
-		o.light_energy = 2.0
-		o.omni_range = 9.0
+		o.light_color = Color(0.95, 0.97, 1.0)
+		o.light_energy = 3.0
+		o.omni_range = 12.0
 		add_child(o)
 		_sign_lights.append(o)
 	var spot := SpotLight3D.new()
 	spot.position = Vector3(0, DOOR_H + 1.6, dz + 3.0 * face)
 	spot.rotation_degrees = Vector3(-60, 0.0 if face > 0 else 180.0, 0)
-	spot.spot_range = 16.0
-	spot.spot_angle = 48.0
-	spot.light_energy = 3.0
+	spot.spot_range = 24.0
+	spot.spot_angle = 62.0
+	spot.light_energy = 6.0
 	spot.light_color = Color(1.0, 0.95, 0.85)
 	spot.shadow_enabled = false
 	add_child(spot)

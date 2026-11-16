@@ -1375,7 +1375,12 @@ func _fill_yard(n: Node3D, c: Vector3) -> void:
 ## drive.gd handles entering the tune/dyno interior.
 func _fill_garage(n: Node3D, c: Vector3) -> void:
 	# paved forecourt with oil-stained concrete + yellow bay lines
-	EnvKit.box(n, Vector3(BLOCK - 2.0, 0.03, BLOCK - 2.0), c + Vector3(0, CURB + 0.02, 0), _mat("garage_lot", func(): return EnvKit.solid(Color(0.1, 0.1, 0.11), 0.5)))
+	EnvKit.box(n, Vector3(BLOCK - 2.0, 0.03, BLOCK - 2.0), c + Vector3(0, CURB + 0.02, 0), _mat("garage_lot2", func():
+		var m := W3D.pbr("hangar_concrete_floor", 4.0, Color(0.62, 0.62, 0.64), 0.6).duplicate() as StandardMaterial3D
+		m.uv1_triplanar = true
+		m.uv1_world_triplanar = true
+		m.uv1_scale = Vector3(0.25, 0.25, 0.25)
+		return m))
 	var yellow := EnvKit.solid(Color(0.95, 0.82, 0.08), 0.6)
 	for sx in [-7.0, 7.0]:
 		EnvKit.box(n, Vector3(0.2, 0.02, 14.0), c + Vector3(sx, CURB + 0.04, 10.0), yellow)

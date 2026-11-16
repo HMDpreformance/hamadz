@@ -24,7 +24,7 @@ screenshots or video of the change and reacted.
 | A5 | Parked cars and traffic are low-poly boxes. | TODO |
 | A6 | Street lamps: a few thick black posts, light pools were flat orange decals. | DOING: lamp light is now computed on the road; lamp model still old |
 | A7 | Far buildings are plain blue boxes. | DOING: now skinned with a lit office facade; needs better silhouettes |
-| A8 | The garage interior is a flat panorama photo behind the car, not a room. | TODO (see D) |
+| A8 | The garage interior is a flat panorama photo behind the car, not a room. | FIXED: real 3D workshop room (see D) |
 | A9 | The game runs on Godot's Mobile renderer, which has no screen-space reflections or SSAO. Earlier "SSR" work did nothing on the phone. | FIXED: reflections now come from a mirror camera that works on mobile |
 
 ## B. Bugs Hamad named
@@ -33,7 +33,7 @@ screenshots or video of the change and reacted.
 |---|---|---|---|
 | B1 | Garage entrance does not work | Entering needed the keyboard Enter key. The "ENTER LSXMOTORSPORT" text was only a label, so on a phone there was no way in. | FIXED: drive onto the pad at low speed and it takes you in. Verified in a headless run; must be re-verified in the exported APK. |
 | B2 | Car intro shows the front end | Intro shot 1 filmed headlights coming at the camera, the hero shot orbited the nose, the race-start camera started in front, and the generated intro film is nose-on. | FIXED: all three in-engine cameras now sit behind the car (tail lights). The old nose-on film is switched off until a rear-view film is made (Genjutsu). |
-| B3 | His LSX logo and workshop/dyno photos were not followed | Exterior sign is cyan neon text, not his logo; interior is a generic panorama. | TODO (see D) |
+| B3 | His LSX logo and workshop/dyno photos were not followed | Exterior sign is cyan neon text, not his logo; interior is a generic panorama. | DOING: logo on the building, real workshop room (see D) |
 
 ## C. City, streets and buildings (what the new version does)
 
@@ -76,19 +76,30 @@ Still to do in the city:
 Reference: `/mnt/project-files/after-hours-demo/lsx-reference/` (logo,
 workshop, dyno bay).
 
-| Photo shows | Game has now | Status |
+First 3D version built 2026-11-16 (`scripts/world/lsx_workshop.gd`,
+`scripts/scenes/garage_dyno.gd`, `scripts/ui/dyno_screen.gd`), shown to Hamad,
+waiting for his reaction.
+
+| Photo shows | Game now | Status |
 |---|---|---|
-| Chrome "LS" + red brushed "X" + MOTORSPORT logo | Cyan neon text on the building; logo only on a menu | TODO: real logo on the building, wall banner and loading screen |
-| Cream corrugated metal walls with a black lower band | Flat generic garage panorama | TODO: real room, corrugated-steel texture |
-| White drop ceiling with square LED panels | none | TODO (ambientCG office ceiling texture downloaded) |
-| Grey polished concrete floor, yellow bay lines | reflective fake floor | TODO |
-| Red scissor lift, red tool chests, oil shelves, wheels and hoods on the wall, racing banners, cooler fan | none in 3D | TODO (tool chest, cart, tyres, compressor props downloaded) |
-| Dyno: car strapped on rollers in the floor, extraction fan, dyno banner | Dyno is a menu panel with numbers | TODO |
+| Chrome "LS" + red brushed "X" + MOTORSPORT logo | Real logo on the building sign, wall banners and dyno TV | DONE (loading screen still TODO) |
+| Cream corrugated metal walls with a black lower band, black columns | Same, real corrugated-steel texture | DONE |
+| White drop ceiling with square LED panels | Same | DONE |
+| Grey concrete floor, yellow bay lines | Same | DONE |
+| Red scissor lift, red tool chests, oil shelf, hoods on the wall, banners, cooler | All in 3D (simple shapes plus scanned props). Wheels on the wall, cables and clutter still missing | DOING |
+| Other customer cars in the bays (Corvettes) | none | TODO |
+| Dyno: car strapped on rollers in the floor, fan, dyno banner | Car on rollers with straps, orange fan, banner, wall TV | DONE (first version) |
+| Brand banners (Weld, Mickey Thompson, Summit, Mustang Dyno) | Made-up brands plus LSX banners (real brand logos are not ours to use) | DONE |
 
 Dyno behaviour Hamad asked for: the car sits on the rollers, the run starts,
 the wheels spin and the engine sound rises, and only then the graph appears.
 The graph is on a **TV on the wall**; tapping the TV moves the camera close to
 it. Enter and exit animations for the garage.
+
+All of that works in the editor build: fade to the bay, engine start, 6.5 s
+pull with rising engine note, driven wheels and rollers spinning, live graph
+on the TV, tap the TV to zoom, RUN AGAIN / DONE. The car rolls in through a
+shutter door on arrival and drives out through it on leaving.
 
 ## E. Cars
 

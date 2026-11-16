@@ -68,6 +68,11 @@ namespace HMD
                 lines.Box(new Vector3(s * (DoorW * 0.5f - 0.4f), 0.05f, -5.5f), new Vector3(0.18f, 0.02f, 11f), 1f, true, false);
             MeshBuilder.Spawn("GuideLines", lines.Build("guides"), new[] { yellow }, transform, false, false);
 
+            // driveway ramp over the kerb, so the car rolls up onto the forecourt smoothly
+            float kerb = 0.19f, rampLen = 2.2f, edge = -City.Walk;
+            var ramp = MeshBuilder.Cube("Ramp", transform, new Vector3(0, kerb * 0.5f - 0.05f, edge - rampLen * 0.5f + 0.3f), new Vector3(DoorW + 3f, 0.1f, rampLen), apron, true);
+            ramp.transform.localRotation = Quaternion.Euler(-Mathf.Atan2(kerb, rampLen) * Mathf.Rad2Deg, 0, 0);
+
             // interior darkness behind the door so the opening looks deep
             MeshBuilder.Cube("Inside", transform, new Vector3(0, DoorH * 0.5f, 3.2f), new Vector3(DoorW, DoorH, 0.1f), Res.Mat(new Color(0.02f, 0.02f, 0.02f), 0.1f));
             var warm = new GameObject("InsideLight").AddComponent<Light>();

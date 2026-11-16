@@ -75,8 +75,8 @@ namespace HMD
         {
             // floor
             var f = new MeshBuilder();
-            f.QuadUV(new Vector3(-W / 2, 0, 0), new Vector3(-W / 2, 0, D), new Vector3(W / 2, 0, D), new Vector3(W / 2, 0, 0), Vector3.up,
-                     new Vector2(0, 0), new Vector2(0, D), new Vector2(W, D), new Vector2(W, 0));
+            f.QuadUV(new Vector3(-W / 2, 0, 0), new Vector3(W / 2, 0, 0), new Vector3(W / 2, 0, D), new Vector3(-W / 2, 0, D), Vector3.up,
+                     new Vector2(0, 0), new Vector2(W, 0), new Vector2(W, D), new Vector2(0, D));
             var fg = MeshBuilder.Spawn("Floor", f.Build("floor"), new[] { floor }, transform, false, false);
             fg.AddComponent<BoxCollider>().center = new Vector3(0, -0.5f, D / 2);
             fg.GetComponent<BoxCollider>().size = new Vector3(W, 1, D);
@@ -110,7 +110,7 @@ namespace HMD
                     bool panel = !dyno && ix % 3 == 1 && iz % 3 == 1;
                     Vector3 p0 = new Vector3(x + 0.02f, H, z + 0.02f), p1 = new Vector3(x + tile - 0.02f, H, z + tile - 0.02f);
                     // facing down
-                    b.Sub(panel ? 1 : dyno ? 2 : 0).QuadUV(new Vector3(p0.x, H, p0.z), new Vector3(p1.x, H, p0.z), new Vector3(p1.x, H, p1.z), new Vector3(p0.x, H, p1.z), Vector3.down,
+                    b.Sub(panel ? 1 : dyno ? 2 : 0).QuadUV(new Vector3(p0.x, H, p0.z), new Vector3(p0.x, H, p1.z), new Vector3(p1.x, H, p1.z), new Vector3(p1.x, H, p0.z), Vector3.down,
                         Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
                 }
             var darkCeil = Res.Mat(new Color(0.06f, 0.06f, 0.065f), 0.2f);

@@ -19,7 +19,8 @@ namespace HMD
             public float pos;         // position along the road
             public float speed, cruise;
             public int lastNode = int.MinValue;
-            public float dir => lane < 2 ? -1f : 1f;
+            // drive on the right (Dubai): on a Z road the +X side goes +Z; on an X road the -Z side goes +X
+            public float dir => (lane < 2 ? -1f : 1f) * (axis == 0 ? 1f : -1f);
         }
 
         public int count = 16;
@@ -121,8 +122,7 @@ namespace HMD
                         // turn: new axis, the old road becomes our position, the crossing road becomes our road
                         float oldLine = City.RoadLine(t.road) + City.LaneOffset(t.lane);
                         int newRoad = node;
-                        int newDirSign = rng.Next(2) == 0 ? -1 : 1;
-                        int newLane = newDirSign < 0 ? rng.Next(2) : 2 + rng.Next(2);
+                        int newLane = rng.Next(4);
                         t.axis = 1 - t.axis;
                         t.road = newRoad;
                         t.lane = newLane;

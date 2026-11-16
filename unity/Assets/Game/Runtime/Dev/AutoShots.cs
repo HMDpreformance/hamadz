@@ -18,6 +18,8 @@ namespace HMD
             dir = Path.Combine(Path.GetDirectoryName(Application.dataPath) ?? ".", "Shots");
             Directory.CreateDirectory(dir);
             var g = Game.I;
+            var pi = g.car.GetComponent<PlayerInput>();
+            if (pi) pi.enabled = false;   // the script drives
             yield return new WaitForSeconds(1.2f);
             yield return Shot("01_intro_rear");
             yield return new WaitForSeconds(5.0f);

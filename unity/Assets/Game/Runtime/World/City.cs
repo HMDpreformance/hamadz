@@ -135,7 +135,7 @@ namespace HMD
             var a = new Vector3(x0, 0, x0); var bb = new Vector3(x1, 0, x0);
             var c = new Vector3(x1, 0, x1); var d = new Vector3(x0, 0, x1);
             // seen from above: a->b->c->d is counter-clockwise when looking down?  Use explicit UVs.
-            b.QuadUV(a, d, c, bb, Vector3.up, new Vector2(x0, x0), new Vector2(x0, x1), new Vector2(x1, x1), new Vector2(x1, x0));
+            b.QuadUV(a, bb, c, d, Vector3.up, new Vector2(x0, x0), new Vector2(x1, x0), new Vector2(x1, x1), new Vector2(x0, x1));
             var go = MeshBuilder.Spawn("Asphalt", b.Build("asphalt"), new[] { asphalt }, transform, false, false);
             go.GetComponent<MeshRenderer>().receiveShadows = true;
             var col = go.AddComponent<BoxCollider>();
@@ -190,10 +190,8 @@ namespace HMD
             float inner = h - Walk;
             if (garage)
             {
-                // the LSX garage takes the south half; north half is a normal row
+                // the LSX garage and its yard take the south part; only the north row is built
                 BuildRow(b, c, inner, 1, i, j);
-                BuildRow(b, c, inner, 2, i, j);
-                BuildRow(b, c, inner, 3, i, j);
             }
             else
             {

@@ -18,8 +18,8 @@ const HW_SOUTH := 150.0       # the south side swings out over the water
 const HW_R := 80.0            # corner radius
 const HW_HALF := 12.0         # half width of the carriageway
 const HW_RISE := 9.0          # bridge deck height
-const LOAD_R := 300.0
-const UNLOAD_R := 380.0
+var LOAD_R := 215.0
+var UNLOAD_R := 270.0
 const EXIT_N := [2, 6, 10]    # grid roads with highway junctions (north side)
 const EXIT_WE := [1, 4]       # ... west and east sides
 const TUNNEL := [60.0, 262.0] # x range of the north tunnel
@@ -99,6 +99,9 @@ func district_name(p: Vector3) -> String:
 
 
 func build() -> void:
+	if OS.get_environment("AH_LOAD_R") != "":
+		LOAD_R = float(OS.get_environment("AH_LOAD_R"))
+		UNLOAD_R = LOAD_R + 50.0
 	_rng.seed = seed_v
 	x0 = road_x(0)
 	x1 = road_x(NX)
@@ -184,22 +187,13 @@ func _mat(key: String, make: Callable) -> Material:
 
 # ---------------------------------------------------------------- ground + water
 func _world_ground() -> void:
-	var m := ShaderMaterial.new()
-	m.shader = _ground_shader()
-	m.set_shader_parameter("pitch", PITCH)
-	m.set_shader_parameter("half_road", ROAD * 0.5)
-	m.set_shader_parameter("offset", Vector2(road_x(0), road_z(0)))
-	m.set_shader_parameter("extent", Vector2((x1 - x0) * 0.5, (z1 - z0) * 0.5))
-	m.set_shader_parameter("outside", Color(0.2, 0.15, 0.1))
-	m.set_shader_parameter("outside_rough", 0.95)
-	m.set_shader_parameter("shop_rect", Vector4(road_x(4) - ROAD, road_x(9) + ROAD, z0 - ROAD, z1 + ROAD))
-	m.set_shader_parameter("noise_tex", EnvKit.noise_tex(3, 0.03))
-	m.set_shader_parameter("asphalt_tex", load("res://textures/asphalt.jpg"))
+	var m := StreetSurface.road(Vector2(road_x(0), road_z(0)), Vector2((x1 - x0) * 0.5, (z1 - z0) * 0.5))
 	var mi := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(hw_h.x * 2 + 240, (water_z - (z0 - HW_OFF - 120.0)))
 	mi.mesh = pm
 	mi.material_override = m
+	mi.layers = PlanarReflection.LAYER_NO_REFLECT
 	mi.position = Vector3(0, 0, (water_z + (z0 - HW_OFF - 120.0)) * 0.5)
 	add_child(mi)
 
@@ -746,7 +740,7 @@ func _lod_blocks() -> void:
 			_lod_mm.set_instance_transform(bi * NZ + bj, xf)
 	var mi := MultiMeshInstance3D.new()
 	mi.multimesh = _lod_mm
-	mi.material_override = SkylineKit.facade("office")
+	mi.material_override = W3D.facade("facade014", Vector2(1.0 / 6.0, 1.0 / 6.0), 2.0)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	# sidewalks for the whole grid are one multimesh too
@@ -756,14 +750,10 @@ func _lod_blocks() -> void:
 			slabs.append(Transform3D(Basis.IDENTITY, block_center(Vector2i(bi, bj)) + Vector3(0, CURB * 0.5, 0)))
 	var swm := BoxMesh.new()
 	swm.size = Vector3(BLOCK, CURB, BLOCK)
-	var sidewalk := StandardMaterial3D.new()
-	sidewalk.albedo_color = Color(0.55, 0.55, 0.56)
-	sidewalk.albedo_texture = load("res://textures/city_paving.jpg")
-	sidewalk.uv1_triplanar = true
-	sidewalk.uv1_scale = Vector3(0.22, 0.22, 0.22)
-	sidewalk.roughness = 0.35
-	sidewalk.metallic = 0.15
-	_mm(swm, sidewalk, slabs)
+	var sidewalk := StreetSurface.walk(Vector2(road_x(0), road_z(0)), Vector2((x1 - x0) * 0.5, (z1 - z0) * 0.5))
+	var swi := _mm(swm, sidewalk, slabs)
+	swi.layers = PlanarReflection.LAYER_NO_REFLECT
+
 
 
 func _far_shore() -> void:
@@ -926,15 +916,10 @@ func _build_block(b: Vector2i) -> void:
 	build_parent = n
 	var c := block_center(b)
 	var lamps_before := lamp_positions.size()
+	var _t0 := Time.get_ticks_msec()
 	match district(b):
-		"downtown":
-			_fill_downtown(c, b)
-		"beach":
-			_fill_beach(c, b)
-		"residential":
-			_fill_residential(n, c, b)
-		"industrial":
-			_fill_industrial(n, c)
+		"downtown", "beach", "residential", "industrial":
+			_fill_w3d(n, c, b, district(b))
 		"plaza":
 			_fill_plaza(n, c)
 		"garage":
@@ -951,9 +936,12 @@ func _build_block(b: Vector2i) -> void:
 			_fill_needle(n, c)
 	if not district(b) in ["industrial", "yard", "park", "garage"]:
 		_street_palms(n, c)
+	_kerbs(n, c)
 	if district(b) in ["downtown", "beach", "residential"]:
 		_pedestrians(n, c, 5 if district(b) == "residential" else 9)
 	build_parent = null
+	if OS.get_environment("AH_BENCH") != "":
+		print("BLOCK %s %s %d ms" % [b, district(b), Time.get_ticks_msec() - _t0])
 	if _lamped.has(b):
 		lamp_positions.resize(lamps_before)      # this block's lights were registered on an earlier visit
 	_lamped[b] = true
@@ -992,7 +980,7 @@ func _tower_h(b: Vector2i, r: RandomNumberGenerator) -> float:
 	return 45.0 + clampf(central, 0.0, 1.0) * r.randf_range(60.0, 150.0)
 
 
-func _fill_downtown(c: Vector3, b: Vector2i) -> void:
+func _old_fill_downtown(c: Vector3, b: Vector2i) -> void:
 	## Glass towers on a lit podium: one landmark tower or a cluster of two or three.
 	var r := RandomNumberGenerator.new()
 	r.seed = b.x * 977 + b.y * 131 + seed_v
@@ -1035,7 +1023,7 @@ func _fill_downtown(c: Vector3, b: Vector2i) -> void:
 		_parked(build_parent, c, 2)
 
 
-func _fill_beach(c: Vector3, b: Vector2i) -> void:
+func _old_fill_beach(c: Vector3, b: Vector2i) -> void:
 	## Marina towers facing the water: slim, curved residential glass.
 	var r := RandomNumberGenerator.new()
 	r.seed = b.x * 311 + seed_v
@@ -1228,12 +1216,12 @@ func _street_palms(n: Node3D, c: Vector3) -> void:
 	for k in 5:
 		var t := -BLOCK * 0.5 + 8.0 + k * 12.0
 		for v in [Vector3(t, CURB, e), Vector3(t, CURB, -e), Vector3(e, CURB, t), Vector3(-e, CURB, t)]:
-			var sc := 0.85 + fmod(absf(v.x * 13.1 + v.z * 7.7 + c.x), 0.35)
+			var sc := 0.8 + fmod(absf(v.x * 13.1 + v.z * 7.7 + c.x), 0.3)
 			xf.append(Transform3D(Basis(Vector3.UP, fmod(c.x + v.x * 3.0 + v.z, TAU)).scaled(Vector3.ONE * sc), c + v))
-	_local_mm(n, SkylineKit.palm_mesh(), SkylineKit.palm_material(), xf)
+	_local_mm(n, StreetKit.palm(), null, xf)
 
 
-func _fill_residential(n: Node3D, c: Vector3, b: Vector2i) -> void:
+func _old_fill_residential(n: Node3D, c: Vector3, b: Vector2i) -> void:
 	## Two rows of houses back to back, lawns, trees, a few porch lights.
 	var walls := []
 	var wall_cols := []
@@ -1300,10 +1288,10 @@ func _trees(n: Node3D, trunks: Array, _crowns: Array) -> void:
 	var xf := []
 	for t in trunks:
 		xf.append(Transform3D(Basis(Vector3.UP, fmod(t.origin.x * 1.7, TAU)), Vector3(t.origin.x, CURB, t.origin.z)))
-	_local_mm(n, SkylineKit.palm_mesh(), SkylineKit.palm_material(), xf)
+	_local_mm(n, StreetKit.palm(), null, xf)
 
 
-func _fill_industrial(n: Node3D, c: Vector3) -> void:
+func _old_fill_industrial(n: Node3D, c: Vector3) -> void:
 	## Warehouses with loading doors and sodium wall lights.
 	var lot := BLOCK - 10.0
 	var steel := _mat("steel", func():
@@ -1632,3 +1620,135 @@ void fragment() {
 	mi.custom_aabb = AABB(Vector3(-34, 0, -34), Vector3(68, 3, 68))
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	n.add_child(mi)
+
+
+# ====================================================================== real 3D blocks (W3D)
+const SHOP_NAMES := [["CAFE", "مقهى"], ["SHAWARMA", "شاورما"], ["GOLD SOUK", "سوق الذهب"], ["KARAK", "كرك"], ["PERFUMES", "عطور"],
+	["PHARMACY", "صيدلية"], ["BAKERY", "مخبز"], ["AUTO PARTS", "قطع غيار"], ["EXCHANGE", "صرافة"], ["JEWELLERY", "مجوهرات"],
+	["MANDI", "مندي"], ["TAILOR", "خياط"], ["MARKET", "سوق"], ["LAUNDRY", "مغسلة"], ["MOBILES", "هواتف"], ["TYRES", "إطارات"],
+	["BARBER", "حلاق"], ["GRILL", "مشاوي"], ["OUD", "عود"], ["TEA HOUSE", "بيت الشاي"]]
+var _sign_font_ar: Font
+
+
+func _kerbs(n: Node3D, c: Vector3) -> void:
+	## Granite kerb plus real street furniture (photo-scanned props) on the sidewalk.
+	var batch := MeshBatch.new()
+	var kerb := W3D.pbr("granite_tile", 1.0, Color(0.5, 0.5, 0.52))
+	var h := BLOCK * 0.5
+	var r := RandomNumberGenerator.new()
+	r.seed = int(c.x * 3.0 + c.z * 7.0)
+	var lantern := W3D.prop("street_lamp_01")
+	var bin := W3D.prop("metal_trash_can", "metal_trash_can")
+	var hydrant := W3D.prop("fire_hydrant", "fire_hydrant")
+	var ubox := W3D.prop("utility_box_01")
+	var remap := {}
+	for part in lantern.parts:
+		var pm: Mesh = part.mesh
+		for si in pm.get_surface_count():
+			var mt := pm.surface_get_material(si)
+			if mt and (mt.resource_name.ends_with("_glass") or mt.resource_name.ends_with("_bulb")):
+				remap[mt] = W3D.glow(Color(1.0, 0.82, 0.55), 5.0)
+	for face in 4:
+		var out := Vector3(sin(face * PI * 0.5), 0, cos(face * PI * 0.5))
+		var F := StreetKit.frame(c + out * (h + 0.02) - Vector3.UP.cross(out) * h, out)
+		StreetKit.lbox(batch, F, kerb, Vector3(0, 0, -0.3), Vector3(BLOCK, CURB + 0.015, 0.3), 1 | 16)
+		if district(Vector2i(int(round((c.x - road_x(0)) / PITCH - 0.5)), int(round((c.z - road_z(0)) / PITCH - 0.5)))) in ["garage", "parking", "yard", "park", "gas", "needle"]:
+			continue
+		# lanterns between the tall road lamps, 1.3 m in from the kerb
+		for lx: float in [10.0, 32.0, 54.0]:
+			batch.add_prop(lantern, F * Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * 1.15), Vector3(lx, CURB, -1.3)), remap)
+		batch.add_prop(bin, F * Transform3D(Basis(Vector3.UP, r.randf() * TAU), Vector3(r.randf_range(14.0, 26.0), CURB, -1.2)))
+		if r.randf() < 0.6:
+			batch.add_prop(hydrant, F * Transform3D(Basis(Vector3.UP, r.randf() * TAU), Vector3(r.randf_range(36.0, 50.0), CURB, -0.9)))
+		if r.randf() < 0.5:
+			batch.add_prop(ubox, F * Transform3D(Basis(Vector3.UP, PI), Vector3(r.randf_range(4.0, 8.0), CURB, -4.4)))
+	batch.commit(n)
+
+
+func _shop_sign(n: Node3D, pos: Vector3, width: float, out: Vector3, r: RandomNumberGenerator) -> void:
+	var nm: Array = SHOP_NAMES[r.randi() % SHOP_NAMES.size()]
+	var ar := r.randf() < 0.35
+	var l := Label3D.new()
+	l.text = nm[1] if ar else nm[0]
+	if ar:
+		if _sign_font_ar == null:
+			_sign_font_ar = load("res://fonts/notokufi_NotoKufiArabic-Bold.ttf")
+		l.font = _sign_font_ar
+	else:
+		l.font = UI.title_font(false)
+	l.font_size = 96
+	var hgt := 0.74
+	var est := hgt * 0.62 * float(l.text.length())
+	if est > width:
+		hgt *= width / est
+	l.pixel_size = hgt / 96.0
+	var col: Color = NEON[r.randi() % NEON.size()]
+	if r.randf() < 0.4:
+		col = Color(1.0, 0.95, 0.85)
+	l.modulate = Color(col.r * 2.2 + 0.2, col.g * 2.2 + 0.2, col.b * 2.2 + 0.2)
+	l.shaded = false
+	l.double_sided = false
+	l.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+	l.position = pos + out * 0.02
+	l.rotation.y = atan2(out.x, out.z)
+	n.add_child(l)
+
+
+func _fill_w3d(n: Node3D, c: Vector3, b: Vector2i, kind: String) -> void:
+	var r := RandomNumberGenerator.new()
+	r.seed = b.x * 977 + b.y * 131 + seed_v
+	var batch := MeshBatch.new()
+	var signs := []
+	var lot := 27.0
+	var base := Vector3(0, CURB, 0)
+	if kind == "industrial":
+		for face in [0, 2]:
+			var out := Vector3(sin(face * PI * 0.5), 0, cos(face * PI * 0.5))
+			var right := Vector3.UP.cross(out)
+			for k in 2:
+				var F := StreetKit.frame(c + base + out * lot - right * 27.0 + right * (k * 27.0), out)
+				StreetKit.warehouse(batch, F, 27.0, r.randf_range(8.0, 12.0), 27.0, r)
+		batch.commit(n)
+		_block_collider(n, c, lot * 2.0, lot * 2.0)
+		return
+	var depth := 12.0
+	var tallest := 0.0
+	for face in 4:
+		var out := Vector3(sin(face * PI * 0.5), 0, cos(face * PI * 0.5))
+		var right := Vector3.UP.cross(out)
+		var length := 54.0 if face % 2 == 0 else 30.0
+		var x := 0.0
+		while x < length - 0.1:
+			var w: float = [12.0, 18.0, 24.0][r.randi() % 3]
+			if length - x - w < 12.0:
+				w = length - x
+			var F := StreetKit.frame(c + base + out * lot + right * (x - length * 0.5), out)
+			var hgt := 0.0
+			match kind:
+				"residential":
+					hgt = StreetKit.apartment(batch, F, w, r.randi_range(3, 5), depth, r, r.randf() < 0.3, signs)
+				"beach":
+					if r.randf() < 0.3:
+						hgt = StreetKit.apartment(batch, F, w, r.randi_range(4, 6), depth, r, true, signs)
+					else:
+						hgt = StreetKit.midrise(batch, F, w, r.randi_range(4, 8), depth, r, signs)
+				_:
+					if r.randf() < 0.3:
+						hgt = StreetKit.apartment(batch, F, w, r.randi_range(4, 6), depth, r, true, signs)
+					else:
+						hgt = StreetKit.midrise(batch, F, w, r.randi_range(3, 8), depth, r, signs)
+			tallest = maxf(tallest, hgt)
+			x += w
+	# courtyard: towers downtown / marina, a dark roof elsewhere
+	if kind == "downtown":
+		StreetKit.tower(batch, c + base, r.randf_range(22.0, 28.0), r.randf_range(22.0, 28.0), _tower_h(b, r), r)
+	elif kind == "beach":
+		for sx: float in [-1.0, 1.0]:
+			StreetKit.tower(batch, c + base + Vector3(sx * 7.5, 0, 0), 14.0, 24.0, r.randf_range(55.0, 115.0), r)
+	batch.commit(n)
+	for sg in signs:
+		if r.randf() < 0.75:
+			_shop_sign(n, sg[0], sg[1], sg[2], r)
+	_block_collider(n, c, lot * 2.0, lot * 2.0)
+	if (b.x + b.y) % 2 == 0:
+		_parked(n, c, 2)

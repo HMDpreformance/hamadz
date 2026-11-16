@@ -68,26 +68,36 @@ var _callout_ev := {}
 var _callout_btn: NeonButton
 var _near_rival: TrafficCar = null
 var _garage: GarageBuilding = null
+var _mirror: PlanarReflection = null
 var _garage_near := false
+var _garage_cool := 0.0
 var _garage_prompt: Label = null
 var _exit_garage := false
 var _big_map: Control = null
 
 
 func _ready() -> void:
-	env = GFX.make_environment(Color(0.4, 0.38, 0.62), 0.66, Color(0.16, 0.08, 0.14), 0.004, EnvKit.desert_sky())
-	env.adjustment_saturation = 1.32
-	env.adjustment_contrast = 1.12
-	env.glow_intensity = 0.8
-	env.glow_hdr_threshold = 0.95
+	env = GFX.make_environment(Color(0.5, 0.55, 0.7), 0.5, Color(0.045, 0.05, 0.075), 0.0022, W3D.sky())
 	env.background_mode = Environment.BG_SKY
+	env.background_energy_multiplier = 0.1
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.34, 0.4, 0.58)
+	env.ambient_light_sky_contribution = 0.0
+	env.ambient_light_energy = 0.95
+	env.tonemap_exposure = 1.15
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	env.adjustment_saturation = 1.08
+	env.adjustment_contrast = 1.08
+	env.glow_intensity = 0.7
+	env.glow_hdr_threshold = 1.1
+	env.fog_sky_affect = 0.25
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 	var moon := DirectionalLight3D.new()
 	moon.rotation_degrees = Vector3(-38, 35, 0)
-	moon.light_color = Color(0.62, 0.6, 1.0)
-	moon.light_energy = 0.75
+	moon.light_color = Color(0.6, 0.68, 1.0)
+	moon.light_energy = 0.5
 	moon.shadow_enabled = GFX.p.shadows
 	moon.shadow_opacity = 0.85
 	moon.shadow_blur = 1.5
@@ -134,6 +144,10 @@ func _ready() -> void:
 	add_child(_race_holder)
 	_rain = Rain.new()
 	add_child(_rain)
+	if GFX.p.mirror:
+		_mirror = PlanarReflection.new()
+		add_child(_mirror)
+		_mirror.setup(0.5 if GFX.index == 2 else 0.4)
 	_cine = Camera3D.new()
 	_cine.far = 1600.0
 	_cine.fov = 50.0
@@ -170,6 +184,7 @@ func _ready() -> void:
 	_garage_prompt.visible = false
 	_hud.add_child(_garage_prompt)
 	if _exit_garage:
+		_garage_cool = 8.0
 		get_tree().create_timer(0.2).timeout.connect(_play_exit_garage)
 
 
@@ -881,8 +896,9 @@ func _process(_dt: float) -> void:
 	# cinematic camera: slow orbit around the grid / the finished car
 	if _cine.current:
 		_cine_t += _dt
-		var a := 0.9 + _cine_t * 0.42
-		var r := 9.5 - minf(_cine_t, 3.0) * 0.6
+		# rear three-quarter sweep: the camera stays behind the car and shows its tail
+		var a := car.rotation.y - 0.75 + minf(_cine_t * 0.3, 1.5)
+		var r := 9.0 - minf(_cine_t, 3.0) * 0.7
 		_cine.position = _cine_center + Vector3(sin(a) * r, 1.5 + _cine_t * 0.25, cos(a) * r)
 		_cine.look_at(_cine_center + Vector3(0, 0.7, 0), Vector3.UP)
 	# acoustics and district name follow the car
@@ -1392,9 +1408,14 @@ func _update_garage() -> void:
 		return
 	var d := car.global_position.distance_to(_garage.entry_pos)
 	_garage.update_near(d)
-	_garage_near = d < 8.5 and _garage.is_open() and car.input_enabled
+	_garage_cool = maxf(_garage_cool - get_process_delta_time(), 0.0)
+	_garage_near = d < 9.5 and _garage.is_open() and car.input_enabled
 	if _garage_prompt:
-		_garage_prompt.visible = _garage_near
+		_garage_prompt.visible = d < 30.0 and car.input_enabled and state == "roam"
+		_garage_prompt.text = "DRIVE IN TO ENTER LSXMOTORSPORT" if not _garage_near else "ENTERING LSXMOTORSPORT"
+	# touch screens have no "accept" key: rolling onto the pad at walking pace is the way in
+	if _garage_near and state == "roam" and _garage_cool <= 0.0 and absf(car.speed) < 14.0:
+		_enter_garage()
 
 
 ## Drive-in cinematic: roll through the open shutter, then load the tune/dyno bay.
@@ -1426,13 +1447,14 @@ func _play_exit_garage() -> void:
 	if _garage:
 		_garage.update_near(0.0)        # force the shutter up
 	_show_banner("LSXMOTORSPORT", 1.4)
-	var out_pos := Vector3(city.road_x(6) + 41.0, 0, 11.0)
+	var out_pos := Vector3(city.road_x(6) + 41.0, 0, 21.0)
 	var tw := create_tween()
 	tw.tween_property(car, "global_position", out_pos, 1.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	await tw.finished
 	car.reset_to(car.global_position, car.rotation.y)
 	car.set_physics_process(true)
 	car.input_enabled = true
+	_garage_cool = 6.0
 
 
 ## Jump straight into the LSX garage from anywhere in free roam.
@@ -1941,6 +1963,11 @@ func dev_look(x: String, y: String, z: String, tx: String, ty: String, tz: Strin
 
 ## Desktop-grade quality pass (Forward+ only): screen-space reflections + GI,
 ## wet-road reflectivity, richer bloom and AgX tonemap. For look demos / Steam.
+func dev_day(e := "2.5") -> void:
+	env.ambient_light_energy = float(e)
+	env.fog_enabled = false
+
+
 func dev_hq() -> void:
 	env.ssr_enabled = true
 	env.ssr_max_steps = 64

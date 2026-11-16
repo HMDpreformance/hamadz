@@ -6,6 +6,7 @@ extends Node3D
 enum Phase { LOGO, VIDEO, CINE, TITLE }
 
 const INTRO_VIDEO := "res://video/intro.ogv"
+const USE_VIDEO := false     # the old film shows the cars nose-on; off until a rear-view film replaces it
 
 const LOGO_TIME := 4.6
 
@@ -129,10 +130,12 @@ func _update_shot(dt: float) -> void:
 	var blur := 0.0
 	match _shot:
 		0:
-			cam.position = Vector3(x + 0.2, 0.28, 30.0 - _shot_t * 1.5)
-			cam.look_at(actors[0].car.position + Vector3(0, 0.6, 0), Vector3.UP)
-			cam.fov = 58.0
-			blur = clampf(1.0 - absf(actors[0].car.position.z - cam.position.z) / 40.0, 0.0, 1.0) * 0.8
+			# low chase from behind: three sets of tail lights pulling away
+			var lead: Vector3 = actors[0].car.position
+			cam.position = lead + Vector3(1.6 - _shot_t * 0.3, 0.75 + _shot_t * 0.12, 8.5 - _shot_t * 0.5)
+			cam.look_at(lead + Vector3(0.6, 0.6, -6.0), Vector3.UP)
+			cam.fov = 62.0
+			blur = 0.7
 		1:
 			var cp: Vector3 = actors[0].car.position
 			cam.position = cp + Vector3(5.5 - _shot_t * 0.5, 0.75, -1.5 + _shot_t * 1.2)
@@ -150,7 +153,7 @@ func _update_shot(dt: float) -> void:
 			var ang := -0.9 + _shot_t * 0.085
 			var r := 9.5 - 2.5 * k
 			var hc := Vector3(x, 0, city.road(2))
-			cam.position = hc + Vector3(sin(ang) * r, 0.9 + 0.9 * k, -cos(ang) * r)
+			cam.position = hc + Vector3(sin(ang) * r, 0.9 + 0.9 * k, cos(ang) * r)      # behind the cars: tail lights and exhausts
 			cam.look_at(hc + Vector3(0, 0.75, 0.5), Vector3.UP)
 			cam.fov = 40.0
 	_post.use_blur = GFX.index > 0
@@ -190,7 +193,7 @@ func _process(dt: float) -> void:
 
 
 func _after_logo() -> void:
-	if ResourceLoader.exists(INTRO_VIDEO):
+	if USE_VIDEO and ResourceLoader.exists(INTRO_VIDEO):
 		_enter_video()
 	else:
 		_enter_cine()

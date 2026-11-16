@@ -1507,14 +1507,18 @@ func _parked_mesh() -> ArrayMesh:
 
 
 func _parked(n: Node3D, c: Vector3, count: int) -> void:
-	## Cars parked at the kerb. They narrow the street and are solid.
-	var xf := []
-	var cols := []
-	var pal := [Color(0.5, 0.05, 0.05), Color(0.05, 0.1, 0.35), Color(0.6, 0.6, 0.62), Color(0.03, 0.03, 0.035), Color(0.75, 0.75, 0.72), Color(0.1, 0.25, 0.12), Color(0.55, 0.35, 0.05)]
+	## Cars parked at the kerb: real car bodies (ParkedCars). They narrow the street and are solid.
+	var cars := []
 	var edge := BLOCK * 0.5 + 1.05
+	var kinds := [ParkedCars.IDS[_rng.randi() % ParkedCars.IDS.size()], ParkedCars.IDS[_rng.randi() % ParkedCars.IDS.size()]]
+	var used := {}
 	for k in count:
 		var side := _rng.randi() % 4
-		var t := _rng.randf_range(-20.0, 20.0)
+		var slot := _rng.randi_range(-3, 3)
+		if used.has(side * 10 + slot):
+			continue
+		used[side * 10 + slot] = true
+		var t := slot * 6.6 + _rng.randf_range(-0.5, 0.5)
 		var p := Vector3(c.x + t, 0, c.z - edge)
 		var yaw := PI * 0.5
 		match side:
@@ -1525,23 +1529,20 @@ func _parked(n: Node3D, c: Vector3, count: int) -> void:
 			3:
 				p = Vector3(c.x + edge, 0, c.z + t)
 				yaw = 0.0
-		xf.append(Transform3D(Basis(Vector3.UP, yaw), p))
-		cols.append(pal[_rng.randi() % pal.size()])
+		# park with the traffic flow on that side of the street
+		if side == 1 or side == 2:
+			yaw += PI
+		var id: String = kinds[k % 2]
+		cars.append({"xf": Transform3D(Basis(Vector3.UP, yaw), p), "id": id, "paint": ParkedCars.PAINTS[_rng.randi() % ParkedCars.PAINTS.size()]})
 		var sb := StaticBody3D.new()
 		var cs := CollisionShape3D.new()
 		var bs := BoxShape3D.new()
-		bs.size = Vector3(1.8, 1.4, 4.4)
+		bs.size = Vector3(1.8, 1.4, float(ParkedCars.LEN[id]))
 		cs.shape = bs
 		sb.add_child(cs)
 		sb.transform = Transform3D(Basis(Vector3.UP, yaw), p + Vector3(0, 0.7, 0))
 		n.add_child(sb)
-	var m := _mat("parked", func():
-		var mt := StandardMaterial3D.new()
-		mt.vertex_color_use_as_albedo = true
-		mt.roughness = 0.25
-		mt.metallic = 0.6
-		return mt)
-	_local_mm(n, _parked_mesh(), m, xf, cols)
+	ParkedCars.add(n, cars)
 
 
 func _person_mesh() -> ArrayMesh:
@@ -1756,4 +1757,4 @@ func _fill_w3d(n: Node3D, c: Vector3, b: Vector2i, kind: String) -> void:
 			_shop_sign(n, sg[0], sg[1], sg[2], r)
 	_block_collider(n, c, lot * 2.0, lot * 2.0)
 	if (b.x + b.y) % 2 == 0:
-		_parked(n, c, 2)
+		_parked(n, c, 4)

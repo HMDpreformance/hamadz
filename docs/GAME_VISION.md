@@ -286,6 +286,26 @@ Each stage is one playable APK.
 
 ---
 
+## 12b. Game brief (Hamad, 2026-11-16) — guiding direction
+
+Hamad shared a full brief. Treated as the game's design/feel north star (not an engine change — see Q6):
+
+- **Concept:** 3D open-world arcade street racer in the spirit of Midnight Club 3: DUB Edition + NFS Underground. Free-roam a neon night city, enter races, build/customize cars, climb from unknown to top racer. Original world/cars/music.
+- **Feel:** arcade handling (drift + grip, forgiving, not a sim), nitro boost, high speed, aggressive AI rivals, traffic to dodge. Cameras: chase + bumper/cockpit. Race types: sprint, circuit, checkpoint + free roam. Progression: win → money + rep → unlock cars/parts. Deep customization: body kits, rims, paint/wraps, engine/tyres/nitro.
+- **Look:** "that style, remastered" — gritty neon night city, wet reflective streets, high-res textures, modern lighting with bloom, reflections, headlight + neon glow. Smooth 60fps, widescreen.
+- **Platforms (aspiration):** one project → Steam (PC), iOS, Android. Keep performance scalable for phones.
+- **Higgsfield art direction** (house style for all generated art): "cinematic neon night street-racing, wet reflective asphalt, moody urban lighting, high detail, 16:9." Use for: district concept art (downtown, docks, highway, hills), car concepts + paint/wrap ideas, texture refs (asphalt, buildings, neon, car materials), menu/loading backgrounds + UI mood, promo/store shots + a trailer once gameplay exists. For car VIDEOS/cinematics use **Genjutsu** (Hamad prefers the motion look).
+- **Feedback style:** specific corrections ("camera too low", "turns too slowly", "city too dark"), not "make it better".
+
+## 12c. LSXmotorsport garage (Hamad, 2026-11-16)
+
+In-world garage named **LSXmotorsport** on an open lot by spawn (repurposed plaza block 6,4). Roll-up shutter door that rolls up as you pull onto the glowing green forecourt pad; drive-in and drive-out cinematics. Interior (garage scene) rebranded with Hamad's actual LSX logo (chrome LS + red X), supports tuning, vehicle swap (showroom) and a new **DYNO** (power/torque pull with peak HP/torque/WHP/0-60/top-speed readout). Reference images: LSX logo, a Mustang-dyno bay, a WELD-banner Corvette workshop (metal walls, drop ceiling, yellow floor lines, red scissor lifts) — interior art can go deeper later to match.
+
+## 12d. Open question Q6 — engine
+
+The brief suggests Unity or Unreal. The game already exists and ships in **Godot 4.4.1** (open world, story mode, customization, real 3D cars, soundtrack, APKs). Switching engines = full restart, losing all of it. **Recommendation: stay on Godot**, treat the brief as design/feel direction, and push Godot's renderer (wet reflections, bloom) toward the look. Awaiting Hamad's call; building continues on Godot meanwhile.
+
 ## 13. Change history of this document
 
 - 2026-11-16: Created. Captured all requests so far, decisions D0–D3, story, gameplay systems, look targets, cars, soundtrack, budget, stage plan.
+- 2026-11-16 (Ultra): Hamad upgraded Higgsfield to Ultra. Built 5 real 3D car bodies (rotary/muscle/classic/sedan/suv) + 8-track soundtrack, LSXmotorsport in-world garage with proximity door + enter/exit cinematics + dyno + logo. Added game brief (12b), garage spec (12c), engine question Q6 (12d).

@@ -67,6 +67,10 @@ var _was_busted := false
 var _callout_ev := {}
 var _callout_btn: NeonButton
 var _near_rival: TrafficCar = null
+var _garage: GarageBuilding = null
+var _garage_near := false
+var _garage_prompt: Label = null
+var _exit_garage := false
 
 
 func _ready() -> void:
@@ -95,8 +99,13 @@ func _ready() -> void:
 	city.build()
 
 	spawn_pos = Vector3(city.road_x(6) + 1.9, 0, 22.0)
-	city.preload_around(spawn_pos)
 	spawn_yaw = 0.0
+	_exit_garage = Nav.args.get("from", "") == "garage"
+	if _exit_garage:
+		# start inside the LSXmotorsport bay, nose pointing out the open door
+		spawn_pos = Vector3(city.road_x(6) + 41.0, 0, -9.0)
+		spawn_yaw = PI
+	city.preload_around(spawn_pos)
 	car = PlayerCar.new()
 	add_child(car)
 	car.setup(Game.current_car(), Game.config())
@@ -154,6 +163,13 @@ func _ready() -> void:
 	Audio.music_state("roam", 1.5)
 	get_tree().create_timer(5.0).timeout.connect(func(): Audio.dj_break(true))
 	GFX.changed.connect(func(): GFX.apply_environment(env))
+	_garage_prompt = UI.label("▲   ENTER  LSXMOTORSPORT   ▲", 24, UI.CYAN, true)
+	UI.place(_garage_prompt, Vector2(0.5, 1), Vector2(-260, -150), Vector2(520, 36))
+	_garage_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_garage_prompt.visible = false
+	_hud.add_child(_garage_prompt)
+	if _exit_garage:
+		get_tree().create_timer(0.2).timeout.connect(_play_exit_garage)
 
 
 func _exit_tree() -> void:
@@ -827,6 +843,7 @@ func _process(_dt: float) -> void:
 	if state == "roam":
 		_update_event_card()
 		_update_callout()
+		_update_garage()
 		if police and car.speed_mph() > 118.0:
 			police.add_heat(_dt * 0.06)
 	elif state == "race" and race:
@@ -888,7 +905,9 @@ func _process(_dt: float) -> void:
 		_toggle_cam()
 	if Input.is_action_just_pressed("pause"):
 		_toggle_pause()
-	if Input.is_action_just_pressed("ui_accept") and state == "roam" and _near_event != "" and _events.has(_near_event):
+	if Input.is_action_just_pressed("ui_accept") and state == "roam" and car.input_enabled and _garage_near:
+		_enter_garage()
+	elif Input.is_action_just_pressed("ui_accept") and state == "roam" and _near_event != "" and _events.has(_near_event):
 		_start_event(_near_event)
 	for k in _steer_keys:
 		k.visible = int(Game.setting("steer_mode", 0)) == 0 and _gauge.visible
@@ -1333,6 +1352,60 @@ func _leave(dest: String) -> void:
 	Nav.goto(dest)
 
 
+# ====================================================================== LSXmotorsport garage
+func _update_garage() -> void:
+	if _garage == null or not is_instance_valid(_garage):
+		_garage = get_tree().get_first_node_in_group("garage_building") as GarageBuilding
+	if _garage == null:
+		_garage_near = false
+		if _garage_prompt:
+			_garage_prompt.visible = false
+		return
+	var d := car.global_position.distance_to(_garage.entry_pos)
+	_garage.update_near(d)
+	_garage_near = d < 8.5 and _garage.is_open() and car.input_enabled
+	if _garage_prompt:
+		_garage_prompt.visible = _garage_near
+
+
+## Drive-in cinematic: roll through the open shutter, then load the tune/dyno bay.
+func _enter_garage() -> void:
+	if _garage == null:
+		return
+	_garage_near = false
+	if _garage_prompt:
+		_garage_prompt.visible = false
+	car.input_enabled = false
+	car.set_physics_process(false)
+	_show_banner("LSXMOTORSPORT", 1.4)
+	Audio.sfx("whoosh", -4.0)
+	var inside := _garage.global_position + Vector3(0, 0, -3.0)
+	var tw := create_tween()
+	tw.tween_property(car, "global_position", inside, 1.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	await tw.finished
+	engine_audio.hush(true)
+	get_tree().paused = false
+	Nav.goto("garage", {"from": "drive"}, "ENTERING LSXMOTORSPORT")
+
+
+## Drive-out cinematic: start parked in the bay, roll out onto the forecourt.
+func _play_exit_garage() -> void:
+	if _garage == null or not is_instance_valid(_garage):
+		_garage = get_tree().get_first_node_in_group("garage_building") as GarageBuilding
+	car.input_enabled = false
+	car.set_physics_process(false)
+	if _garage:
+		_garage.update_near(0.0)        # force the shutter up
+	_show_banner("LSXMOTORSPORT", 1.4)
+	var out_pos := Vector3(city.road_x(6) + 41.0, 0, 11.0)
+	var tw := create_tween()
+	tw.tween_property(car, "global_position", out_pos, 1.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	await tw.finished
+	car.reset_to(car.global_position, car.rotation.y)
+	car.set_physics_process(true)
+	car.input_enabled = true
+
+
 # ====================================================================== HUD widgets
 class _Gauge extends Control:
 	## Dash cluster: big yellow speedometer with chrome bezel, a black tach
@@ -1757,6 +1830,33 @@ func dev_look(x: String, y: String, z: String, tx: String, ty: String, tz: Strin
 	_hud.visible = false
 	post.amount = 0.0
 	post.visible = false
+
+
+## Desktop-grade quality pass (Forward+ only): screen-space reflections + GI,
+## wet-road reflectivity, richer bloom and AgX tonemap. For look demos / Steam.
+func dev_hq() -> void:
+	env.ssr_enabled = true
+	env.ssr_max_steps = 64
+	env.ssr_fade_in = 0.15
+	env.ssr_fade_out = 2.0
+	env.ssr_depth_tolerance = 0.3
+	env.ssil_enabled = true
+	env.ssil_intensity = 1.2
+	env.ssao_enabled = true
+	env.ssao_intensity = 2.2
+	env.ssao_radius = 2.5
+	env.glow_bloom = 0.3
+	env.glow_intensity = 1.0
+	env.glow_strength = 1.1
+	env.glow_hdr_threshold = 0.85
+	env.tonemap_mode = Environment.TONE_MAPPER_AGX
+	env.tonemap_white = 8.0
+	env.adjustment_saturation = 1.38
+	env.adjustment_contrast = 1.14
+	env.volumetric_fog_enabled = true
+	env.volumetric_fog_density = 0.016
+	env.volumetric_fog_emission = Color(0.5, 0.25, 0.5)
+	env.volumetric_fog_emission_energy = 0.4
 
 
 func dev_near(x: String, z: String) -> void:

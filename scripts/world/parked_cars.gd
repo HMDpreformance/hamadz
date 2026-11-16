@@ -25,6 +25,15 @@ static func _find(n: Node, xf: Transform3D) -> Array:
 	return []
 
 
+static func _yaw(id: String) -> float:
+	var jp := "res://cars/%s.json" % id
+	if FileAccess.file_exists(jp):
+		var j = JSON.parse_string(FileAccess.get_file_as_string(jp))
+		if j is Dictionary:
+			return float(j.get("yaw", 90.0))
+	return 90.0
+
+
 ## {mesh, fix (model -> car frame: nose toward -z, wheels on y = 0), mat}
 static func lod(id: String) -> Dictionary:
 	if _cache.has(id):
@@ -34,7 +43,7 @@ static func lod(id: String) -> Dictionary:
 	var found := _find(root, Transform3D.IDENTITY)
 	root.free()
 	var mesh: Mesh = found[0]
-	var xf: Transform3D = Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3.ZERO) * (found[1] as Transform3D)
+	var xf: Transform3D = Transform3D(Basis(Vector3.UP, deg_to_rad(_yaw(id))), Vector3.ZERO) * (found[1] as Transform3D)
 	var box: AABB = xf * mesh.get_aabb()
 	var s: float = float(LEN[id]) / maxf(box.size.z, 0.01)
 	var c := box.get_center()

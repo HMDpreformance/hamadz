@@ -1419,18 +1419,21 @@ func _update_garage() -> void:
 			_garage_prompt.visible = false
 		return
 	var d := car.global_position.distance_to(_garage.entry_pos)
-	_garage.update_near(d)
+	# the shutter only rolls up when the car is right in front of it
+	_garage.update_near(d, 7.5)
 	_garage_cool = maxf(_garage_cool - get_process_delta_time(), 0.0)
-	_garage_near = d < 9.5 and _garage.is_open() and car.input_enabled
+	_garage_near = d < 9.5 and car.input_enabled
 	if _garage_prompt:
 		_garage_prompt.visible = d < 30.0 and car.input_enabled and state == "roam" and _garage_cool <= 0.0
-		_garage_prompt.text = "DRIVE IN TO ENTER LSXMOTORSPORT" if not _garage_near else "ENTERING LSXMOTORSPORT"
-	# touch screens have no "accept" key: rolling onto the pad at walking pace is the way in
-	if _garage_near and state == "roam" and _garage_cool <= 0.0 and absf(car.speed) < 14.0:
+		_garage_prompt.text = "DRIVE IN TO ENTER LSXMOTORSPORT"
+	# no auto-pull: the player drives through the door; crossing the threshold loads the garage
+	var loc := car.global_position - _garage.global_position
+	var inside := absf(loc.x) < GarageBuilding.DOOR_W * 0.5 and loc.z * _garage.face < GarageBuilding.D - 0.6 and loc.z * _garage.face > -GarageBuilding.D
+	if inside and state == "roam" and _garage_cool <= 0.0 and car.input_enabled:
 		_enter_garage()
 
 
-## Drive-in cinematic: roll through the open shutter, then load the tune/dyno bay.
+## The car has driven in through the shutter: hand over to the garage scene.
 func _enter_garage() -> void:
 	if _garage == null:
 		return
@@ -1438,13 +1441,8 @@ func _enter_garage() -> void:
 	if _garage_prompt:
 		_garage_prompt.visible = false
 	car.input_enabled = false
-	car.set_physics_process(false)
+	_garage_cool = 99.0
 	_show_banner("LSXMOTORSPORT", 1.4)
-	Audio.sfx("whoosh", -4.0)
-	var inside := _garage.global_position + Vector3(0, 0, -3.0)
-	var tw := create_tween()
-	tw.tween_property(car, "global_position", inside, 1.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	await tw.finished
 	engine_audio.hush(true)
 	get_tree().paused = false
 	Nav.goto("garage", {"from": "drive"}, "ENTERING LSXMOTORSPORT")

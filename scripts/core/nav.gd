@@ -85,7 +85,11 @@ void fragment() {
 	UI.place(_spin, Vector2(1, 1), Vector2(-150, -200), Vector2(90, 90))
 	_root.add_child(_spin)
 	_fps = UI.label("", 18, UI.GREEN)
-	_fps.position = Vector2(8, 4)
+	# top middle of the screen (Hamad: easier to read there than in the corner)
+	_fps.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_fps.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_fps.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_fps.position.y = 4
 	add_child(_fps)
 
 

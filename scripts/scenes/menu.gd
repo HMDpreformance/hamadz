@@ -217,8 +217,11 @@ func _build_ui() -> void:
 	var l3 := UI.label("CASH  " + CarDB.money(Game.money()), 20, UI.AMBER)
 	l3.position = Vector2(30, 62)
 	info.add_child(l3)
-	var ver := UI.label("BUILD 0.15.1  •  CREW CALL-OUTS", 14, Color(1, 1, 1, 0.4))
-	UI.place(ver, Vector2(0, 1), Vector2(48, -30), Vector2(400, 20))
+	var vstr: String = str(ProjectSettings.get_setting("application/config/version", "?"))
+	var ver := UI.label("BUILD v" + vstr, 26, UI.CYAN, true)
+	UI.outline(ver, 5)
+	UI.place(ver, Vector2(1, 1), Vector2(-260, -44), Vector2(240, 30))
+	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_menu_root.add_child(ver)
 
 	_panel = UI.full(Control.new())

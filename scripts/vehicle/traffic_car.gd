@@ -23,6 +23,9 @@ var _knock := Vector3.ZERO     # flung by RAM / ROAR: drift with this velocity, 
 var _knock_t := 0.0
 var _spin := 0.0
 var _layer := 1
+var is_rival := false
+var rival_name := ""
+var rival_car := "tuner"
 
 
 func setup(id: String, paint: int) -> void:

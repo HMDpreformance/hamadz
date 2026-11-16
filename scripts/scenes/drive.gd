@@ -64,6 +64,9 @@ var story_target = null         # Vector3 or null: next story race (free roam GP
 var police: Police
 var _heat_label: Label
 var _was_busted := false
+var _callout_ev := {}
+var _callout_btn: NeonButton
+var _near_rival: TrafficCar = null
 
 
 func _ready() -> void:
@@ -143,6 +146,7 @@ func _ready() -> void:
 	add_child(police)
 	police.setup(city, car)
 	police.heat_changed.connect(_on_heat)
+	traffic.spawn_rivals([2, 6, 7], ["REZ", "ECHO", "JINX", "BLAZE", "RAVEN"])
 	_make_event_markers()
 	_set_state("roam")
 	get_tree().create_timer(1.6).timeout.connect(_story_check)
@@ -331,13 +335,20 @@ static func _place_name(n: int) -> String:
 	return ["-", "1ST", "2ND", "3RD", "4TH", "5TH", "6TH", "7TH", "8TH"][clampi(n, 0, 8)]
 
 
-func _start_event(id: String) -> void:
-	if state != "roam" or not _events.has(id):
+func _start_event(id: String, ev_override := {}) -> void:
+	if state != "roam":
 		return
-	var ev: Dictionary = _events[id].ev
-	if _event_lock(ev) != "":
-		Audio.sfx("ui_deny")
-		return
+	var ev: Dictionary
+	if ev_override.is_empty():
+		if not _events.has(id):
+			return
+		ev = _events[id].ev
+		if _event_lock(ev) != "":
+			Audio.sfx("ui_deny")
+			return
+	else:
+		ev = ev_override
+		_callout_ev = ev_override
 	_last_event = id
 	skills.reset()
 	if police:
@@ -390,6 +401,87 @@ func _start_event(id: String) -> void:
 	_hud_driving(true)
 	_set_state("countdown")
 	race.run_countdown()
+
+
+## Street call-outs: when a crew car is cruising close and you have slowed to its
+## pace, a CALL OUT button appears; tap it to race it on the spot.
+func _update_callout() -> void:
+	if _callout_btn == null:
+		return
+	var best: TrafficCar = null
+	var bd := 16.0
+	var pp := car.global_position
+	for r in traffic.rivals:
+		if not is_instance_valid(r):
+			continue
+		var d := Vector2(pp.x - r.global_position.x, pp.z - r.global_position.z).length()
+		if d < bd:
+			bd = d
+			best = r
+	_near_rival = best
+	var show := best != null and car.speed_mph() < 70.0 and not _card.visible
+	if show and not _callout_btn.visible:
+		Audio.sfx("ui_move", -2.0)
+	_callout_btn.visible = show
+	if show:
+		_callout_btn.set_caption("CALL OUT  " + str(best.rival_name))
+
+
+## Builds a sprint route along the roads ahead of the player.
+func _callout_route() -> Array:
+	var gx := clampi(int(round((car.global_position.x - city.x0) / City.PITCH)), 0, OpenWorld.NX)
+	var gz := clampi(int(round((car.global_position.z - city.z0) / City.PITCH)), 0, OpenWorld.NZ)
+	var fwd := car.forward()
+	# primary axis from heading
+	var step := Vector2i.ZERO
+	if absf(fwd.x) > absf(fwd.z):
+		step = Vector2i(1 if fwd.x > 0 else -1, 0)
+	else:
+		step = Vector2i(0, 1 if fwd.z > 0 else -1)
+	var cur := Vector2i(gx, gz)
+	var route := [Vector2(cur.x, cur.y)]
+	var legs := 0
+	var dir := step
+	while legs < 6:
+		var nxt := cur + dir
+		if nxt.x < 0 or nxt.x > OpenWorld.NX or nxt.y < 0 or nxt.y > OpenWorld.NZ:
+			# turn toward the centre instead of leaving the map
+			dir = Vector2i(0, 1 if gz < OpenWorld.NZ / 2 else -1) if dir.y == 0 else Vector2i(1 if gx < OpenWorld.NX / 2 else -1, 0)
+			nxt = cur + dir
+			if nxt.x < 0 or nxt.x > OpenWorld.NX or nxt.y < 0 or nxt.y > OpenWorld.NZ:
+				break
+		cur = nxt
+		route.append(Vector2(cur.x, cur.y))
+		legs += 1
+		# one gentle turn midway for interest
+		if legs == 3 and randf() < 0.6:
+			dir = Vector2i(-dir.y, dir.x) if randf() < 0.5 else Vector2i(dir.y, -dir.x)
+	if route.size() < 3:
+		return []
+	return route
+
+
+func _begin_callout() -> void:
+	if _near_rival == null or state != "roam":
+		return
+	var r := _near_rival
+	var route := _callout_route()
+	if route.is_empty():
+		Audio.sfx("ui_deny")
+		return
+	_callout_btn.visible = false
+	var reward := 2500 + randi() % 2000
+	var ev := {
+		"id": "callout", "name": str(r.rival_name) + " CALL-OUT", "type": "sprint",
+		"opponents": 1, "reward": reward, "rep": 1, "level": clampi(Game.story_chapter(), 0, 3),
+		"rival": str(r.rival_name), "rival_car": r.rival_car,
+		"blurb": "Street race. First to the end wins the pot.",
+		"route": route,
+	}
+	# hide the challenged car so it isn't also in the world during the race
+	r.visible = false
+	r.process_mode = Node.PROCESS_MODE_DISABLED
+	_start_event("callout", ev)
 
 
 func _on_track_changed(title: String, artist: String) -> void:
@@ -481,6 +573,9 @@ func _end_race(to_roam := true) -> void:
 	cam.make_current()
 	_hud_driving(true)
 	_near_event = "?"          # so the card for the event you are parked on shows again
+	if traffic:
+		traffic.revive_rivals(car.global_position)
+	_callout_ev = {}
 	skills.reset()
 	Audio.music_state("roam", 1.0)
 	Audio.music_filter(20000.0)
@@ -492,8 +587,11 @@ func _end_race(to_roam := true) -> void:
 
 func _retry_event() -> void:
 	var id := _last_event
+	var co := _callout_ev
 	_end_race(true)
-	if id != "":
+	if id == "callout" and not co.is_empty():
+		_start_event("callout", co)
+	elif id != "":
 		_start_event(id)
 
 
@@ -509,6 +607,8 @@ func _hud_driving(on: bool) -> void:
 		_story_label.visible = on and state == "roam"
 	if _heat_label and not on:
 		_heat_label.visible = false
+	if _callout_btn and not on:
+		_callout_btn.visible = false
 
 
 func _make_marker() -> void:
@@ -726,6 +826,7 @@ func _process(_dt: float) -> void:
 	var p := car.global_position
 	if state == "roam":
 		_update_event_card()
+		_update_callout()
 		if police and car.speed_mph() > 118.0:
 			police.add_heat(_dt * 0.06)
 	elif state == "race" and race:
@@ -1063,7 +1164,15 @@ func _build_hud() -> void:
 	_hud.move_child(arcs, 1)
 	_drive_ui = [left, right, gas, brk, nos, hb, _gauge, _map_holder, _arrow, pk, ck, arcs]
 
-	# wanted stars (top centre, under the info bar)
+	# street call-out button (shows when a crew car is cruising alongside)
+	_callout_btn = NeonButton.make("CALL OUT", Vector2(360, 66), UI.MAGENTA, 30)
+	_callout_btn.align_left = false
+	_callout_btn.filled = true
+	UI.place(_callout_btn, Vector2(0.5, 0), Vector2(-180, 150), Vector2(360, 66))
+	_callout_btn.visible = false
+	_callout_btn.pressed.connect(_begin_callout)
+	_hud.add_child(_callout_btn)
+	# wanted stars (top centre, under the info bar)	# wanted stars (top centre, under the info bar)
 	_heat_label = UI.label("", 26, Color(1.0, 0.3, 0.25), true)
 	UI.outline(_heat_label, 6)
 	UI.place(_heat_label, Vector2(0.5, 0), Vector2(-200, 46), Vector2(400, 34))
@@ -1520,6 +1629,33 @@ func dev_rel() -> void:
 
 func dev_story_log() -> void:
 	print("STORY ch=%d seen=%d complete=%s busy=%s state=%s navbusy=%s %s" % [Game.story_chapter(), int(Game.story().seen), Game.chapter_complete(), _story_busy, state, Nav.busy, JSON.stringify(Game.story())])
+
+
+func dev_callout_near() -> void:
+	if traffic.rivals.is_empty(): return
+	var r: TrafficCar = traffic.rivals[0]
+	r.global_position = car.global_position + car.forward() * 3.0 + car.global_transform.basis.x * 4.5
+	r.rotation.y = car.rotation.y
+	car.speed = 0.0; car.velocity = Vector3.ZERO
+
+
+func dev_callout() -> void:
+	# force the nearest rival next to the player, then start the call-out
+	if traffic.rivals.is_empty():
+		print("CALLOUT no rivals"); return
+	var r: TrafficCar = traffic.rivals[0]
+	r.global_position = car.global_position + car.forward() * 8.0 + car.global_transform.basis.x * 4.0
+	car.speed = 0.0; car.velocity = Vector3.ZERO
+	_near_rival = r
+	print("CALLOUT rival=%s car=%s" % [r.rival_name, r.rival_car])
+	_begin_callout()
+
+
+func dev_callout_log() -> void:
+	var rc := 0
+	for r in traffic.rivals:
+		if is_instance_valid(r): rc += 1
+	print("CALLOUT rivals=%d near=%s race=%s state=%s route_ok=%s" % [rc, _near_rival != null, race != null, state, not _callout_ev.is_empty()])
 
 
 func dev_heat(v := "2") -> void:

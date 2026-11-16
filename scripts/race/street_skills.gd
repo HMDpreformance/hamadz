@@ -259,10 +259,10 @@ func _roar() -> void:
 	var p := car.global_position
 	var fwd := car.forward()
 	if traffic:
-		for t in traffic.cars:
-			var d := t.global_position - p
+		for t: TrafficCar in traffic.cars:
+			var d: Vector3 = t.global_position - p
 			d.y = 0.0
-			var dist := d.length()
+			var dist: float = d.length()
 			if dist < 48.0 and dist > 0.1 and d.normalized().dot(fwd) > 0.2:
 				var side := car.global_transform.basis.x * signf(d.dot(car.global_transform.basis.x) + 0.01)
 				t.knock((side * 16.0 + fwd * 6.0) * clampf(1.4 - dist / 48.0, 0.4, 1.2))

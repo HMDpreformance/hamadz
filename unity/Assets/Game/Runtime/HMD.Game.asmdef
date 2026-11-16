@@ -1,0 +1,19 @@
+{
+  "name": "HMD.Game",
+  "rootNamespace": "HMD",
+  "references": [
+    "Unity.RenderPipelines.Universal.Runtime",
+    "Unity.RenderPipelines.Core.Runtime",
+    "UnityEngine.UI"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [
+    { "name": "com.unity.render-pipelines.universal", "expression": "12.0.0", "define": "HMD_URP" }
+  ],
+  "noEngineReferences": false
+}

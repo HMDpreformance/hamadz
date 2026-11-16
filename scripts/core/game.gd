@@ -32,7 +32,7 @@ func _fresh() -> Dictionary:
 		"rep": 0,
 		"events": {},
 		"story": {"chapter": 0, "seen": -1, "abilities": [], "finished": false},
-		"settings": {"difficulty": 1, "preset": 1, "music": 0.8, "sfx": 0.9, "steer_mode": 0, "show_fps": false},
+		"settings": {"difficulty": 1, "preset": 0 if (OS.has_feature("mobile") or OS.get_name() in ["Android", "iOS"]) else 1, "preset_set": false, "music": 0.8, "sfx": 0.9, "steer_mode": 0, "show_fps": false},
 	}
 
 
@@ -50,6 +50,11 @@ func load_game() -> void:
 					else:
 						data[k] = parsed[k]
 	data.money = int(data.money)
+	# One-time mobile migration: older saves defaulted to BALANCED before the
+	# renderer was phone-aware. If the player never deliberately picked a tier,
+	# start phones on PERFORMANCE so they run smooth out of the box.
+	if (OS.has_feature("mobile") or OS.get_name() in ["Android", "iOS"]) and not bool(data.settings.get("preset_set", false)):
+		data.settings.preset = 0
 	for id in CarDB.CAR_ORDER:
 		_ensure_car(id)
 

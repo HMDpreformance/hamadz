@@ -7,7 +7,7 @@ changes, so any future work starts from the same picture.
 - Repo: `HMDpreformance/hamadz` · Engine: Godot 4.4.1 (Mobile renderer) · Platform: Android (APK)
 - Package: `com.redlinefoundry.afterhours` (kept so updates install over old builds)
 - Working title history: "After Hours: Street Syndicate" → "HMDnight Club" (0.9)
-- Last updated: 2026-11-16 (0.14 planning + story mode)
+- Last updated: 2026-11-16 (0.15.1 — police chases + street call-outs shipped)
 
 ---
 
@@ -268,7 +268,7 @@ Each stage is one playable APK.
 | Stage | Version | Content | Needs credits? |
 |---|---|---|---|
 | A | **0.14** | This doc. Story mode (chapters, crews, cutscene dialogue, rewards). MC3 street skills: near miss, drafting, perfect launch, FOCUS / RAM / ROAR abilities with meter and button. Crew-leader duels and new district events. | No |
-| B | 0.15 | Street call-outs: crew cars cruising each district, flash to challenge, race starts on the spot. **Police heat level and chases (confirmed wanted).** Any-order races. | No |
+| B | 0.15 | **DONE (0.15.0 police chases + heat; 0.15.1 street call-outs).** Crew cars cruise the city; pull alongside and CALL OUT to race on the spot. Police heat rises from ramming/overspeed, cruisers chase with lightbars + siren. Any-order races still to come. | No |
 | C | 0.16 | Modern look pass: better reflections and paint flake, headlight cones, rain spray, dusk preset, photo mode, camera polish. | No |
 | D | 0.17 | Real 3D bodies for the other 7 cars. | ~84 credits |
 | E | 0.18 | Soundtrack expansion and second station; story voices. | ~185–220 credits |

@@ -153,6 +153,19 @@ func _lights(dz: float) -> void:
 	spot.light_color = Color(1.0, 0.95, 0.85)
 	spot.shadow_enabled = false
 	add_child(spot)
+	# floodlights on the corners wash the forecourt
+	for sx in [-1.0, 1.0]:
+		var fl := SpotLight3D.new()
+		add_child(fl)
+		fl.position = Vector3(sx * (W - 0.6), HGT + 0.6, dz + 0.8 * face)
+		fl.look_at_from_position(fl.global_position, global_position + Vector3(sx * 4.0, 0, (D + 15.0) * face), Vector3.UP)
+		fl.spot_range = 36.0
+		fl.spot_angle = 50.0
+		fl.spot_attenuation = 0.5
+		fl.light_energy = 5.5
+		fl.light_color = Color(1.0, 0.95, 0.86)
+		fl.shadow_enabled = false
+		EnvKit.box(self, Vector3(0.7, 0.3, 0.4), Vector3(sx * (W - 0.6), HGT + 0.6, dz + 0.5 * face), EnvKit.emissive(Color(1.0, 0.96, 0.88), 4.0))
 
 
 # --------------------------------------------------------------- door control

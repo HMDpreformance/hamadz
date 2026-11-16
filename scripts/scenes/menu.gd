@@ -57,55 +57,72 @@ var _shot_t := 0.0
 var _t := 0.0
 var _traffic: TrafficCar
 var _logo: Label
+var _base := Transform3D.IDENTITY
 
 
 func _ready() -> void:
-	env = GFX.make_environment(Color(0.3, 0.33, 0.5), 0.6, Color(0.08, 0.05, 0.12), 0.008, EnvKit.city_sky())
+	# the menu plays in front of the real game city (same streets, buildings and wet road)
+	env = GFX.make_environment(Color(0.5, 0.55, 0.7), 0.5, Color(0.045, 0.05, 0.075), 0.0022, W3D.sky())
 	env.background_mode = Environment.BG_SKY
+	env.background_energy_multiplier = 0.1
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.34, 0.4, 0.58)
+	env.ambient_light_sky_contribution = 0.0
+	env.ambient_light_energy = 0.95
+	env.tonemap_exposure = 1.15
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	env.adjustment_saturation = 1.08
+	env.adjustment_contrast = 1.08
+	env.glow_intensity = 0.7
+	env.glow_hdr_threshold = 1.1
+	env.fog_sky_affect = 0.25
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
-	city = City.new()
-	city.blocks = 2
-	city.seed_v = 31
-	city.with_colliders = false
+	var world := OpenWorld.new()
+	world.LOAD_R = 150.0
+	world.UNLOAD_R = 200.0
+	city = world
 	add_child(city)
 	city.build()
+	_base = Transform3D(Basis(Vector3.UP, PI), Vector3(world.road_x(6) + 1.7, 0, 16.0))
+	world.preload_around(_base.origin)
 	car = CarVisual.new()
 	add_child(car)
 	car.setup(Game.current_car(), Game.config())
-	car.rotation.y = 0.5
-	car.set_steer(0.35)
+	car.transform = _base * Transform3D(Basis(Vector3.UP, 0.35), Vector3.ZERO)
+	car.set_steer(0.3)
+	car.set_lights(true)
 	city.focus = car
 	# hero lighting on the car
 	var key := SpotLight3D.new()
-	key.position = Vector3(2.5, 7.0, -4.0)
-	key.look_at_from_position(key.position, Vector3(0, 0.5, 0), Vector3.UP)
-	key.spot_range = 16.0
-	key.spot_angle = 30.0
-	key.light_energy = 7.0
-	key.light_color = Color(1.0, 0.92, 0.82)
-	key.shadow_enabled = GFX.p.shadows
 	add_child(key)
-	for d in [[Vector3(-5, 1.6, 2), Color(1.0, 0.15, 0.55), 2.2], [Vector3(5, 1.4, 3), Color(0.1, 0.8, 1.0), 2.2]]:
-		var o := OmniLight3D.new()
-		o.position = d[0]
-		o.light_color = d[1]
-		o.light_energy = d[2]
-		o.omni_range = 9.0
-		add_child(o)
-	# neon gantry over the street so the backdrop reads at a glance
-	city.add_sign("STREET SYNDICATE", Vector3(0, 9.5, 26.0), PI, Color(1.0, 0.1, 0.5), 3.4)
-	city.add_sign("OPEN ALL NIGHT", Vector3(-22.0, 6.5, -18.0), PI * 0.25, Color(0.1, 0.85, 1.0), 2.2)
+	key.look_at_from_position(_base * Vector3(2.5, 7.0, 4.0), _base * Vector3(0, 0.5, 0), Vector3.UP)
+	key.spot_range = 16.0
+	key.spot_angle = 32.0
+	key.light_energy = 6.0
+	key.light_color = Color(1.0, 0.86, 0.68)
+	key.shadow_enabled = GFX.p.shadows
+	var fill := OmniLight3D.new()
+	fill.position = _base * Vector3(-4.5, 1.6, 3.0)
+	fill.light_color = Color(0.75, 0.85, 1.0)
+	fill.light_energy = 1.4
+	fill.omni_range = 9.0
+	add_child(fill)
+	if GFX.p.mirror:
+		var mirror := PlanarReflection.new()
+		add_child(mirror)
+		mirror.setup(0.5)
 	# passing traffic for life
 	var h := City.PITCH * 0.5 - 5.6
-	var c := Vector3(City.PITCH * 0.5, 0, City.PITCH * 0.5)
+	var c := Vector3(world.road_x(6) + City.PITCH * 0.5, 0, 0)
 	_traffic = TrafficCar.new()
 	add_child(_traffic)
 	_traffic.setup("muscle" if Game.current_car() != "muscle" else "euro", 11)
 	_traffic.run_loop(PackedVector3Array([c + Vector3(-h, 0, h), c + Vector3(-h, 0, -h), c + Vector3(h, 0, -h), c + Vector3(h, 0, h)]), 1)
 	cam = Camera3D.new()
 	cam.fov = 38.0
+	cam.h_offset = -1.3
 	cam.far = 500.0
 	add_child(cam)
 	_build_ui()
@@ -118,11 +135,12 @@ func _ready() -> void:
 # ====================================================================== cameras
 func _shots() -> Array:
 	# [from_pos, to_pos, from_look, to_look, fov, duration]
+	# the first shot shows the back of the car
 	return [
-		[Vector3(-5.5, 0.9, -5.0), Vector3(-2.5, 1.3, -6.6), Vector3(0.4, 0.6, 0), Vector3(0.4, 0.6, 0), 40.0, 8.0],
-		[Vector3(4.6, 0.35, -1.0), Vector3(4.2, 0.5, 2.6), Vector3(0, 0.5, -0.6), Vector3(0, 0.55, 0.6), 34.0, 7.0],
-		[Vector3(-3.0, 3.6, 6.5), Vector3(1.5, 2.2, 6.0), Vector3(0, 0.5, 0), Vector3(0, 0.6, 0), 42.0, 8.0],
-		[Vector3(-2.2, 0.5, -3.4), Vector3(-3.4, 0.6, -1.6), Vector3(-0.3, 0.45, -1.2), Vector3(-0.6, 0.5, -0.4), 30.0, 7.0],
+		[Vector3(-3.8, 1.0, 5.6), Vector3(-1.6, 1.35, 6.9), Vector3(0.3, 0.7, 0), Vector3(0.3, 0.7, 0), 40.0, 8.0],
+		[Vector3(4.6, 0.35, 1.4), Vector3(4.2, 0.5, -2.4), Vector3(0, 0.5, 0.6), Vector3(0, 0.55, -0.6), 34.0, 7.0],
+		[Vector3(3.2, 3.4, 7.2), Vector3(-1.5, 2.3, 6.6), Vector3(0, 0.5, 0), Vector3(0, 0.6, 0), 42.0, 8.0],
+		[Vector3(-2.4, 0.5, 3.2), Vector3(-3.4, 0.6, 1.4), Vector3(-0.3, 0.45, 1.2), Vector3(-0.6, 0.5, 0.4), 30.0, 7.0],
 	]
 
 
@@ -137,8 +155,7 @@ func _process(dt: float) -> void:
 	var s: Array = _shots()[_shot]
 	var k := clampf(_shot_t / float(s[5]), 0.0, 1.0)
 	var e := k * k * (3.0 - 2.0 * k)
-	cam.position = (s[0] as Vector3).lerp(s[1], e)
-	cam.look_at((s[2] as Vector3).lerp(s[3], e), Vector3.UP)
+	cam.look_at_from_position(_base * (s[0] as Vector3).lerp(s[1], e), _base * (s[2] as Vector3).lerp(s[3], e), Vector3.UP)
 	cam.fov = s[4]
 	# quick dip to black between shots
 	var edge := minf(_shot_t, float(s[5]) - _shot_t)

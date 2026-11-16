@@ -30,6 +30,7 @@ var _fade: ColorRect
 var _bars: Array = []
 var _cine: Camera3D
 var _rain: Rain
+const RAIN_CHANCE := 0.12
 var _cine_t := 0.0
 var _cine_center := Vector3.ZERO
 var _race_holder: Node3D
@@ -142,8 +143,15 @@ func _ready() -> void:
 
 	_race_holder = Node3D.new()
 	add_child(_race_holder)
-	_rain = Rain.new()
-	add_child(_rain)
+	# weather: dry nights are normal, rain is rare (about one drive in eight)
+	var raining := randf() < RAIN_CHANCE
+	if OS.get_environment("AH_RAIN") != "":
+		raining = OS.get_environment("AH_RAIN") == "1"
+	StreetSurface.set_rain(raining)
+	fx.wet = raining
+	if raining:
+		_rain = Rain.new()
+		add_child(_rain)
 	if GFX.p.mirror:
 		_mirror = PlanarReflection.new()
 		add_child(_mirror)

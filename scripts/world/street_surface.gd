@@ -28,6 +28,7 @@ uniform sampler2D refl_tex : source_color, filter_linear, repeat_disable;
 uniform float refl_on = 0.0;
 uniform float tile = 4.0;
 uniform float wet = 1.0;
+uniform float rainf = 1.0;      // 1 = rain is falling (rings on the puddles)
 uniform vec3 tint : source_color = vec3(1.0);
 uniform vec3 lamp_color : source_color = vec3(1.0, 0.7, 0.4);
 uniform float lamp_power = 5.0;
@@ -113,7 +114,7 @@ void fragment() {
 	vec2 rc = floor(p * 2.2);
 	float rh = fract(sin(dot(rc, vec2(127.1, 311.7))) * 43758.5453);
 	float rt = fract(TIME * 1.3 + rh * 7.0);
-	float ring = smoothstep(0.08, 0.0, abs(length(fract(p * 2.2) - 0.5) - rt * 0.45)) * (1.0 - rt) * step(0.55, rh) * puddle;
+	float ring = smoothstep(0.08, 0.0, abs(length(fract(p * 2.2) - 0.5) - rt * 0.45)) * (1.0 - rt) * step(0.55, rh) * puddle * rainf;
 	float ndepth = mix(1.0, 0.12, puddle);
 	NORMAL_MAP = mix(vec3(0.5, 0.5, 1.0), nm, ndepth);
 	NORMAL_MAP_DEPTH = 1.0;
@@ -182,7 +183,23 @@ static func _make(mode: float, tex: String, tile: float, tint: Color, city: Node
 	m.set_shader_parameter("tint", tint)
 	m.set_shader_parameter("pitch", City.PITCH)
 	m.set_shader_parameter("half_road", City.ROAD * 0.5)
+	m.set_shader_parameter("wet", 1.0 if raining else DRY_WET)
+	m.set_shader_parameter("rainf", 1.0 if raining else 0.0)
 	return m
+
+
+## Weather. Dry nights are the norm: the street keeps a light sheen (hosed-down,
+## night-shoot look) with few puddles; rain brings the full wet road and rings.
+const DRY_WET := 0.42
+static var raining := false
+
+
+static func set_rain(on: bool) -> void:
+	raining = on
+	for m in [_road, _walk]:
+		if m:
+			m.set_shader_parameter("wet", 1.0 if on else DRY_WET)
+			m.set_shader_parameter("rainf", 1.0 if on else 0.0)
 
 
 static func road(offset: Vector2, extent: Vector2) -> ShaderMaterial:

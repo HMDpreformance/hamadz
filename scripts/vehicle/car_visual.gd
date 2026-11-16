@@ -696,18 +696,27 @@ func _build_wheels() -> void:
 		if not front:
 			tw += wide * 0.5              # a widebody is there to fit more rubber
 		var z: float = spec.front_axle if front else spec.rear_axle
+		var wsc := ws
+		if model and not _fit.is_empty():
+			var f: Dictionary = _fit["front" if front else "rear"]
+			z = f.z
+			wsc = f.r / WheelFactory.radius(0)      # fill the arch the baked wheel filled
 		var u := _u(z)
 		var x := _hw(u) + 0.022 + wide - tw * ws * 0.5 - 0.012
 		if model:
 			x = float(_model_cfg.get("track", _model_hw - 0.03)) - tw * ws * 0.5 + wide
+			if not _fit.is_empty():
+				x = float(_fit["front" if front else "rear"].x) - tw * wsc * 0.5 + wide
 		for left in [false, true]:
 			var w := WheelFactory.build(int(cfg.rims), int(cfg.rim_color), size_idx, tw, left)
-			w.pivot.position = Vector3(-x if left else x, wheel_radius, z)
-			w.pivot.scale = Vector3.ONE * ws
+			w.pivot.position = Vector3(-x if left else x, WheelFactory.radius(size_idx) * wsc, z)
+			w.pivot.scale = Vector3.ONE * wsc
 			(w.spin.get_parent() as Node3D).rotation.z = camber
 			w["front"] = front
 			_wheel_root.add_child(w.pivot)
 			wheels.append(w)
+	if model and not _fit.is_empty():
+		wheel_radius = WheelFactory.radius(size_idx) * float(_fit.rear.r) / WheelFactory.radius(0)
 
 
 func _spec_r() -> float:
@@ -717,6 +726,10 @@ func _spec_r() -> float:
 func _update_ride() -> void:
 	var drop: float = DROP[clampi(int(cfg.suspension), 0, 3)] + RIDE[clampi(int(cfg.get("ride", 0)), 0, 3)]
 	body.position.y = (wheel_radius - _spec_r()) - drop
+	if model and not _fit.is_empty():
+		# the body stands on its own (cut-out) wheels; only bigger rims and the drop move it
+		var gain: float = WheelFactory.radius(clampi(int(cfg.wheel_size), 0, 3)) / WheelFactory.radius(0) - 1.0
+		body.position.y = float(_fit.rear.r) * gain - drop
 
 
 func ride_offset() -> float:
@@ -1226,6 +1239,14 @@ uniform float paint_metal = 0.5;
 uniform float paint_rough = 0.17;
 uniform float coat = 1.0;
 uniform float tail_e = 1.4;
+// the wheels modelled into the body are cut away so only the real, spinning wheels show
+uniform mat4 to_body = mat4(1.0);
+uniform vec4 cut_f = vec4(0.0);    // z, y, radius, inner x (body space); radius 0 = off
+uniform vec4 cut_r = vec4(0.0);
+varying vec3 bpos;
+void vertex() {
+	bpos = (to_body * vec4(VERTEX, 1.0)).xyz;
+}
 vec3 rgb2hsv(vec3 c) {
 	vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
 	vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
@@ -1234,6 +1255,8 @@ vec3 rgb2hsv(vec3 c) {
 	return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-5)), d / (q.x + 1e-5), q.x);
 }
 void fragment() {
+	if (cut_f.z > 0.0 && abs(bpos.x) > cut_f.w && length(bpos.zy - cut_f.xy) < cut_f.z) discard;
+	if (cut_r.z > 0.0 && abs(bpos.x) > cut_r.w && length(bpos.zy - cut_r.xy) < cut_r.z) discard;
 	vec3 c = texture(tex, UV).rgb;
 	vec3 h = rgb2hsv(c);
 	vec3 kh = rgb2hsv(key);
@@ -1302,6 +1325,17 @@ func _load_model(id: String) -> bool:
 	_model_hw = box.size.x * s * 0.5
 	_model_h = box.size.y * s
 	_paint_mats.clear()
+	_fit = {}
+	var fit = _model_cfg.get("fit")
+	if fit is Dictionary and (fit.get("wheels", []) as Array).size() == 2:
+		var lift := float(_model_cfg.get("lift", 0.0))
+		for w in fit.wheels:
+			var along := Vector3(float(w.z), 0, 0) if str(fit.get("axis", "x")) == "x" else Vector3(0, 0, float(w.z))
+			var z: float = (holder.transform.basis * along).z * _L
+			var e := {"z": z, "y": float(w.y) * _L + lift, "r": float(w.r) * _L, "x": float(w.x) * _L}
+			_fit["front" if z < 0.0 else "rear"] = e
+		if not (_fit.has("front") and _fit.has("rear")):
+			_fit = {}
 	for mi in _meshes(model):
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		for i in mi.mesh.get_surface_count():
@@ -1312,11 +1346,38 @@ func _load_model(id: String) -> bool:
 				sm.set_shader_parameter("tex", src.albedo_texture)
 			if _model_cfg.has("key"):
 				sm.set_shader_parameter("key", Color(_model_cfg.key))
+			if not _fit.is_empty():
+				sm.set_shader_parameter("to_body", root.transform * holder.transform * _rel_xf(mi, holder))
+				for k in ["front", "rear"]:
+					var f: Dictionary = _fit[k]
+					sm.set_shader_parameter("cut_f" if k == "front" else "cut_r", Vector4(f.z, f.y, f.r * 1.03, f.x - CUT_DEPTH))
 			mi.set_surface_override_material(i, sm)
 			_paint_mats.append(sm)
+	# dark wheel wells behind the cut-outs, so the arches are not see-through
+	if not _fit.is_empty():
+		var wm := StandardMaterial3D.new()
+		wm.albedo_color = Color(0.012, 0.012, 0.014)
+		wm.roughness = 1.0
+		for k in ["front", "rear"]:
+			var f: Dictionary = _fit[k]
+			for sx in [-1.0, 1.0]:
+				var well := MeshInstance3D.new()
+				var cm := CylinderMesh.new()
+				cm.top_radius = f.r * 1.08
+				cm.bottom_radius = f.r * 1.08
+				cm.height = 0.03
+				cm.radial_segments = 20
+				cm.rings = 0
+				well.mesh = cm
+				well.material_override = wm
+				well.rotation.z = PI * 0.5
+				well.position = Vector3(sx * (f.x - CUT_DEPTH - 0.02), f.y, f.z)
+				body.add_child(well)
 	return true
 
 
+const CUT_DEPTH := 0.34     # how far in from the wheel face the baked wheel is removed
+var _fit := {}              # measured baked wheels (tools/fit_wheels.py): front/rear -> {z, y, r, x}
 var _paint_mats := []
 
 

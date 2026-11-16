@@ -1853,10 +1853,6 @@ func dev_hq() -> void:
 	env.tonemap_white = 8.0
 	env.adjustment_saturation = 1.38
 	env.adjustment_contrast = 1.14
-	env.volumetric_fog_enabled = true
-	env.volumetric_fog_density = 0.016
-	env.volumetric_fog_emission = Color(0.5, 0.25, 0.5)
-	env.volumetric_fog_emission_energy = 0.4
 
 
 func dev_near(x: String, z: String) -> void:

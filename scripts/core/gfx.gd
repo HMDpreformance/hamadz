@@ -53,25 +53,43 @@ func make_environment(ambient: Color, ambient_energy: float, fog: Color, fog_den
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = ambient
 	env.ambient_light_energy = ambient_energy
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	# Filmic AgX tone curve: rolls off bright neon cleanly instead of clipping to
+	# white. Works on both the mobile and forward+ renderers.
+	env.tonemap_mode = Environment.TONE_MAPPER_AGX
 	env.tonemap_white = 6.0
+	env.tonemap_exposure = 0.95
+	# Bloom: only genuinely bright sources glow, soft blend so shop windows don't
+	# smear into a flare.
 	env.glow_enabled = p.glow
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	env.glow_intensity = 0.55
-	env.glow_strength = 0.95
-	env.glow_bloom = 0.0
-	env.glow_hdr_threshold = 1.15
-	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
+	env.glow_strength = 0.9
+	env.glow_bloom = 0.08
+	env.glow_hdr_threshold = 1.35
+	env.glow_hdr_scale = 1.4
 	env.set_glow_level(1, 0.0)
 	env.set_glow_level(2, 1.0)
 	env.set_glow_level(3, 1.0)
 	env.set_glow_level(4, 1.0)
 	env.set_glow_level(5, 0.6)
+	# Screen-space effects: forward+ (desktop/Steam) only -- silently ignored by
+	# the mobile renderer, so the same code path covers both tiers.
+	env.ssr_enabled = true
+	env.ssr_max_steps = 48
+	env.ssr_fade_in = 0.15
+	env.ssr_fade_out = 2.0
+	env.ssr_depth_tolerance = 0.3
+	env.ssil_enabled = true
+	env.ssil_intensity = 1.0
+	env.ssao_enabled = true
+	env.ssao_intensity = 2.0
+	env.ssao_radius = 2.5
 	if fog_density > 0.0:
 		env.fog_enabled = true
 		env.fog_light_color = fog
 		env.fog_density = fog_density
 		env.fog_sky_affect = 0.0
 	env.adjustment_enabled = true
-	env.adjustment_contrast = 1.08
+	env.adjustment_contrast = 1.06
 	env.adjustment_saturation = 1.12
 	return env

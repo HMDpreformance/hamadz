@@ -1845,14 +1845,17 @@ func dev_hq() -> void:
 	env.ssao_enabled = true
 	env.ssao_intensity = 2.2
 	env.ssao_radius = 2.5
-	env.glow_bloom = 0.3
-	env.glow_intensity = 1.0
-	env.glow_strength = 1.1
-	env.glow_hdr_threshold = 0.85
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
+	env.glow_bloom = 0.08
+	env.glow_intensity = 0.55
+	env.glow_strength = 0.9
+	env.glow_hdr_threshold = 1.35
+	env.glow_hdr_scale = 1.4
 	env.tonemap_mode = Environment.TONE_MAPPER_AGX
-	env.tonemap_white = 8.0
-	env.adjustment_saturation = 1.38
-	env.adjustment_contrast = 1.14
+	env.tonemap_white = 6.0
+	env.tonemap_exposure = 0.95
+	env.adjustment_saturation = 1.12
+	env.adjustment_contrast = 1.06
 
 
 func dev_near(x: String, z: String) -> void:

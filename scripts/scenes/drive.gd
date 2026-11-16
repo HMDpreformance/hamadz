@@ -71,6 +71,7 @@ var _garage: GarageBuilding = null
 var _garage_near := false
 var _garage_prompt: Label = null
 var _exit_garage := false
+var _big_map: Control = null
 
 
 func _ready() -> void:
@@ -289,6 +290,10 @@ func _refresh_event_markers() -> void:
 			if tag:
 				tag.visible = _is_story_next(id)
 			e.node.get_node("Beam").visible = not lock
+	# always-on LSX garage marker (wrench). _pin() clamps it to the map edge
+	# when it is out of range, so it doubles as a direction arrow.
+	if state == "roam":
+		mk.append({"pos": city.block_center(Vector2i(6, 4)), "color": Color(0.1, 0.95, 1.0), "kind": "garage"})
 	minimap.markers = mk
 	_update_story_hud()
 
@@ -1065,6 +1070,30 @@ func _build_hud() -> void:
 	var ring := _ChromeRing.new()
 	ring.size = Vector2(196, 196)
 	_map_holder.add_child(ring)
+	# tap the minimap to open the big city map
+	var map_btn := Button.new()
+	map_btn.flat = true
+	map_btn.focus_mode = Control.FOCUS_NONE
+	map_btn.position = Vector2(8, 8)
+	map_btn.size = Vector2(180, 180)
+	map_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	map_btn.pressed.connect(_open_big_map)
+	_map_holder.add_child(map_btn)
+	var map_hint := UI.label("MAP", 14, UI.CYAN, true)
+	map_hint.position = Vector2(70, 150)
+	map_hint.size = Vector2(60, 20)
+	map_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	map_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_map_holder.add_child(map_hint)
+
+	# --- top-left: GARAGE shortcut
+	var gk := TouchKey.make("", "GARAGE", UI.AMBER, Vector2(120, 64))
+	gk.toggle_only = true
+	gk.round_shape = false
+	gk.position = Vector2(296, 16)
+	gk.tapped.connect(_goto_garage)
+	_hud.add_child(gk)
+	_drive_ui.append(gk)
 
 	# --- driving controls
 	var left := TouchKey.make("steer_left", "<", UI.TEXT, Vector2(124, 124))
@@ -1404,6 +1433,84 @@ func _play_exit_garage() -> void:
 	car.reset_to(car.global_position, car.rotation.y)
 	car.set_physics_process(true)
 	car.input_enabled = true
+
+
+## Jump straight into the LSX garage from anywhere in free roam.
+func _goto_garage() -> void:
+	if state != "roam" or not car.input_enabled:
+		return
+	if _big_map:
+		_close_big_map()
+	get_tree().paused = false
+	Nav.goto("garage", {"from": "drive"}, "LSXMOTORSPORT")
+
+
+## Tap the minimap -> a near-fullscreen city map that pauses the game.
+func _open_big_map() -> void:
+	if _big_map != null or state != "roam":
+		return
+	get_tree().paused = true
+	_big_map = Control.new()
+	_big_map.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_big_map.process_mode = Node.PROCESS_MODE_ALWAYS
+	_hud.add_child(_big_map)
+	var bg := ColorRect.new()
+	bg.color = Color(0.015, 0.02, 0.03, 0.92)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	_big_map.add_child(bg)
+	var vp := get_viewport().get_visible_rect().size
+	var side := minf(vp.x * 0.9, vp.y - 190.0)
+	var holder := Control.new()
+	holder.position = Vector2((vp.x - side) * 0.5, 64.0)
+	holder.size = Vector2(side, side)
+	_big_map.add_child(holder)
+	var big := MiniMap.new()
+	big.world = city
+	big.player = car
+	big.traffic = traffic
+	big.markers = minimap.markers
+	big.target = minimap.target
+	big.route = minimap.route
+	big.round_frame = false
+	big.scale_px = side / 1200.0    # fit roughly the whole city
+	big.position = Vector2.ZERO
+	big.size = Vector2(side, side)
+	holder.add_child(big)
+	var title := UI.label("CITY MAP", 40, UI.CYAN, true)
+	UI.outline(title, 8)
+	title.position = Vector2(holder.position.x, holder.position.y - 60)
+	title.size = Vector2(side, 48)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_big_map.add_child(title)
+	var legend := UI.label("WRENCH = LSXMOTORSPORT GARAGE", 20, UI.TEXT, true)
+	legend.position = Vector2(holder.position.x, holder.position.y + side + 8)
+	legend.size = Vector2(side, 28)
+	legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_big_map.add_child(legend)
+	var go := TouchKey.make("", "GO TO GARAGE", UI.AMBER, Vector2(240, 64))
+	go.toggle_only = true
+	go.round_shape = false
+	go.position = Vector2(vp.x * 0.5 - 250, vp.y - 74)
+	go.tapped.connect(_goto_garage)
+	_big_map.add_child(go)
+	var close := TouchKey.make("", "CLOSE", UI.RED, Vector2(240, 64))
+	close.toggle_only = true
+	close.round_shape = false
+	close.position = Vector2(vp.x * 0.5 + 10, vp.y - 74)
+	close.tapped.connect(_close_big_map)
+	_big_map.add_child(close)
+	bg.gui_input.connect(func(e: InputEvent):
+		if e is InputEventMouseButton and e.pressed:
+			_close_big_map())
+
+
+func _close_big_map() -> void:
+	if _big_map == null:
+		return
+	_big_map.queue_free()
+	_big_map = null
+	get_tree().paused = false
 
 
 # ====================================================================== HUD widgets

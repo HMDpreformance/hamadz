@@ -55,6 +55,8 @@ func load_game() -> void:
 	# start phones on PERFORMANCE so they run smooth out of the box.
 	if (OS.has_feature("mobile") or OS.get_name() in ["Android", "iOS"]) and not bool(data.settings.get("preset_set", false)):
 		data.settings.preset = 0
+	# Temporary: keep the FPS counter on by default so Hamad can report numbers.
+	data.settings.show_fps = true
 	for id in CarDB.CAR_ORDER:
 		_ensure_car(id)
 

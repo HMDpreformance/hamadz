@@ -4,7 +4,7 @@ extends Node3D
 
 const ITEMS := [
 	["HIT THE STREETS", "streets"],
-	["CAREER MODE", "career"],
+	["STORY MODE", "career"],
 	["CAR LOT", "lot"],
 	["GARAGE", "garage"],
 	["OPTIONS", "options"],
@@ -217,7 +217,7 @@ func _build_ui() -> void:
 	var l3 := UI.label("CASH  " + CarDB.money(Game.money()), 20, UI.AMBER)
 	l3.position = Vector2(30, 62)
 	info.add_child(l3)
-	var ver := UI.label("BUILD 0.13  •  VERTICAL SLICE", 14, Color(1, 1, 1, 0.4))
+	var ver := UI.label("BUILD 0.14  •  STORY UPDATE", 14, Color(1, 1, 1, 0.4))
 	UI.place(ver, Vector2(0, 1), Vector2(48, -30), Vector2(400, 20))
 	_menu_root.add_child(ver)
 
@@ -236,7 +236,9 @@ func _on_item(id: String) -> void:
 			Nav.goto("showroom", {"from": "menu"}, "CAR LOT")
 		"streets":
 			Nav.goto("drive", {}, "HITTING THE STREETS")
-		"career", "arcade":
+		"career":
+			_open(_career())
+		"arcade":
 			_open(_coming_soon(id))
 		"options":
 			var op := OptionsPanel.new()
@@ -339,6 +341,70 @@ func _coming_soon(id: String) -> Control:
 	g.pressed.connect(func(): Nav.goto("garage", {}, "ENTERING GARAGE"))
 	box.add_child(g)
 	_back_button(box, 820, 470)
+	return root
+
+
+## Story mode: the chapter list with progress, and CONTINUE STORY.
+func _career() -> Control:
+	var w := 1040.0
+	var h := 640.0
+	var root := _frame(w, h, "STORY MODE", UI.MAGENTA)
+	var box: Control = root.get_node("Box")
+	var cur := Game.story_chapter()
+	var fin: bool = Game.story().finished
+	var sub := UI.label("Five crews run Dubai after dark. Above them sits the Night Club. Earn your name.", 20, UI.TEXT)
+	sub.position = Vector2(36, 80)
+	box.add_child(sub)
+	var y := 120.0
+	for i in StoryDB.chapter_count():
+		var ch := StoryDB.chapter(i)
+		var done := fin or i < cur
+		var now := not fin and i == cur
+		var crew: Dictionary = StoryDB.CREWS.get(ch.crew, {})
+		var col: Color = crew.get("color", UI.AMBER)
+		var row := UI.panel(Color(col.r * 0.12, col.g * 0.12, col.b * 0.12, 0.9) if now else Color(0, 0, 0, 0.35),
+			Color(col.r, col.g, col.b, 0.8 if now else 0.15), 0.15)
+		row.position = Vector2(30, y)
+		row.size = Vector2(w - 60, 50)
+		box.add_child(row)
+		var s1 := UI.label(ch.sub, 15, col if (done or now) else UI.DIM)
+		s1.position = Vector2(22, 4)
+		row.add_child(s1)
+		var s2 := UI.label(ch.title, 26, Color.WHITE if (done or now) else UI.DIM, true)
+		s2.position = Vector2(20, 16)
+		row.add_child(s2)
+		var info := ""
+		if not crew.is_empty():
+			info = "%s  •  %s" % [crew.district, crew.family]
+		else:
+			info = ch.district
+		var s3 := UI.label(info, 16, UI.DIM)
+		s3.position = Vector2(380, 16)
+		row.add_child(s3)
+		var won := 0
+		for id in ch.missions:
+			if Game.event_passed(id):
+				won += 1
+		var st := "COMPLETE" if done else ("%d / %d RACES" % [won, ch.missions.size()] if now else "LOCKED")
+		var s4 := UI.label(st, 18, UI.GREEN if done else (UI.AMBER if now else UI.DIM))
+		s4.position = Vector2(w - 260, 14)
+		s4.size = Vector2(180, 24)
+		s4.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		row.add_child(s4)
+		y += 58.0
+	var abil := []
+	for a in Game.story().abilities:
+		abil.append(StoryDB.ABILITIES[a].name)
+	var al := UI.label("ABILITIES WON: " + (", ".join(abil) if not abil.is_empty() else "NONE YET"), 17, UI.CYAN)
+	al.position = Vector2(36, h - 66)
+	box.add_child(al)
+	var go := NeonButton.make("REPLAY CITY" if fin else ("START STORY" if cur == 0 and int(Game.story().seen) < 0 else "CONTINUE STORY"), Vector2(320, 54), UI.GREEN, 24)
+	go.align_left = false
+	go.filled = true
+	go.position = Vector2(w - 600, h - 78)
+	go.pressed.connect(func(): Nav.goto("drive", {"story": true}, StoryDB.chapter(Game.story_chapter()).title))
+	box.add_child(go)
+	_back_button(box, w, h)
 	return root
 
 

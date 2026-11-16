@@ -56,6 +56,11 @@ var traffic: Traffic
 var minimap: MiniMap
 var _space_t := 0.0
 var _district := ""
+var skills: StreetSkills
+var dialog: StoryDialog
+var _story_label: Label
+var _story_busy := false
+var story_target = null         # Vector3 or null: next story race (free roam GPS)
 
 
 func _ready() -> void:
@@ -121,8 +126,19 @@ func _ready() -> void:
 	_make_marker()
 	_build_hud()
 	_spawn_traffic()
+	skills = StreetSkills.new()
+	add_child(skills)
+	skills.setup(car, traffic, cam, _hud, env)
+	skills.rivals_fn = func() -> Array:
+		var out := []
+		if race:
+			for r in race.rivals:
+				out.append(r.car)
+		return out
+	_drive_ui.append_array(skills.hud_nodes())
 	_make_event_markers()
 	_set_state("roam")
+	get_tree().create_timer(1.6).timeout.connect(_story_check)
 	Audio.play_ambience("city", -10.0)
 	Audio.music_state("roam", 1.5)
 	get_tree().create_timer(5.0).timeout.connect(func(): Audio.dj_break(true))
@@ -171,7 +187,21 @@ func _make_event_markers() -> void:
 		beam.material_override = m
 		beam.position.y = 20.0
 		beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		beam.name = "Beam"
 		n.add_child(beam)
+		if StoryDB.chapter_of(ev.id) >= 0:
+			var st := Label3D.new()
+			st.font = UI.title_font()
+			st.font_size = 72
+			st.pixel_size = 0.02
+			st.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			st.shaded = false
+			st.no_depth_test = true
+			st.text = "★ STORY ★" if not ev.get("boss", false) else "★ CREW LEADER ★"
+			st.modulate = Color(2.2, 1.7, 0.4)
+			st.position.y = 9.6
+			st.name = "Story"
+			n.add_child(st)
 		var l := Label3D.new()
 		l.font = UI.title_font()
 		l.font_size = 96
@@ -200,6 +230,12 @@ func _make_event_markers() -> void:
 func _event_lock(ev: Dictionary) -> String:
 	if _dev_unlock:
 		return ""
+	var ci := StoryDB.chapter_of(ev.id)
+	if ci >= 0:
+		if Game.story().finished or ci <= Game.story_chapter() or Game.event_passed(ev.id):
+			return ""
+		var ch := StoryDB.chapter(ci)
+		return "STORY: UNLOCKS IN %s, %s" % [ch.sub, ch.title]
 	if Game.rep() < int(ev.rep):
 		return "NEEDS %d REP  (YOU HAVE %d)" % [int(ev.rep), Game.rep()]
 	var need := int(ev.get("rating", 0))
@@ -216,10 +252,18 @@ func _refresh_event_markers() -> void:
 		e.node.visible = show
 		if show:
 			var col: Color = EventDB.TYPE_COLOR[e.ev.type]
-			if _event_lock(e.ev) != "":
+			var lock := _event_lock(e.ev) != ""
+			if lock:
 				col = Color(0.45, 0.45, 0.5)
+			elif _is_story_next(id):
+				col = Color(1.0, 0.82, 0.15)
 			mk.append({"pos": e.pos, "color": col})
+			var tag := e.node.get_node_or_null("Story") as Label3D
+			if tag:
+				tag.visible = _is_story_next(id)
+			e.node.get_node("Beam").visible = not lock
 	minimap.markers = mk
+	_update_story_hud()
 
 
 func _update_event_card() -> void:
@@ -253,6 +297,10 @@ func _update_event_card() -> void:
 	if int(ev.get("laps", 1)) > 1:
 		bits.append("%d LAPS" % int(ev.laps))
 	(_card.get_node("Info") as Label).text = "   •   ".join(bits)
+	var ci := StoryDB.chapter_of(ev.id)
+	if ci >= 0:
+		var ch := StoryDB.chapter(ci)
+		(_card.get_node("Type") as Label).text = "%s  •  STORY  •  %s %s" % [EventDB.TYPE_LABEL[ev.type], ch.sub, ch.title]
 	var rec := Game.event_record(ev.id)
 	var lock := _event_lock(ev)
 	var st := _card.get_node("Status") as Label
@@ -284,6 +332,7 @@ func _start_event(id: String) -> void:
 		Audio.sfx("ui_deny")
 		return
 	_last_event = id
+	skills.reset()
 	_set_state("intro")
 	Audio.sfx("ui_select")
 	Audio.sfx("whoosh", -3.0)
@@ -363,6 +412,7 @@ func _on_go() -> void:
 	Audio.music_filter(20000.0)
 	Audio.duck_music(0.0, 0.25)
 	_show_banner("GO!", 0.9)
+	skills.launch()
 	_place_marker(race.next_checkpoint(), "1" if race.cps.size() > 1 else "FINISH", UI.CYAN)
 
 
@@ -422,11 +472,13 @@ func _end_race(to_roam := true) -> void:
 	cam.make_current()
 	_hud_driving(true)
 	_near_event = "?"          # so the card for the event you are parked on shows again
+	skills.reset()
 	Audio.music_state("roam", 1.0)
 	Audio.music_filter(20000.0)
 	Audio.duck_music(0.0, 1.0)
 	if to_roam:
 		_set_state("roam")
+		get_tree().create_timer(0.6).timeout.connect(_story_check)
 
 
 func _retry_event() -> void:
@@ -444,6 +496,8 @@ func _set_bars(on: bool) -> void:
 func _hud_driving(on: bool) -> void:
 	for n in _drive_ui:
 		n.visible = on
+	if _story_label:
+		_story_label.visible = on and state == "roam"
 
 
 func _make_marker() -> void:
@@ -510,10 +564,128 @@ func _spawn_traffic() -> void:
 		minimap.traffic = traffic
 
 
+# ====================================================================== story
+func _is_story_next(id: String) -> bool:
+	if Game.story().finished:
+		return false
+	return StoryDB.chapter(Game.story_chapter()).missions.has(id) and not Game.event_passed(id)
+
+
+func _update_story_hud() -> void:
+	if _story_label == null:
+		return
+	story_target = null
+	if Game.story().finished:
+		_story_label.text = "STORY COMPLETE  •  YOU RUN THE NIGHT CLUB"
+		_story_label.add_theme_color_override("font_color", Color(1.0, 0.82, 0.2))
+		return
+	var ch := StoryDB.chapter(Game.story_chapter())
+	var done := 0
+	var next := ""
+	var best := INF
+	for id in ch.missions:
+		if Game.event_passed(id):
+			done += 1
+		elif _events.has(id):
+			var d: float = car.global_position.distance_to(_events[id].pos) if car else 0.0
+			if d < best:
+				best = d
+				next = id
+	var t := "%s  •  %s\n" % [ch.sub, ch.title]
+	if next != "":
+		t += "NEXT: %s   (%d / %d)" % [_events[next].ev.name, done, ch.missions.size()]
+		story_target = _events[next].pos
+	_story_label.text = t
+	_story_label.add_theme_color_override("font_color", Color(1.0, 0.86, 0.35))
+	if minimap and state == "roam":
+		minimap.target = story_target
+
+
+## Plays the current chapter's intro, or its outro + reward when every race in
+## it is won. Chains (outro, then the next chapter's intro).
+func _story_check() -> void:
+	if _story_busy or state != "roam" or Nav.busy or not is_inside_tree():
+		return
+	if OS.has_environment("AH_DEV") and not _dev_story:
+		return
+	if Game.story().finished:
+		return
+	var idx := Game.story_chapter()
+	var ch := StoryDB.chapter(idx)
+	if int(Game.story().seen) < idx:
+		var crew: Dictionary = StoryDB.CREWS.get(ch.crew, {})
+		var line: String = ch.district
+		if not crew.is_empty():
+			line = "%s  •  %s  •  %s" % [crew.name, crew.district, crew.family]
+		await _play_story(ch.intro, [ch.sub, ch.title, line, crew.get("color", UI.AMBER)])
+		Game.mark_intro_seen()
+		_story_check.call_deferred()
+	elif Game.chapter_complete():
+		await _play_story(ch.outro, ["COMPLETE", ch.title, "", UI.GREEN])
+		var r := Game.advance_chapter()
+		Audio.sting(true)
+		var bits := []
+		if r.has("money"):
+			bits.append("+" + CarDB.money(int(r.money)))
+		if r.has("car"):
+			bits.append(CarDB.CARS[r.car].name)
+		if r.has("ability"):
+			bits.append(StoryDB.ABILITIES[r.ability].name)
+		if not bits.is_empty():
+			_show_banner("  •  ".join(bits), 2.2)
+		_set_state("roam")
+		get_tree().create_timer(2.8).timeout.connect(_story_check)
+
+
+func _play_story(lines: Array, card: Array) -> void:
+	_story_busy = true
+	var prev_state := state
+	state = "story"
+	Audio.dj_ok = false
+	_card.visible = false
+	_refresh_event_markers()
+	car.input_enabled = false
+	Controls.release_all()
+	var tw := create_tween()
+	tw.tween_property(_fade, "color:a", 1.0, 0.35)
+	await tw.finished
+	car.hold = true
+	_cine_center = car.global_position
+	_cine_t = 0.0
+	_cine.make_current()
+	_set_bars(true)
+	_hud_driving(false)
+	(_info.get_parent() as Control).visible = false
+	Audio.duck_music(-6.0, 0.6)
+	create_tween().tween_property(_fade, "color:a", 0.0, 0.5)
+	if card[1] != "":
+		dialog.show_chapter(card[0], card[1], card[2], card[3])
+		await get_tree().create_timer(1.4).timeout
+	dialog.auto_advance = _dev_auto_story
+	await dialog.play(lines)
+	var tw2 := create_tween()
+	tw2.tween_property(_fade, "color:a", 1.0, 0.3)
+	await tw2.finished
+	car.hold = false
+	car.input_enabled = true
+	cam.snap_behind()
+	cam.make_current()
+	_set_bars(false)
+	state = prev_state
+	_hud_driving(true)
+	(_info.get_parent() as Control).visible = true
+	Audio.duck_music(0.0, 0.8)
+	create_tween().tween_property(_fade, "color:a", 0.0, 0.4)
+	_story_busy = false
+	_set_state(state)
+
+
 # ====================================================================== state
 func _set_state(st: String) -> void:
 	state = st
 	Audio.dj_ok = st == "roam"
+	if _story_label:
+		_story_label.visible = st == "roam" and _gauge.visible
 	if st != "done":
 		(_info.get_parent() as Control).visible = true
 	match st:
@@ -861,8 +1033,15 @@ func _build_hud() -> void:
 	_hud.move_child(arcs, 1)
 	_drive_ui = [left, right, gas, brk, nos, hb, _gauge, _map_holder, _arrow, pk, ck, arcs]
 
+	# story objective (under the minimap)
+	_story_label = UI.label("", 17, Color.WHITE)
+	UI.outline(_story_label, 6)
+	UI.place(_story_label, Vector2(0, 0), Vector2(26, 382), Vector2(460, 80))
+	_hud.add_child(_story_label)
 	_build_pause(layer)
 	_build_result(layer)
+	dialog = StoryDialog.new()
+	layer.add_child(dialog)
 
 
 func _show_banner(text: String, hold: float) -> void:
@@ -1177,10 +1356,17 @@ class _Arrow extends Control:
 		queue_redraw()
 
 	func _draw() -> void:
-		if scene == null or not scene._marker.visible:
+		if scene == null:
+			return
+		var goal = null
+		if scene._marker.visible:
+			goal = scene._marker.position
+		elif scene.state == "roam" and scene.story_target != null and scene._card and not scene._card.visible:
+			goal = scene.story_target
+		if goal == null:
 			return
 		var car: PlayerCar = scene.car
-		var to: Vector3 = scene._marker.position - car.global_position
+		var to: Vector3 = goal - car.global_position
 		to.y = 0.0
 		var fwd := car.forward()
 		var ang := atan2(to.dot(car.global_transform.basis.x), to.dot(fwd))
@@ -1230,6 +1416,77 @@ func dev_finish() -> void:
 
 
 var _dev_unlock := false
+var _dev_auto_story := false
+var _dev_story := false
+
+
+func dev_story_auto() -> void:
+	_dev_auto_story = true
+	_dev_story = true
+
+
+func dev_story_on() -> void:
+	_dev_story = true
+
+
+func dev_story_chapter(n: String) -> void:
+	Game.data.story.chapter = int(n)
+	Game.data.story.seen = int(n) - 1
+	_refresh_event_markers()
+
+
+func dev_win(id: String) -> void:
+	Game.record_event(id, 1, 60.0, 0)
+	_refresh_event_markers()
+
+
+func dev_story_check() -> void:
+	_story_check()
+
+
+func dev_ability(id := "") -> void:
+	skills.unlock_all = true
+	if id != "":
+		skills.ability = id
+	skills.meter = 1.0
+
+
+func dev_nearmiss_test(lat := "2.8") -> void:
+	var t: TrafficCar = traffic.cars[0]
+	var f := car.forward()
+	var p := car.global_position + f * 25.0 + car.global_transform.basis.x * float(lat)
+	t.process_mode = Node.PROCESS_MODE_DISABLED
+	t.global_transform = Transform3D(car.global_transform.basis, p)
+	car.velocity = f * 32.0
+	car.speed = 32.0
+	Input.action_press("gas")
+
+
+func dev_draft_test() -> void:
+	var t: TrafficCar = traffic.cars[0]
+	var f := car.forward()
+	t.global_transform = Transform3D(car.global_transform.basis, car.global_position + f * 9.0)
+	t.cruise = 18.0
+	car.velocity = f * 17.0
+	car.speed = 17.0
+
+
+func dev_activate() -> void:
+	skills.activate()
+
+
+func dev_rel() -> void:
+	var t: TrafficCar = traffic.cars[0]
+	var d := t.global_position - car.global_position
+	print("REL lon=%.1f lat=%.1f v=%.1f crashcd=%.2f" % [d.dot(car.forward()), d.dot(car.global_transform.basis.x), car.speed, skills._crash_cd])
+
+
+func dev_story_log() -> void:
+	print("STORY ch=%d seen=%d complete=%s busy=%s state=%s navbusy=%s %s" % [Game.story_chapter(), int(Game.story().seen), Game.chapter_complete(), _story_busy, state, Nav.busy, JSON.stringify(Game.story())])
+
+
+func dev_skills_log() -> void:
+	print("SKILLS near=%d meter=%.2f draft=%.2f active=%s push=%.2f ts=%.2f story=%s" % [skills.near_count, skills.meter, skills.draft, skills.active, car.push_time, Engine.time_scale, JSON.stringify(Game.story())])
 
 
 func dev_event(id: String) -> void:

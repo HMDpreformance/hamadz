@@ -31,6 +31,7 @@ func _fresh() -> Dictionary:
 		"runs": 0,
 		"rep": 0,
 		"events": {},
+		"story": {"chapter": 0, "seen": -1, "abilities": [], "finished": false},
 		"settings": {"difficulty": 1, "preset": 1, "music": 0.8, "sfx": 0.9, "steer_mode": 0, "show_fps": false},
 	}
 
@@ -43,9 +44,9 @@ func load_game() -> void:
 			var parsed = JSON.parse_string(f.get_as_text())
 			if typeof(parsed) == TYPE_DICTIONARY and int(parsed.get("version", 0)) == SAVE_VERSION:
 				for k in parsed:
-					if k == "settings":
+					if k == "settings" or k == "story":
 						for sk in parsed[k]:
-							data.settings[sk] = parsed[k][sk]
+							data[k][sk] = parsed[k][sk]
 					else:
 						data[k] = parsed[k]
 	data.money = int(data.money)
@@ -201,3 +202,59 @@ func event_record(id: String) -> Dictionary:
 
 func rep() -> int:
 	return int(data.get("rep", 0))
+
+
+# ------------------------------------------------------------------ story (career)
+func story() -> Dictionary:
+	return data.story
+
+
+func story_chapter() -> int:
+	return int(data.story.chapter)
+
+
+func has_ability(id: String) -> bool:
+	return data.story.abilities.has(id)
+
+
+## True when every mission of the current chapter has been won.
+func chapter_complete() -> bool:
+	if data.story.finished:
+		return false
+	for id in StoryDB.chapter(story_chapter()).missions:
+		if not event_passed(id):
+			return false
+	return true
+
+
+## Won (or a gold / silver medal in a time trial).
+func event_passed(id: String) -> bool:
+	var rec := event_record(id)
+	var ev := EventDB.get_event(id)
+	if ev.get("type", "") == "trial":
+		return int(rec.best_place) in [1, 2]
+	return int(rec.wins) > 0
+
+
+## Pays the current chapter's reward and opens the next one. Returns the reward.
+func advance_chapter() -> Dictionary:
+	var ch := StoryDB.chapter(story_chapter())
+	var r: Dictionary = ch.get("reward", {})
+	if r.has("money"):
+		data.money = int(data.money) + int(r.money)
+	if r.has("car") and not data.owned_cars.has(r.car):
+		data.owned_cars.append(r.car)
+	if r.has("ability") and not data.story.abilities.has(r.ability):
+		data.story.abilities.append(r.ability)
+	if story_chapter() >= StoryDB.chapter_count() - 1:
+		data.story.finished = true
+	else:
+		data.story.chapter = story_chapter() + 1
+	money_changed.emit(data.money)
+	save_game()
+	return r
+
+
+func mark_intro_seen() -> void:
+	data.story.seen = story_chapter()
+	save_game()

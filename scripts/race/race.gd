@@ -71,6 +71,9 @@ func setup(w: OpenWorld, event: Dictionary, p: PlayerCar, traffic: Traffic, hold
 		var pool: Array = [["tuner", "classic", "muscle", "sedan"], ["tuner", "muscle", "sedan", "rotary", "euro"],
 			["muscle", "sedan", "rotary", "euro", "suv"], ["rotary", "euro", "suv", "exotic", "muscle"]][clampi(level, 0, 3)]
 		var id: String = pool[rng.randi() % pool.size()]
+		var boss: bool = k == 0 and ev.has("rival")     # a named crew leader takes the first slot
+		if boss:
+			id = ev.rival_car
 		var cfg := CarDB.default_config(id)
 		cfg["paint"] = rng.randi() % CarDB.PAINTS.size()
 		cfg["finish"] = rng.randi() % 3
@@ -89,6 +92,9 @@ func setup(w: OpenWorld, event: Dictionary, p: PlayerCar, traffic: Traffic, hold
 		cfg["suspension"] = clampi(level, 0, 2)
 		if level >= 2:
 			cfg["turbo"] = 1 if id != "muscle" else 3
+		if boss:
+			cfg["engine"] = clampi(int(cfg["engine"]) + 1, 0, 3)
+			cfg["glow"] = 1 + rng.randi() % (CarDB.UNDERGLOW.size() - 1)
 		var c := PlayerCar.new()
 		holder.add_child(c)
 		c.setup(id, cfg)
@@ -110,6 +116,9 @@ func setup(w: OpenWorld, event: Dictionary, p: PlayerCar, traffic: Traffic, hold
 		voice.setup(c.engine_profile, true, "World")
 		voice.gain_db = 1.0 + c.exhaust_level * 1.5
 		var nm: String = names[rng.randi() % names.size()]
+		if boss:
+			nm = ev.rival
+			drv.skill += 0.03
 		names.erase(nm)
 		rivals.append({"car": c, "driver": drv, "name": nm, "voice": voice, "finish_time": -1.0})
 	# everyone watches everyone

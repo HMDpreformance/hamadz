@@ -12,10 +12,11 @@ const ACTIONS := {
 	"nitro": [KEY_SHIFT, KEY_N],
 	"camera": [KEY_C],
 	"pause": [KEY_P],
+	"ability": [KEY_Q, KEY_E],
 }
 const PAD := {
 	"gas": JOY_BUTTON_A, "brake": JOY_BUTTON_X, "handbrake": JOY_BUTTON_B, "nitro": JOY_BUTTON_Y,
-	"camera": JOY_BUTTON_RIGHT_SHOULDER, "pause": JOY_BUTTON_START,
+	"camera": JOY_BUTTON_RIGHT_SHOULDER, "pause": JOY_BUTTON_START, "ability": JOY_BUTTON_LEFT_SHOULDER,
 }
 
 

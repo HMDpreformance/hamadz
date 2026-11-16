@@ -61,6 +61,9 @@ var dialog: StoryDialog
 var _story_label: Label
 var _story_busy := false
 var story_target = null         # Vector3 or null: next story race (free roam GPS)
+var police: Police
+var _heat_label: Label
+var _was_busted := false
 
 
 func _ready() -> void:
@@ -136,6 +139,10 @@ func _ready() -> void:
 				out.append(r.car)
 		return out
 	_drive_ui.append_array(skills.hud_nodes())
+	police = Police.new()
+	add_child(police)
+	police.setup(city, car)
+	police.heat_changed.connect(_on_heat)
 	_make_event_markers()
 	_set_state("roam")
 	get_tree().create_timer(1.6).timeout.connect(_story_check)
@@ -333,6 +340,8 @@ func _start_event(id: String) -> void:
 		return
 	_last_event = id
 	skills.reset()
+	if police:
+		police.stand_down()
 	_set_state("intro")
 	Audio.sfx("ui_select")
 	Audio.sfx("whoosh", -3.0)
@@ -498,6 +507,8 @@ func _hud_driving(on: bool) -> void:
 		n.visible = on
 	if _story_label:
 		_story_label.visible = on and state == "roam"
+	if _heat_label and not on:
+		_heat_label.visible = false
 
 
 func _make_marker() -> void:
@@ -715,6 +726,8 @@ func _process(_dt: float) -> void:
 	var p := car.global_position
 	if state == "roam":
 		_update_event_card()
+		if police and car.speed_mph() > 118.0:
+			police.add_heat(_dt * 0.06)
 	elif state == "race" and race:
 		var bits := []
 		if race.laps > 1:
@@ -785,9 +798,26 @@ static func _fmt(t: float) -> String:
 	return "%02d:%05.2f" % [m, t - m * 60.0]
 
 
+func _on_heat(level: float, busted: bool) -> void:
+	if _heat_label == null:
+		return
+	if level < 1.0:
+		_heat_label.visible = false
+		return
+	var stars := int(ceil(level))
+	_heat_label.visible = state == "roam"
+	_heat_label.text = ("BUSTED? " if busted else "HEAT  ") + "★".repeat(stars)
+	if busted and not _was_busted:
+		_show_banner("COPS!", 1.0)
+		Audio.voice("", 0.0, 0)
+	_was_busted = busted
+
+
 func _on_crash(force: float) -> void:
 	Audio.sfx("crash", clampf(-12.0 + force * 0.5, -12.0, 0.0), randf_range(0.85, 1.1))
 	cam.shake(clampf(force * 0.012, 0.05, 0.35))
+	if state == "roam" and police and force > 3.0:
+		police.add_heat(clampf(force * 0.05, 0.08, 0.5))
 
 
 func _toggle_cam() -> void:
@@ -1033,6 +1063,13 @@ func _build_hud() -> void:
 	_hud.move_child(arcs, 1)
 	_drive_ui = [left, right, gas, brk, nos, hb, _gauge, _map_holder, _arrow, pk, ck, arcs]
 
+	# wanted stars (top centre, under the info bar)
+	_heat_label = UI.label("", 26, Color(1.0, 0.3, 0.25), true)
+	UI.outline(_heat_label, 6)
+	UI.place(_heat_label, Vector2(0.5, 0), Vector2(-200, 46), Vector2(400, 34))
+	_heat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_heat_label.visible = false
+	_hud.add_child(_heat_label)
 	# story objective (under the minimap)
 	_story_label = UI.label("", 17, Color.WHITE)
 	UI.outline(_story_label, 6)
@@ -1483,6 +1520,17 @@ func dev_rel() -> void:
 
 func dev_story_log() -> void:
 	print("STORY ch=%d seen=%d complete=%s busy=%s state=%s navbusy=%s %s" % [Game.story_chapter(), int(Game.story().seen), Game.chapter_complete(), _story_busy, state, Nav.busy, JSON.stringify(Game.story())])
+
+
+func dev_heat(v := "2") -> void:
+	police.add_heat(float(v))
+
+
+func dev_police_log() -> void:
+	var near := 9999.0
+	for u in police.units:
+		near = minf(near, u.car.global_position.distance_to(car.global_position))
+	print("POLICE heat=%.2f units=%d active=%s nearest=%.1f wanted=%s" % [police.heat, police.units.size(), police.active, near, police.wanted()])
 
 
 func dev_skills_log() -> void:

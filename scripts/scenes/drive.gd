@@ -692,6 +692,9 @@ func _make_marker() -> void:
 	_marker_label.no_depth_test = true
 	_marker_label.position.y = 9.0
 	_marker.add_child(_marker_label)
+	# race markers are HUD-like: keep them out of the wet-road mirror
+	for n in [col, ring, _marker_label]:
+		(n as VisualInstance3D).layers = PlanarReflection.LAYER_NO_REFLECT
 
 
 func _place_marker(pos: Vector3, text: String, color: Color) -> void:
@@ -2013,3 +2016,11 @@ func dev_goto_event(id: String, back := "0") -> void:
 	var yaw: float = e.yaw
 	car.reset_to(e.pos + Vector3(sin(yaw), 0, cos(yaw)) * float(back), yaw)
 	cam.snap_behind()
+
+
+func dev_nohud() -> void:
+	for c in get_children():
+		if c is CanvasLayer:
+			(c as CanvasLayer).visible = false
+	if Nav.get("_fps"):
+		Nav._fps.visible = false

@@ -10,6 +10,8 @@ var _beam: SpotLight3D
 var _flare: MeshInstance3D
 var _sparks: GPUParticles3D
 var _spark_t := 0.0
+var _spray: Array[GPUParticles3D] = []
+var wet := true          # night streets are wet; drive scene can toggle
 
 
 func attach(c: PlayerCar) -> void:
@@ -47,6 +49,12 @@ func attach(c: PlayerCar) -> void:
 	_sparks = _make_sparks(int(90 * float(GFX.p.particles)))
 	add_child(_sparks)
 	c.scraped.connect(sparks)
+	# rain spray kicked up behind the rear wheels on the wet road
+	for sgn in [1.0, -1.0]:
+		var sp := _make_spray(int(40 * float(GFX.p.particles)))
+		sp.position = Vector3(sgn * (v.half_width() - 0.1), 0.1, v.axle_z(false) + 0.35)
+		add_child(sp)
+		_spray.append(sp)
 
 
 func _make_smoke(amount: int) -> GPUParticles3D:
@@ -147,6 +155,54 @@ func _process(_dt: float) -> void:
 			_sparks.emitting = false
 	for f in _flames:
 		f.emitting = car.using_nitro or _bf > 0.0
+	var spraying := wet and absf(car.speed) > 9.0
+	for sp in _spray:
+		sp.emitting = spraying
+		sp.speed_scale = clampf(absf(car.speed) / 28.0, 0.6, 1.8)
+
+
+## A fine pale mist thrown up off the wet road behind the wheels.
+func _make_spray(amount: int) -> GPUParticles3D:
+	var p := GPUParticles3D.new()
+	p.amount = maxi(amount, 10)
+	p.lifetime = 0.6
+	p.emitting = false
+	p.local_coords = false
+	var pm := ParticleProcessMaterial.new()
+	pm.direction = Vector3(0, 0.5, 1)
+	pm.spread = 22.0
+	pm.initial_velocity_min = 1.5
+	pm.initial_velocity_max = 4.0
+	pm.gravity = Vector3(0, -3.0, 0)
+	pm.damping_min = 1.0
+	pm.damping_max = 2.0
+	var sc := Curve.new()
+	sc.add_point(Vector2(0, 0.3))
+	sc.add_point(Vector2(1, 1.0))
+	var sct := CurveTexture.new()
+	sct.curve = sc
+	pm.scale_curve = sct
+	pm.scale_min = 0.5
+	pm.scale_max = 1.1
+	var g := Gradient.new()
+	g.colors = PackedColorArray([Color(0.8, 0.85, 0.95, 0.0), Color(0.82, 0.86, 0.95, 0.3), Color(0.8, 0.84, 0.92, 0.0)])
+	g.offsets = PackedFloat32Array([0.0, 0.2, 1.0])
+	var gt := GradientTexture1D.new()
+	gt.gradient = g
+	pm.color_ramp = gt
+	p.process_material = pm
+	var q := QuadMesh.new()
+	q.size = Vector2(1.1, 1.1)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.vertex_color_use_as_albedo = true
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.albedo_texture = UI.radial_tex(Color(1, 1, 1, 1), Color(1, 1, 1, 0))
+	m.disable_receive_shadows = true
+	q.material = m
+	p.draw_pass_1 = q
+	return p
 
 
 func _make_sparks(amount: int) -> GPUParticles3D:

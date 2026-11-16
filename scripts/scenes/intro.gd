@@ -6,7 +6,7 @@ extends Node3D
 enum Phase { LOGO, VIDEO, CINE, TITLE }
 
 const INTRO_VIDEO := "res://video/intro.ogv"
-const USE_VIDEO := false     # the old film shows the cars nose-on; off until a rear-view film replaces it
+const USE_VIDEO := true      # rear-view film (2026-11-16), approved by Hamad
 
 const LOGO_TIME := 4.6
 
@@ -32,7 +32,7 @@ var _leaving := false
 var _world_ready := false
 var _video: VideoStreamPlayer
 var _video_t := 0.0
-var _video_len := 5.0
+var _video_len := 6.0
 
 
 func _ready() -> void:
@@ -209,7 +209,7 @@ func _enter_video() -> void:
 	_video = VideoStreamPlayer.new()
 	_video.stream = load(INTRO_VIDEO)
 	_video.expand = true
-	_video.volume_db = -80.0
+	_video.volume_db = -5.0             # the film carries its own engine and tyre sound
 	_video.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ui.add_child(_video)
 	_ui.move_child(_video, 0)            # under the fade, CRT overlay and letterbox

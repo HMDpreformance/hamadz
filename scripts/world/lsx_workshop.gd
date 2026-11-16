@@ -12,7 +12,7 @@ const Z0 := -8.0          # back wall
 const Z1 := 13.0          # wall behind the camera
 const H := 4.7            # drop-ceiling height
 const BAND := 1.25        # height of the black lower wall band
-const DYNO := Vector3(6.3, 0.0, -2.4)       # where the car stands on the rollers (faces -z)
+const DYNO := Vector3(6.3, 0.0, -2.4)       # where the car stands on the rollers (nose toward the room, +z)
 const DOOR_Z := 3.0       # roller door centre on the left wall
 const DOOR_W := 5.0
 const DOOR_H := 3.5
@@ -181,7 +181,7 @@ func _shell() -> void:
 	var steel := W3D.pbr("corrugated_iron", 2.4, Color(1.0, 0.95, 0.82), 0.95)
 	_b.quad(steel, Vector3(-HX, DOOR_H, d1), Vector3(-HX, DOOR_H, d0), Vector3(-HX, H, d0), Vector3(-HX, H, d1))
 	# drop ceiling: 0.6 m tiles with square LED panels
-	var ceil := W3D.facade("officeceiling002", Vector2(3.6, 3.6), 3.4)
+	var ceil := W3D.facade("officeceiling002", Vector2(3.6, 3.6), 3.4, Color(0.42, 0.42, 0.44))
 	_b.quad(ceil, Vector3(-HX, H, Z0), Vector3(HX, H, Z0), Vector3(HX, H, Z1), Vector3(-HX, H, Z1))
 
 
@@ -347,9 +347,9 @@ func _dyno_bay() -> void:
 	set_axles(-1.3, 1.3, 4.4)
 	# cooling fan in front of the car
 	var orange := W3D.flat(Color(0.9, 0.36, 0.04), 0.45, 0.2)
-	var fz := DYNO.z - 4.3
+	var fz := DYNO.z + 4.4
 	var fan := Node3D.new()
-	fan.position = Vector3(DYNO.x, 0.78, fz)
+	fan.position = Vector3(DYNO.x + 1.5, 0.78, fz)
 	add_child(fan)
 	var drum := MeshInstance3D.new()
 	var tm := TorusMesh.new()
@@ -376,8 +376,8 @@ func _dyno_bay() -> void:
 		bl.rotation.y = 0.5
 		hub.add_child(bl)
 		fan_blades.add_child(hub)
-	_box(W3D.flat(Color(0.12, 0.12, 0.13), 0.5, 0.5), Vector3(DYNO.x - 0.55, 0.06, fz), Vector3(0.08, 0.12, 0.7))
-	_box(W3D.flat(Color(0.12, 0.12, 0.13), 0.5, 0.5), Vector3(DYNO.x + 0.55, 0.06, fz), Vector3(0.08, 0.12, 0.7))
+	_box(W3D.flat(Color(0.12, 0.12, 0.13), 0.5, 0.5), Vector3(DYNO.x + 0.95, 0.06, fz), Vector3(0.08, 0.12, 0.7))
+	_box(W3D.flat(Color(0.12, 0.12, 0.13), 0.5, 0.5), Vector3(DYNO.x + 2.05, 0.06, fz), Vector3(0.08, 0.12, 0.7))
 	# blue dyno control cabinet with extraction hose
 	var blue := W3D.flat(Color(0.05, 0.16, 0.5), 0.4, 0.2)
 	_box(blue, Vector3(HX - 0.75, 0.8, Z0 + 0.7), Vector3(0.9, 1.6, 0.7))
@@ -428,17 +428,17 @@ func _roller_set() -> Node3D:
 ## Put the roller sets under the car's axles (car local z, car faces -z) and
 ## tie the rear down with ratchet straps.
 func set_axles(front_z: float, rear_z: float, car_len: float) -> void:
-	roll_f.position = DYNO + Vector3(0, 0, front_z)
-	roll_r.position = DYNO + Vector3(0, 0, rear_z)
+	roll_f.position = DYNO + Vector3(0, 0, -front_z)
+	roll_r.position = DYNO + Vector3(0, 0, -rear_z)
 	if straps == null:
 		return
 	for c in straps.get_children():
 		c.queue_free()
 	var web := W3D.flat(Color(0.85, 0.7, 0.05), 0.7)
-	var tail := DYNO.z + car_len * 0.5 - 0.15
+	var tail := DYNO.z - car_len * 0.5 + 0.15
 	for sx in [-1.0, 1.0]:
 		var a := Vector3(DYNO.x + sx * 0.45, 0.34, tail)
-		var b := Vector3(DYNO.x + sx * 1.25, 0.02, tail + 1.5)
+		var b := Vector3(DYNO.x + sx * 1.25, 0.02, tail - 1.5)
 		var m := MeshInstance3D.new()
 		var bm := BoxMesh.new()
 		bm.size = Vector3(0.05, 0.012, a.distance_to(b))

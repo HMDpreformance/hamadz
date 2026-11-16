@@ -89,7 +89,7 @@ func start() -> void:
 	for n in [g.mover, g.mmover]:
 		if n:
 			n.position = LsxWorkshop.DYNO + Vector3(0, 0.03, 0)
-			n.rotation.y = 0.0
+			n.rotation.y = PI
 	for n in [g.turn_node, g.mturn_node]:
 		if n:
 			n.rotation.y = 0.0
@@ -132,6 +132,7 @@ func finish() -> void:
 	for n in [g.mover, g.mmover]:
 		if n:
 			n.position = Vector3.ZERO
+			n.rotation.y = 0.0
 	g.car.set_body_tilt(0.0, 0.0)
 	if _cam_tw:
 		_cam_tw.kill()

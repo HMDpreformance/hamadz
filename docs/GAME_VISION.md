@@ -53,6 +53,7 @@ Read as six requirements:
 | D0 | 2026-11-11 | Godot 4.4.1, Mobile renderer. Expand the existing project, never restart. | Runs on phones, already built 13 stages on it. |
 | D1 | 2026-11-16 | **Real-looking original cars.** Photoreal 3D cars clearly in the style of real JDM, muscle, Euro, luxury and super cars, with our own names and badges. No real brand names, logos or exact likenesses. | Hamad picked this on a card. Real makes need a license from each carmaker; without one the game can't go on the Play Store or be shared publicly. This way it looks real and stays releasable. |
 | D2 | 2026-11-12 | All music, voices, art are original or generated for us. No sampled songs, no real artists' voices, no copied MC3 names/maps/art. | Same release reason as D1. |
+| D4 | 2026-11-16 | Credits approved for the real 3D car bodies and the expanded soundtrack (later stages); confirm the exact spend on a card when each run happens. Police chases are wanted in the story. | Hamad answered "yes both". |
 | D3 | 2026-11-16 | The story is our own: Dubai at night, our crews, our characters. We copy the *structure* of MC3/NFS careers (crews, rivals, blacklist-style bosses), never their plots or names. | Originality + release safety. |
 
 ---
@@ -267,7 +268,7 @@ Each stage is one playable APK.
 | Stage | Version | Content | Needs credits? |
 |---|---|---|---|
 | A | **0.14** | This doc. Story mode (chapters, crews, cutscene dialogue, rewards). MC3 street skills: near miss, drafting, perfect launch, FOCUS / RAM / ROAR abilities with meter and button. Crew-leader duels and new district events. | No |
-| B | 0.15 | Street call-outs: crew cars cruising each district, flash to challenge, race starts on the spot. Police heat level. Any-order races. | No |
+| B | 0.15 | Street call-outs: crew cars cruising each district, flash to challenge, race starts on the spot. **Police heat level and chases (confirmed wanted).** Any-order races. | No |
 | C | 0.16 | Modern look pass: better reflections and paint flake, headlight cones, rain spray, dusk preset, photo mode, camera polish. | No |
 | D | 0.17 | Real 3D bodies for the other 7 cars. | ~84 credits |
 | E | 0.18 | Soundtrack expansion and second station; story voices. | ~185–220 credits |
@@ -277,10 +278,10 @@ Each stage is one playable APK.
 
 ## 12. Open questions for Hamad
 
-1. Credits: OK to spend on cars (D) and music/voices (E)? Current balance (~8) covers only the story voices.
+1. ~~Credits: OK to spend on cars (D) and music/voices (E)?~~ **Answered yes (D4).** Balance (~8) still only covers story voices, so I'll ask on a card for the exact spend before each run.
 2. Story tone: keep it like MC3 (light, about respect and cars) or darker like NFS Most Wanted (cops, betrayal)? Current draft is in between.
 3. Should story races be required in order, or can chapters be played in any order once unlocked (MC3 let you pick clubs)? Current build: in order.
-4. Police chases: wanted, or keep it pure racing?
+4. ~~Police chases: wanted?~~ **Answered yes (D4).** Promoted into Stage B (0.15).
 5. The "master prompt" from earlier threads was cut off. Re-send it if there is more.
 
 ---

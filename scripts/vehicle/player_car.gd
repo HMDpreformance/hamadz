@@ -44,6 +44,8 @@ var in_hand := false
 var in_nitro := false
 var hold := false            # on the grid: engine revs freely, car stays put
 var top_scale := 1.0         # AI catch-up / difficulty
+var push_time := 0.0         # slipstream / perfect-launch shove (seconds left)
+var ram_time := 0.0          # RAM ability: traffic bounces off without slowing us
 
 # state
 var steer := 0.0
@@ -167,7 +169,9 @@ func _physics_process(dt: float) -> void:
 		nitro = minf(nitro + dt / (16.0 * nitro_cap), 1.0)
 
 	# ---- longitudinal
-	var top := vmax * (1.2 if using_nitro else 1.0) * top_scale
+	push_time = maxf(push_time - dt, 0.0)
+	ram_time = maxf(ram_time - dt, 0.0)
+	var top := vmax * (1.2 if using_nitro else 1.0) * top_scale * (1.08 if push_time > 0.0 else 1.0)
 	var acc := 0.0
 	_shift_cut = maxf(_shift_cut - dt, 0.0)
 	if throttle > 0.0 and _shift_cut <= 0.0:
@@ -181,6 +185,8 @@ func _physics_process(dt: float) -> void:
 			acc += 20.0 * throttle
 	if using_nitro:
 		acc += (9.0 * clampf(1.0 - vf / top, 0.0, 1.0) + 1.5) * nitro_power
+	if push_time > 0.0 and vf > 2.0:
+		acc += 5.5 * clampf(1.0 - vf / top, 0.0, 1.0) + 1.0
 	braking = brk > 0.05
 	if braking:
 		if vf > 1.0:
@@ -230,6 +236,13 @@ func _physics_process(dt: float) -> void:
 		if n.length_squared() < 0.01:
 			continue
 		n = n.normalized()
+		var hit := col.get_collider()
+		if ram_time > 0.0 and hit is TrafficCar:
+			# RAM: the civilian gets thrown aside and we keep our speed
+			(hit as TrafficCar).knock(pre * 0.9 - n * 6.0)
+			velocity = pre
+			crashed.emit(5.0)
+			continue
 		var impact := -pre.dot(n)
 		if impact > 0.6 or absf(speed) > 8.0:
 			scraped.emit(col.get_position(), maxf(impact, absf(speed) * 0.08))

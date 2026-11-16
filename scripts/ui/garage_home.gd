@@ -13,6 +13,7 @@ const ITEMS := [
 	{"id": "custom", "label": "CUSTOMIZE VEHICLE", "icon": "custom"},
 	{"id": "wheels", "label": "WHEELS + STANCE", "icon": "wheel"},
 	{"id": "perf", "label": "ENGINE + TUNING", "icon": "gauge"},
+	{"id": "dyno", "label": "DYNO TEST", "icon": "dyno"},
 	{"id": "drive", "label": "TEST DRIVE", "icon": "flag"},
 	{"id": "cars", "label": "MANAGE VEHICLES", "icon": "key"},
 	{"id": "lot", "label": "CAR LOT", "icon": "dollar"},
@@ -47,7 +48,7 @@ func _ready() -> void:
 	frame.offset_left = 6
 	frame.offset_right = -6
 	add_child(frame)
-	var crumb := UI.label("MAIN MENU  \\  GARAGE", 30, Color.WHITE, true, false)
+	var crumb := UI.label("MAIN MENU  \\  LSXMOTORSPORT", 30, Color.WHITE, true, false)
 	UI.chrome(crumb, Color(1, 1, 1), Color(0.86, 0.88, 0.92), Color(0.55, 0.58, 0.64), 36.0)
 	UI.outline(crumb, 6)
 	crumb.position = Vector2(64, 14)
@@ -284,6 +285,20 @@ class Icon extends Control:
 				var na := PI * 1.85
 				draw_line(c + Vector2(0, 6) * s, c + Vector2(0, 6) * s + Vector2(cos(na), sin(na)) * 28 * s, Color(1.0, 0.8, 0.1, dim), 4 * s, true)
 				draw_circle(c + Vector2(0, 6) * s, 5 * s, STEEL * dim)
+			"dyno":
+				# two rollers on the floor
+				for rx in [-22, 22]:
+					_metal(_ring(c + Vector2(rx, 30) * s, 15 * s, 20))
+					draw_circle(c + Vector2(rx, 30) * s, 5 * s, EDGE)
+				# car body sitting across the rollers
+				var bod := PackedVector2Array([Vector2(-40, 12), Vector2(-26, 12), Vector2(-16, -2), Vector2(14, -6), Vector2(30, 2), Vector2(42, 6), Vector2(42, 14), Vector2(-40, 14)])
+				_metal(_xf(bod, c, 0.0, s))
+				# rising power curve in red
+				var pts := PackedVector2Array()
+				for k in 9:
+					var t := k / 8.0
+					pts.append(c + Vector2(-42 + t * 84, -14 - t * t * 24) * s)
+				draw_polyline(pts, Color(1.0, 0.2, 0.15, dim), 4 * s, true)
 			"flag":
 				_metal(_bar(c + Vector2(-34, -40) * s, c + Vector2(-34, 46) * s, 7 * s))
 				var x0 := -30.0

@@ -19,6 +19,13 @@ var blocked := false
 var loop: PackedVector3Array = []   # manager-less mode: lap these points forever (menu backdrop)
 var _li := 0
 var _speed := 0.0
+var _knock := Vector3.ZERO     # flung by RAM / ROAR: drift with this velocity, then rejoin the lane
+var _knock_t := 0.0
+var _spin := 0.0
+var _layer := 1
+var is_rival := false
+var rival_name := ""
+var rival_car := "tuner"
 
 
 func setup(id: String, paint: int) -> void:
@@ -55,8 +62,36 @@ func speed() -> float:
 	return _speed
 
 
+## Throws the car aside (special abilities). It slides, spins, then drives on.
+func knock(vel: Vector3) -> void:
+	if _knock_t > 0.0:
+		return
+	vel.y = 0.0
+	_knock = vel
+	_knock_t = 1.6
+	_spin = randf_range(-5.0, 5.0)
+	_speed = 0.0
+	_layer = collision_layer if collision_layer != 0 else _layer
+	collision_layer = 0
+
+
+func knocked() -> bool:
+	return _knock_t > 0.0
+
+
 func _physics_process(dt: float) -> void:
 	if manager == null and loop.is_empty():
+		return
+	if _knock_t > 0.0:
+		_knock_t -= dt
+		_knock *= exp(-dt * 1.6)
+		_spin *= exp(-dt * 1.2)
+		var pk := global_position + _knock * dt
+		pk.y = manager.height_at(pk) if manager else 0.0
+		var b := global_transform.basis.rotated(Vector3.UP, _spin * dt).orthonormalized()
+		global_transform = Transform3D(b, pk)
+		if _knock_t <= 0.0:
+			collision_layer = _layer
 		return
 	var seg := seg_b - seg_a
 	seg.y = 0.0

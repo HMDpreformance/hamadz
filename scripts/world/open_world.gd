@@ -29,7 +29,7 @@ const SHOP_SIGNS := [["CAFE", "مقهى"], ["SHAWARMA", "شاورما"], ["GOLD 
 const TOWER_SIGNS := [["AL NOOR TOWER", "برج النور"], ["SAHRA BANK", "بنك الصحراء"], ["GULF STAR", "نجمة الخليج"], ["PEARL TOWER", "برج اللؤلؤة"],
 	["FALCON TOWER", "برج الصقر"], ["DESERT ROSE", "وردة الصحراء"], ["OASIS HOTEL", "فندق الواحة"], ["AL BARQ TELECOM", "اتصالات البرق"]]
 const SPECIAL := {
-	Vector2i(6, 4): "plaza", Vector2i(5, 2): "parking", Vector2i(7, 6): "parking",
+	Vector2i(6, 4): "garage", Vector2i(5, 2): "parking", Vector2i(7, 6): "parking",
 	Vector2i(3, 5): "gas", Vector2i(9, 2): "gas", Vector2i(2, 3): "park", Vector2i(1, 6): "park",
 	Vector2i(7, 3): "needle",
 	Vector2i(10, 4): "yard", Vector2i(10, 6): "yard", Vector2i(11, 1): "yard",
@@ -83,6 +83,9 @@ func district(b: Vector2i) -> String:
 func district_name(p: Vector3) -> String:
 	if on_highway(p):
 		return "SHEIKH ZAYED ROAD"
+	var gb := Vector2i(clampi(int(floor((p.x - road_x(0)) / PITCH)), 0, NX - 1), clampi(int(floor((p.z - road_z(0)) / PITCH)), 0, NZ - 1))
+	if SPECIAL.get(gb, "") == "garage":
+		return "LSXMOTORSPORT"
 	if p.z > z1 + ROAD * 0.5:
 		return "THE WALK"
 	var b := Vector2i(clampi(int(floor((p.x - x0) / PITCH)), 0, NX - 1), clampi(int(floor((p.z - z0) / PITCH)), 0, NZ - 1))
@@ -934,6 +937,8 @@ func _build_block(b: Vector2i) -> void:
 			_fill_industrial(n, c)
 		"plaza":
 			_fill_plaza(n, c)
+		"garage":
+			_fill_garage(n, c)
 		"parking":
 			_fill_parking(n, c)
 		"gas":
@@ -944,7 +949,7 @@ func _build_block(b: Vector2i) -> void:
 			_fill_yard(n, c)
 		"needle":
 			_fill_needle(n, c)
-	if not district(b) in ["industrial", "yard", "park"]:
+	if not district(b) in ["industrial", "yard", "park", "garage"]:
 		_street_palms(n, c)
 	if district(b) in ["downtown", "beach", "residential"]:
 		_pedestrians(n, c, 5 if district(b) == "residential" else 9)
@@ -1375,6 +1380,27 @@ func _fill_yard(n: Node3D, c: Vector3) -> void:
 		EnvKit.cyl(n, 0.15, 14.0, p + Vector3(0, 7.0, 0), _mat("pole", func(): return EnvKit.solid(Color(0.08, 0.085, 0.09), 0.5, 0.7)), Vector3.ZERO, 6)
 		EnvKit.box(n, Vector3(1.6, 0.5, 0.5), p + Vector3(0, 14.0, 0), _mat("flood", func(): return EnvKit.emissive(Color(0.85, 0.92, 1.0), 8.0)))
 		lamp_positions.append(p + Vector3(-sg * 4.0, 11.0, -sg * 4.0))
+
+
+## LSXmotorsport: the player's home garage building on an open lot near spawn.
+## The shutter door rolls up as the car pulls onto the glowing forecourt pad;
+## drive.gd handles entering the tune/dyno interior.
+func _fill_garage(n: Node3D, c: Vector3) -> void:
+	# paved forecourt with oil-stained concrete + yellow bay lines
+	EnvKit.box(n, Vector3(BLOCK - 2.0, 0.03, BLOCK - 2.0), c + Vector3(0, CURB + 0.02, 0), _mat("garage_lot", func(): return EnvKit.solid(Color(0.1, 0.1, 0.11), 0.5)))
+	var yellow := EnvKit.solid(Color(0.95, 0.82, 0.08), 0.6)
+	for sx in [-7.0, 7.0]:
+		EnvKit.box(n, Vector3(0.2, 0.02, 14.0), c + Vector3(sx, CURB + 0.04, 10.0), yellow)
+	EnvKit.box(n, Vector3(14.2, 0.02, 0.2), c + Vector3(0, CURB + 0.04, 3.2), yellow)
+	var gb := GarageBuilding.new()
+	n.add_child(gb)
+	gb.position = c + Vector3(0, CURB, -6.0)
+	gb.build()
+	gb.add_to_group("garage_building")
+	# colliders: back + both side walls; front stays open to drive in
+	_block_collider(n, c + Vector3(0, 0, -13.0), 18.0, 0.6, Vector3.ZERO, 6.0)
+	_block_collider(n, c + Vector3(-9.0, 0, -6.0), 0.6, 14.0, Vector3.ZERO, 6.0)
+	_block_collider(n, c + Vector3(9.0, 0, -6.0), 0.6, 14.0, Vector3.ZERO, 6.0)
 
 
 func _fill_plaza(n: Node3D, c: Vector3) -> void:

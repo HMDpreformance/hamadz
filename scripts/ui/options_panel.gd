@@ -121,6 +121,7 @@ func _set_choice(key: String, i: int) -> void:
 	match key:
 		"preset":
 			Game.set_setting("preset", i)
+			Game.set_setting("preset_set", true)
 			GFX.set_preset(i)
 		"steer_mode":
 			Game.set_setting("steer_mode", i)

@@ -112,7 +112,19 @@ func _pin(m: Vector2, col: Color, kind: String) -> void:
 		var k := lim / maxf(absf(d.x), absf(d.y))
 		m = c + d * k
 	var pulse := 1.0 + 0.2 * sin(_t * 5.0)
-	if kind == "target":
+	if kind == "garage":
+		# wrench glyph so the LSX garage is unmistakable on the map
+		var s := 7.5 * pulse
+		draw_circle(m, s + 2.0, Color(0.03, 0.04, 0.06, 0.85))
+		draw_arc(m, s + 2.0, 0, TAU, 20, col, 1.5)
+		# handle: diagonal bar
+		draw_line(m + Vector2(-s * 0.55, s * 0.55), m + Vector2(s * 0.3, -s * 0.3), col, 2.6)
+		# open head: a C at the top-right end
+		var head := m + Vector2(s * 0.5, -s * 0.5)
+		draw_arc(head, s * 0.45, deg_to_rad(-40), deg_to_rad(210), 14, col, 2.6)
+		# foot of the handle
+		draw_circle(m + Vector2(-s * 0.55, s * 0.55), 1.8, col)
+	elif kind == "target":
 		draw_arc(m, 6.5 * pulse, 0, TAU, 16, col, 2.5)
 		draw_circle(m, 2.5, col)
 	else:

@@ -290,7 +290,7 @@ func _build_ui() -> void:
 	home = GarageHome.new()
 	ui.add_child(home)
 	home.activated.connect(_on_home)
-	home.back_pressed.connect(func(): Nav.goto("menu"))
+	home.back_pressed.connect(_on_back)
 
 	# ---- top bar
 	var top := UI.rect(Color(0, 0, 0, 0.0))
@@ -310,12 +310,16 @@ func _build_ui() -> void:
 	back.position = Vector2(22, 18)
 	back.pressed.connect(_on_back)
 	_work.add_child(back)
-	var title := UI.label("GARAGE", 44, Color.WHITE, true)
-	UI.chrome(title, Color(1, 1, 1), Color(1.0, 0.75, 0.1), Color(0.8, 0.25, 0.0), 54.0)
-	title.position = Vector2(196, 10)
-	_work.add_child(title)
-	var sub := UI.label("SYNDICATE TUNING  //  BAY 01", 16, UI.DIM)
-	sub.position = Vector2(200, 62)
+	var logo := TextureRect.new()
+	logo.texture = load("res://textures/lsx_logo.png")
+	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	logo.position = Vector2(196, 8)
+	logo.size = Vector2(216, 58)
+	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_work.add_child(logo)
+	var sub := UI.label("TUNING   •   DYNO   •   CAR SALES   //   BAY 01", 16, UI.DIM)
+	sub.position = Vector2(200, 66)
 	_work.add_child(sub)
 	# money
 	var mp := Control.new()
@@ -779,14 +783,18 @@ func _on_drive() -> void:
 		return
 	if view_car != Game.current_car():
 		Game.select_car(view_car)
-	Nav.goto("drive", {}, "HITTING THE STREETS")
+	Nav.goto("drive", {"from": "garage"}, "HITTING THE STREETS")
 
 
 func _on_back() -> void:
 	if not home.visible:
 		_select_group("")
 		return
-	Nav.goto("menu")
+	# if we drove in from the streets, roll back out; otherwise return to the menu
+	if Nav.args.get("from", "") == "drive":
+		Nav.goto("drive", {"from": "garage"}, "LEAVING LSXMOTORSPORT")
+	else:
+		Nav.goto("menu")
 
 
 func _set_home(on: bool) -> void:
@@ -800,9 +808,17 @@ func _on_home(id: String) -> void:
 		"custom": _select_group("paint")
 		"wheels": _select_group("wheels")
 		"perf": _select_group("perf")
+		"dyno": _open_dyno()
 		"cars": _select_group("cars")
 		"drive": _on_drive()
 		"lot": Nav.goto("showroom", {"from": "garage"}, "CAR LOT")
+
+
+func _open_dyno() -> void:
+	var dp := DynoPanel.new()
+	ui.add_child(dp)
+	dp.closed.connect(func(): dp.queue_free())
+	dp.setup(view_car, Game.config(view_car))
 
 
 func dev_home(id: String) -> void:

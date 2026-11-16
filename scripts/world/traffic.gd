@@ -13,6 +13,7 @@ const RECYCLE := 300.0
 var world: OpenWorld
 var player: Node3D
 var cars: Array[TrafficCar] = []
+var rivals: Array[TrafficCar] = []
 var _rng := RandomNumberGenerator.new()
 var _hw_lanes := [PackedVector3Array(), PackedVector3Array()]
 var _t := 0.0
@@ -44,6 +45,34 @@ func setup(w: OpenWorld, p: Node3D, street: int, highway: int) -> void:
 			c.cruise = _rng.randf_range(24.0, 31.0)
 			c.hw_sign = 1 if k % 2 == 0 else -1
 			_spawn_highway(c)
+
+
+## Crew cars that cruise the city as challengeable rivals. Bright paint, a name,
+## and a car id to put on the grid when the player calls them out.
+func spawn_rivals(paints: Array, names: Array) -> void:
+	for i in paints.size():
+		var c := TrafficCar.new()
+		c.manager = self
+		c.is_rival = true
+		c.rival_name = names[i % names.size()]
+		var ids := ["tuner", "rotary", "muscle", "sedan", "euro"]
+		c.rival_car = ids[_rng.randi() % ids.size()]
+		add_child(c)
+		c.setup(c.rival_car, paints[i % paints.size()])
+		c.cruise = _rng.randf_range(11.0, 14.0)
+		_spawn_street(c, 40.0, 140.0)
+		cars.append(c)
+		rivals.append(c)
+
+
+## After a call-out race, bring the crew cars back near the player and cruising.
+func revive_rivals(near: Vector3) -> void:
+	for c in rivals:
+		if not is_instance_valid(c):
+			continue
+		c.visible = true
+		c.process_mode = Node.PROCESS_MODE_INHERIT
+		_spawn_street(c, 70.0, 180.0)
 
 
 func green(axis: int) -> bool:
@@ -171,8 +200,12 @@ func _physics_process(dt: float) -> void:
 		_t = 1.0
 		var pp := player.global_position
 		for c in cars:
+			if c.is_rival and not c.visible:
+				continue
 			var d := Vector2(c.global_position.x - pp.x, c.global_position.z - pp.z).length()
-			if c.hw_index < 0 and d > RECYCLE:
+			if c.is_rival and d > 230.0:
+				_spawn_street(c, 80.0, 160.0)
+			elif c.hw_index < 0 and d > RECYCLE:
 				_spawn_street(c, 150.0, 270.0)
 			elif c.hw_index >= 0 and d > 520.0 and absf(world.hw_dist(pp)) < 260.0:
 				_spawn_highway(c)

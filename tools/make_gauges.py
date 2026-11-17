@@ -17,6 +17,7 @@ AMBER_HI = (255, 214, 110)
 def ang(f): return math.radians(225 - 270 * f)
 def pt(c, r, a): return (c + r * math.cos(a), c - r * math.sin(a))
 
+FACE_MID, FACE_SIDE = 0.62, 0.20   # how solid the dial face is in the middle and at the sides
 FLAME = os.path.join(ROOT, "unity_assets", "gen_src", "dial_flame.jpg")   # blue flames on black, square
 
 def face(size, majors, minor_per, label, numsize, unit, red_from=None):
@@ -25,7 +26,6 @@ def face(size, majors, minor_per, label, numsize, unit, red_from=None):
     n = size * SS; c = n / 2; R = n / 2
     im = Image.new("RGBA", (n, n), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
-    d.ellipse([c - R * 0.985, c - R * 0.985, c + R * 0.985, c + R * 0.985], fill=(0, 0, 0, 120))
     for i in range(50):          # slim polished chrome bezel with a cold blue tint
         t = i / 49
         r = R * (0.965 - 0.045 * t)
@@ -36,9 +36,21 @@ def face(size, majors, minor_per, label, numsize, unit, red_from=None):
     fl = Image.open(FLAME).convert("RGB").resize((int(2 * r0), int(2 * r0)), Image.LANCZOS)
     base = Image.new("RGB", fl.size, (4, 8, 20))
     fl = Image.blend(base, fl, 0.85)
-    mask = Image.new("L", fl.size, 0)
-    ImageDraw.Draw(mask).ellipse([0, 0, fl.size[0] - 1, fl.size[1] - 1], fill=238)
-    im.paste(fl, (int(c - r0), int(c - r0)), mask)
+    # see-through face: about 60% solid in the middle, fading to 20% solid (80% see-through) at the sides,
+    # so the street shows through the dial and it sits in the game picture
+    import numpy as np
+    w = fl.size[0]
+    yy, xx = np.mgrid[0:w, 0:w]
+    rr = np.hypot(xx - w / 2, yy - w / 2) / (w / 2)
+    al = np.where(rr <= 1, 255 * (FACE_MID + (FACE_SIDE - FACE_MID) * np.clip(rr, 0, 1) ** 1.6), 0).astype("uint8")
+    mask = Image.fromarray(al, "L")
+    hole = Image.new("L", (n, n), 255)
+    ImageDraw.Draw(hole).ellipse([c - r0, c - r0, c + r0, c + r0], fill=0)
+    im.putalpha(Image.composite(im.getchannel("A"), Image.new("L", (n, n), 0), hole))   # clear the bezel disc inside
+    lay = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    fla = fl.convert("RGBA"); fla.putalpha(mask)
+    lay.paste(fla, (int(c - r0), int(c - r0)))
+    im = Image.alpha_composite(im, lay)
     d = ImageDraw.Draw(im)
     ICE = (190, 235, 255); BLUE = (40, 150, 255)
     glow = Image.new("RGBA", (n, n), (0, 0, 0, 0)); gd = ImageDraw.Draw(glow)

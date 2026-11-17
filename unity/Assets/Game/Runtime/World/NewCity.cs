@@ -14,7 +14,8 @@ namespace HMD
     public class NewCity : MonoBehaviour
     {
         public static NewCity I;
-        public static bool Wanted => System.Environment.CommandLine.Contains("-newcity");
+        // the Dubai city is the game; -oldcity brings back the first grid city (dev only)
+        public static bool Wanted => !System.Environment.CommandLine.Contains("-oldcity");
 
         /// <summary>Plan units to metres (from the json). The map pictures cover 3200 x 2300 plan units.</summary>
         public float Scale = 0.75f;

@@ -100,7 +100,65 @@ water = {
     "creek": spline([(2380, 2010), (2330, 1800), (2380, 1600), (2330, 1420), (2180, 1330), (2020, 1250), (1930, 1130)], 20),
     "lake": ring(2240, 870, 110, 60, 10, 32),
 }
-plan = {"size": [W, H], "coast": COAST, "roads": roads, "water": water,
+# ---- heights: the city is not flat
+def terrain(x, y):
+    """Ground height in metres: sea level at the coast, rising gently inland, real hills in Dubai Hills
+    and Nad Al Sheba, a low rise under Downtown."""
+    inland = max(0.0, coast_y(x) - y)
+    h = 1.5 + 9.0 * min(1.0, inland / 1500.0) ** 1.3
+    for cx, cy, r, amp in ((1500, 310, 330, 16), (1250, 120, 260, 11), (2060, 420, 260, 9), (1620, 1130, 300, 3), (300, 250, 300, 6)):
+        h += amp * math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * (r * 0.55) ** 2))
+    return h
+
+def crossings(A, B):
+    """Distances along polyline A (metres) where it crosses polyline B."""
+    out = []; dist = 0.0
+    for (x1, y1), (x2, y2) in zip(A, A[1:]):
+        seg = math.dist((x1, y1), (x2, y2))
+        for (x3, y3), (x4, y4) in zip(B, B[1:]):
+            den = (x2 - x1) * (y4 - y3) - (y2 - y1) * (x4 - x3)
+            if abs(den) < 1e-9: continue
+            t = ((x3 - x1) * (y4 - y3) - (y3 - y1) * (x4 - x3)) / den
+            u = ((x3 - x1) * (y2 - y1) - (y3 - y1) * (x2 - x1)) / den
+            if 0 <= t < 1 and 0 <= u < 1: out.append(dist + t * seg)
+        dist += seg
+    return out
+
+def bump(dists, at, height, flat, ramp):
+    """A bridge or underpass profile: full height for `flat` metres around `at`, smooth ramps of `ramp` metres."""
+    out = []
+    for dd in dists:
+        k = abs(dd - at)
+        f = 1.0 if k <= flat / 2 else max(0.0, 1 - (k - flat / 2) / ramp)
+        out.append(height * (f * f * (3 - 2 * f)))
+    return out
+
+hw = [r for r in roads if r["cls"] == "highway"]
+levels = []           # where a road leaves the ground, for the game and the map
+for r in roads:
+    pts = r["pts"]; dists = [0.0]
+    for a_, b_ in zip(pts, pts[1:]): dists.append(dists[-1] + math.dist(a_, b_))
+    extra = [0.0] * len(pts)
+    def add(at, height, flat, ramp, kind):
+        b = bump(dists, at, height, flat, ramp)
+        for i in range(len(extra)):
+            if abs(b[i]) > abs(extra[i]): extra[i] = b[i]
+        levels.append({"road": r["name"], "kind": kind, "at": round(at, 1), "height": height})
+    if r["cls"] == "highway":
+        # flyovers: the highway goes over every main road, and over a highway listed after it
+        for o in roads:
+            if o is r or o["cls"] == "street": continue
+            if o["cls"] == "highway" and hw.index(o) < hw.index(r): continue
+            for at in crossings(pts, o["pts"]): add(at, 7.5, 60, 150, "flyover")
+    if r["cls"] != "street" or r["name"] == "Palm Trunk":
+        for at in crossings(pts, water["creek"]): add(at, 8.0, 90, 130, "bridge")
+    if r["name"] == "Palm Trunk": add(150, 9.0, 120, 110, "bridge")
+    if r["name"] == "Downtown Blvd":
+        for at in crossings(pts, hw[0]["pts"]): add(at, -6.0, 50, 110, "underpass")
+    r["h"] = [round(terrain(x, y) + e, 2) for (x, y), e in zip(pts, extra)]
+    r["deck"] = [round(e, 2) for e in extra]      # height above the ground (bridge deck) or below (underpass)
+
+plan = {"size": [W, H], "coast": COAST, "roads": roads, "water": water, "levels": levels, "terrain": [[round(terrain(x, y), 1) for x in range(0, W + 1, 50)] for y in range(0, H + 1, 50)],
         "districts": [{"name": d[0], "x": d[1], "y": d[2]} for d in districts] + [{"name": "Palm Jumeirah", "x": PX, "y": PY + 300}],
         "garage": {"name": "LSXmotorsport", "x": 760, "y": 700}, "landmark": {"name": "Sky Tower", "x": 1620, "y": 1130}}
 os.makedirs(os.path.join(ROOT, "unity_assets", "city"), exist_ok=True)
@@ -134,6 +192,17 @@ for cls, edge, col, wd in (("street", (20, 20, 22), (120, 122, 126), 9), ("main"
         if r["cls"] == cls: fat(d, r["pts"], edge, wd + 8)
     for r in roads:
         if r["cls"] == cls: fat(d, r["pts"], col, wd)
+for r in roads:        # bridges and flyovers: white side rails; underpasses: darker
+    run = []
+    for pt, e in zip(r["pts"], r["deck"] + [0]):
+        if abs(e) > 2.5: run.append((pt, e))
+        elif run:
+            if len(run) > 1:
+                wd = {"highway": 22, "main": 17, "street": 9}[r["cls"]]
+                up = run[0][1] > 0
+                fat(d, [q[0] for q in run], (255, 255, 255) if up else (0, 0, 0), wd + (12 if up else 10))
+                fat(d, [q[0] for q in run], ((255, 200, 70) if r["cls"] == "highway" else (215, 217, 220)) if up else (90, 92, 96), wd)
+            run = []
 im = im.resize((im.width // 2, im.height // 2), Image.LANCZOS); d = ImageDraw.Draw(im)
 F = ImageFont.truetype(os.path.join(ROOT, "fonts", "rajdhani_Rajdhani-Bold.ttf"), 30)
 def label(x, y, t, font=F, fill=(255, 255, 255)):
@@ -155,4 +224,4 @@ d.polygon([(50, 30), (66, 74), (50, 64), (34, 74)], fill=(240, 240, 240)); d.tex
 out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "unity_assets", "city", "plan_preview.jpg")
 im.save(out, quality=90)
 km = sum(sum(math.dist(a, b) for a, b in zip(r["pts"], r["pts"][1:])) for r in roads) / 1000
-print(len(roads), "roads, %.1f km, written" % km, out)
+print(len(levels), "bridges/flyovers/underpasses;", len(roads), "roads, %.1f km, written" % km, out)

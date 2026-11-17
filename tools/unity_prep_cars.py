@@ -60,6 +60,21 @@ def clear_front_lamps(mesh, ax, c, L, front_sign):
     mat.baseColorTexture = Image.fromarray((img * 255).astype(np.uint8))
     print("  front lamp texels cleared:", int(sel.sum()))
 
+def neutral_glass(mesh):
+    """Generated glass sometimes comes out teal-green, which the in-game repaint (by hue) would
+    turn into body colour. Texels that are green with at least as much blue as red (the paint key
+    is a yellow-green, red well above blue) become dark neutral glass."""
+    from PIL import Image
+    mat = mesh.visual.material
+    img = np.array(mat.baseColorTexture.convert("RGB")).astype(np.float32) / 255.0
+    r, g, b = img[..., 0], img[..., 1], img[..., 2]
+    sel = (g > r + 0.03) & (b >= r * 0.92) & (g > b)
+    v = img.max(2)
+    dark = np.clip(v * 0.32, 0, 1)
+    img[sel] = np.stack([dark * 0.92, dark * 0.97, dark * 1.05], -1)[sel]
+    mat.baseColorTexture = Image.fromarray((img.clip(0, 1) * 255).astype(np.uint8))
+    print("  glass texels neutralised:", int(sel.sum()))
+
 def prep(cid, src=None):
     """src: a newer high-detail body just for Unity (the Godot game keeps cars/<id>.glb).
     Its wheel fit is in <src minus .glb>.json (tools/fit_wheels.py <src>), with "front": +1/-1."""
@@ -83,6 +98,8 @@ def prep(cid, src=None):
     rw = [w for w in wheels if not w["front"]]
     assert len(fw) == 1 and len(rw) == 1, (cid, wheels)
     front_sign = 1 if fw[0]["z"] > 0 else -1
+    if hd and cfg.get("neutral_glass"):
+        neutral_glass(mesh)
     if hd and cfg.get("clear_front_lamps"):
         clear_front_lamps(mesh, ax, c, L, front_sign)
 

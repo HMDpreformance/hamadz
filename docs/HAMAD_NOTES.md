@@ -126,3 +126,4 @@ Playtest 2026-11-17 (afternoon), Hamad's words in short:
 - Rain must not be always on: sometimes yes, sometimes no. Rain looks cheap. Done in code: showers come and go during a drive (fade in 18 s, road dries slowly). Rain look still to improve.
 - Lighting looks cheap. To improve.
 - Buildings look cheap and do not match the map. To improve: real 3D building models per district (Marina, Downtown, villas, old Deira, warehouses), made with Higgsfield.
+- Chase camera a little higher, not too much. Done in code: about 0.28 m higher.

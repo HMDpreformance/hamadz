@@ -80,7 +80,7 @@ namespace HMD
             }
             float dist = Mathf.Lerp(5.0f, 6.2f, speed / 220f);   // lower and closer: a high wide camera makes the car look like a toy
             dist *= Mathf.Max(1f, CarLen() / 4.9f);
-            float height = Mathf.Lerp(1.5f, 1.35f, speed / 220f) * Mathf.Lerp(1f, Mathf.Max(1f, CarLen() / 4.9f), 0.6f);
+            float height = Mathf.Lerp(1.78f, 1.62f, speed / 220f) * Mathf.Lerp(1f, Mathf.Max(1f, CarLen() / 4.9f), 0.6f);
             Vector3 want = target.position - fwd * dist + Vector3.up * height;
             transform.position = snap ? want : Vector3.SmoothDamp(transform.position, want, ref vel, 0.09f);
             Vector3 look = target.position + Vector3.up * 0.85f + fwd * 3f;

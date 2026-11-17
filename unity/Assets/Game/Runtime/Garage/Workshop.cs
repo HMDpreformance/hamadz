@@ -36,6 +36,13 @@ namespace HMD
             ceil = Res.Mat(new Color(0.9f, 0.9f, 0.88f), 0.2f);
             led = Res.Glow(new Color(1f, 0.98f, 0.94f), 3.2f);
             floor = Res.TexMat("Tex/garage_floor", Vector2.one / 4f, 0.88f, 0f, new Color(0.62f, 0.63f, 0.65f));   // polished
+            var epoxy = Res.Tex("Gen/shop_floor");
+            if (epoxy != null)
+            {
+                // light grey polished epoxy like the real workshop floor
+                floor = Res.Mat(new Color(0.78f, 0.79f, 0.8f), 0.86f, 0f);
+                Res.SetMainTex(floor, epoxy, Vector2.one / 7f);
+            }
             yellow = Res.Mat(new Color(0.98f, 0.78f, 0.02f), 0.6f);
             red = Res.Mat(new Color(0.75f, 0.03f, 0.03f), 0.75f, 0.2f);
             black = Res.Mat(new Color(0.02f, 0.02f, 0.025f), 0.6f, 0.3f);
@@ -52,6 +59,7 @@ namespace HMD
             DynoBay();
             Lights();
             Banners();
+            Props();
 
             var probe = new GameObject("RoomProbe").AddComponent<ReflectionProbe>();
             probe.transform.SetParent(transform, false);
@@ -313,16 +321,84 @@ namespace HMD
             }
         }
 
+        /// <summary>A generated 3D workshop item (tool chest, tyres, lift...). Scaled to a real height and set on the floor.</summary>
+        Transform Prop(string name, Vector3 pos, float yaw, float height, Vector3 colliderSize = default)
+        {
+            var prefab = Res.Load<GameObject>("Props/" + name);
+            if (prefab == null) return null;
+            var holder = new GameObject("Prop_" + name).transform;
+            holder.SetParent(transform, false);
+            holder.localPosition = pos;
+            holder.localRotation = Quaternion.Euler(0, yaw, 0);
+            var go = Object.Instantiate(prefab, holder);
+            go.transform.localPosition = Vector3.zero; go.transform.localRotation = Quaternion.identity; go.transform.localScale = Vector3.one;
+            foreach (var c in go.GetComponentsInChildren<Collider>()) Object.Destroy(c);
+            // plain lit materials with the model's own picture (keeps the build free of extra shader variants)
+            foreach (var r in go.GetComponentsInChildren<Renderer>())
+            {
+                var src = r.sharedMaterial;
+                Texture tex = null;
+                if (src != null)
+                    foreach (var prop in new[] { "baseColorTexture", "_BaseMap", "_MainTex" })
+                        if (src.HasProperty(prop) && src.GetTexture(prop) != null) { tex = src.GetTexture(prop); break; }
+                var m = Res.Mat(Color.white, 0.45f, 0.1f);
+                if (tex != null) Res.SetMainTex(m, tex, Vector2.one);
+                r.sharedMaterial = m;
+            }
+            // measure, scale to the wanted height, stand it on the floor, centre it on its spot
+            var rs = go.GetComponentsInChildren<Renderer>();
+            if (rs.Length == 0) return holder;
+            Bounds b = rs[0].bounds;
+            foreach (var r in rs) b.Encapsulate(r.bounds);
+            float k = height / Mathf.Max(0.01f, b.size.y);
+            go.transform.localScale = Vector3.one * k;
+            Vector3 centre = holder.InverseTransformPoint(b.center);
+            float bottom = (b.center.y - b.extents.y - holder.position.y) * k;
+            go.transform.localPosition = new Vector3(-centre.x * k, -bottom, -centre.z * k);
+            if (colliderSize != default)
+            {
+                var bc = holder.gameObject.AddComponent<BoxCollider>();
+                bc.size = colliderSize; bc.center = new Vector3(0, colliderSize.y * 0.5f, 0);
+            }
+            return holder;
+        }
+
+        void Props()
+        {
+            // rolling tool chests beside the bays and at the dyno
+            Prop("tool_chest", new Vector3(-12.4f, 0, 15.2f), 90, 1.25f, new Vector3(0.8f, 1.2f, 1.4f));
+            Prop("tool_chest", new Vector3(1.2f, 0, 21.5f), 200, 1.25f, new Vector3(1.4f, 1.2f, 0.8f));
+            Prop("tool_chest", new Vector3(12.6f, 0, 14f), -90, 1.25f, new Vector3(0.8f, 1.2f, 1.4f));
+            // tyre stacks
+            Prop("tyre_stack", new Vector3(12.6f, 0, 10.5f), 20, 1.0f, new Vector3(0.75f, 1f, 0.75f));
+            Prop("tyre_stack", new Vector3(12.5f, 0, 11.6f), 70, 1.0f, new Vector3(0.75f, 1f, 0.75f));
+            Prop("tyre_stack", new Vector3(-12.6f, 0, 30.5f), 10, 1.0f, new Vector3(0.75f, 1f, 0.75f));
+            Prop("tyre_stack", new Vector3(-11.6f, 0, 31.6f), 120, 1.0f, new Vector3(0.75f, 1f, 0.75f));
+            // a two-post lift in the third bay
+            Prop("lift", new Vector3(4.5f, 0, 9f), 0, 3.4f);
+            // engine on a stand, workbenches, oil drums
+            Prop("engine_stand", new Vector3(-3.5f, 0, 30.5f), 160, 1.35f, new Vector3(1.1f, 1.3f, 1.1f));
+            Prop("workbench", new Vector3(5.5f, 0, 1.0f), 180, 1.05f, new Vector3(2.2f, 1f, 0.9f));
+            Prop("workbench", new Vector3(-12.9f, 0, 25f), 90, 1.05f, new Vector3(0.9f, 1f, 2.2f));
+            Prop("oil_drums", new Vector3(12.4f, 0, 32.4f), 30, 1.05f, new Vector3(1.5f, 1f, 1.5f));
+            Prop("oil_drums", new Vector3(-12.6f, 0, 2f), 200, 1.05f, new Vector3(1.5f, 1f, 1.5f));
+        }
+
         void Banners()
         {
             // banners on the walls (original brands drawn for the game) + the real LSX logo
-            string[] names = { "banner_lsx", "banner_wheels", "banner_tires", "banner_apex", "banner_flag", "banner_dyno" };
+            string[] names = { "banner_lsx", "banner_wheels", "banner_tires", "banner_apex", "banner_flag", "banner_dyno",
+                               "banner_apex2", "banner_torq", "banner_nitro", "banner_dynomax", "banner_dynomax", "toolwall", "toolwall" };
             Vector3[] pos =
             {
                 new Vector3(0, 4.4f, D - 0.08f), new Vector3(-7f, 4.4f, D - 0.08f), new Vector3(-W / 2 + 0.08f, 4.2f, 14f),
                 new Vector3(-W / 2 + 0.08f, 4.2f, 22f), new Vector3(5f, 4.4f, D - 0.08f), new Vector3(W / 2 - 0.08f, 4.2f, 29f),
+                new Vector3(-W / 2 + 0.08f, 4.4f, 18f), new Vector3(-W / 2 + 0.08f, 4.4f, 27f), new Vector3(-11f, 4.4f, D - 0.08f),
+                new Vector3(9.5f, 4.5f, D - 0.08f), new Vector3(W / 2 - 0.08f, 4.6f, 20f),
+                new Vector3(-W / 2 + 0.07f, 2.75f, 8.2f), new Vector3(5.5f, 2.6f, 0.07f),
             };
-            float[] yaw = { 0, 0, -90, -90, 0, 90 };
+            float[] yaw = { 0, 0, -90, -90, 0, 90, -90, -90, 0, 0, 90, -90, 180 };
+            float[] tall = { 1.4f, 1.4f, 1.4f, 1.4f, 1.4f, 1.4f, 2.0f, 2.0f, 2.0f, 2.0f, 1.8f, 2.3f, 2.3f };
             for (int k = 0; k < names.Length; k++)
             {
                 var t = Res.Tex("Gen/" + names[k]);
@@ -334,11 +410,12 @@ namespace HMD
                 q.transform.localPosition = pos[k];
                 q.transform.localRotation = Quaternion.Euler(0, yaw[k], 0);
                 float aspect = (float)t.width / t.height;
-                q.transform.localScale = new Vector3(1.4f * aspect, 1.4f, 1);
+                q.transform.localScale = new Vector3(tall[k] * aspect, tall[k], 1);
                 var m = Res.Mat(Color.white, 0.3f);
                 Res.SetMainTex(m, t, Vector2.one);
                 q.GetComponent<Renderer>().sharedMaterial = m;
             }
+            // the old hand-drawn banners that share a wall spot with a new one move aside
             var logo = Res.Tex("Art/lsx-logo");
             if (logo)
             {

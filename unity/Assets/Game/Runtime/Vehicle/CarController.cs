@@ -24,6 +24,7 @@ namespace HMD
     [RequireComponent(typeof(Rigidbody))]
     public class CarController : MonoBehaviour
     {
+        public Transform shadow;   // dark contact shadow quad under the car
         public CarSpec spec;
         public WheelCollider[] wheels = new WheelCollider[4];   // FL, FR, RL, RR
         public Transform[] wheelVisuals = new Transform[4];
@@ -293,6 +294,18 @@ namespace HMD
                 if (dynoMode)
                     q = transform.rotation * Quaternion.Euler(IsDriven(i) ? dynoWheelAngle : 0, 0, 0);
                 wheelVisuals[i].SetPositionAndRotation(p, q);
+            }
+            // contact shadow: flat on the ground under the tyres, turning with the car
+            if (shadow != null)
+            {
+                float gy = float.MaxValue;
+                for (int i = 0; i < 4; i++)
+                    if (wheels[i] != null && wheelVisuals[i] != null) gy = Mathf.Min(gy, wheelVisuals[i].position.y - wheels[i].radius);
+                if (gy != float.MaxValue)
+                {
+                    Vector3 c = transform.position;
+                    shadow.SetPositionAndRotation(new Vector3(c.x, gy + 0.03f, c.z), Quaternion.Euler(90, transform.eulerAngles.y, 0));
+                }
             }
         }
 

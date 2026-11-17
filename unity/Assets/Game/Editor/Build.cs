@@ -64,6 +64,9 @@ namespace HMD.EditorTools
             CopyDir("w3d/facade", Imp + "/Facade", "*.jpg");
             CopyDir("w3d/gen", Imp + "/Gen", "*.jpg", "*.png");
             CopyDir("w3d/sky", Imp + "/Sky", "*.hdr");
+            CopyDir("unity_assets/tower", Imp + "/Tower", "*.jpg");
+            CopyDir("unity_assets/gen", Imp + "/Gen", "*.jpg", "*.png");
+            CopyDir("unity_assets/props", Imp + "/Props", "*.glb");
             CopyDir("audio/engines", Imp + "/Audio/engines", "*.wav");
             CopyDir("audio/car", Imp + "/Audio/car", "*.wav");
             CopyDir("audio/music", Imp + "/Audio/music", "*.ogg");

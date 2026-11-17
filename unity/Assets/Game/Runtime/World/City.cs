@@ -31,7 +31,8 @@ namespace HMD
         public Quaternion PlayerStartRot { get; private set; }
 
         Material asphalt, walkMat, curbMat, lineWhite, lineYellow, medianMat, palmLeaf, palmBark, lampPole, lampGlow;
-        Material[] facades, shopMats, neon;
+        Material[] facades, shopMats, neon, towers;
+        float[] towerTile;
         Material glassTower, glassDark, roofMat, podiumMat;
         System.Random rng;
 
@@ -115,6 +116,23 @@ namespace HMD
                 Res.Glow(new Color(1f, 0.55f, 0.05f), 5f), Res.Glow(new Color(0.55f, 0.2f, 1f), 5f),
                 Res.Glow(new Color(0.2f, 1f, 0.45f), 4f), Res.Glow(new Color(1f, 0.95f, 0.85f), 4f),
             };
+            // tower skins: photo facades with lit windows (generated for the game), one repeat = ~10 floors
+            var tn = new[] { "office", "resi", "black", "hotel", "fins", "stone" };
+            var tsz = new[] { 34f, 30f, 44f, 26f, 38f, 24f };
+            var tl = new List<Material>(); var tt = new List<float>();
+            for (int k = 0; k < tn.Length; k++)
+            {
+                var d = Res.Tex("Tower/" + tn[k]);
+                if (d == null) continue;
+                bool glassy = k == 0 || k == 2 || k == 4;
+                var m = Res.Mat(Color.white, glassy ? 0.82f : 0.45f, glassy ? 0.25f : 0f);
+                Res.SetMainTex(m, d, Vector2.one);
+                var e = Res.Tex("Tower/" + tn[k] + "_emit");
+                Res.SetEmission(m, Color.white * 1.35f, e != null ? e : d);
+                tl.Add(m); tt.Add(tsz[k]);
+            }
+            towers = tl.ToArray(); towerTile = tt.ToArray();
+
             glassTower = Res.Glass(new Color(0.12f, 0.2f, 0.3f, 1f), 0.96f);
             glassTower.SetFloat("_Metallic", 0.85f);
             Res.SetEmission(glassTower, new Color(0.25f, 0.5f, 0.85f) * 0.15f);
@@ -155,10 +173,11 @@ namespace HMD
         // sub-mesh slots per block
         const int S_WALK = 0, S_CURB = 1, S_ROOF = 2, S_PODIUM = 3, S_GLASS = 4, S_GLASSDARK = 5, S_SHOP0 = 6, S_SHOP1 = 7, S_POLE = 8, S_LAMP = 9, S_FAC = 10; // + facades
         int NeonSlot(int k) => S_FAC + facades.Length + k;
+        int TowerSlot(int k) => S_FAC + facades.Length + neon.Length + k;
 
         void BuildBlock(int i, int j)
         {
-            int subs = S_FAC + facades.Length + neon.Length;
+            int subs = S_FAC + facades.Length + neon.Length + towers.Length;
             var b = new MeshBuilder(subs);
             var c = BlockCenter(i, j);
             float h = Block * 0.5f;
@@ -201,6 +220,7 @@ namespace HMD
             var mats = new List<Material> { walkMat, curbMat, roofMat, podiumMat, glassTower, glassDark, shopMats[0], shopMats[shopMats.Length > 1 ? 1 : 0], lampPole, lampGlow };
             mats.AddRange(facades);
             mats.AddRange(neon);
+            mats.AddRange(towers);
             var go = MeshBuilder.Spawn("Block_" + i + "_" + j, b.Build("block"), mats.ToArray(), transform, true, true);
             go.isStatic = true;
         }
@@ -264,17 +284,35 @@ namespace HMD
                 float tiers = 1 + Ri(3);
                 float th = rest / tiers;
                 Vector3 s = upper;
+                int skin = towers.Length > 0 ? Ri(towers.Length) : -1;
                 for (int k = 0; k < tiers; k++)
                 {
                     Vector3 tc = ctr + Vector3.up * (podiumH + th * k + th * 0.5f);
-                    b.Sub(R() < 0.8f ? S_GLASS : S_GLASSDARK).Box(tc, new Vector3(s.x, th, s.z), 4f, true, false);
+                    if (skin >= 0) b.Sub(TowerSlot(skin)).Box(tc, new Vector3(s.x, th, s.z), towerTile[skin], true, true);
+                    else b.Sub(R() < 0.8f ? S_GLASS : S_GLASSDARK).Box(tc, new Vector3(s.x, th, s.z), 4f, true, false);
+                    // roof slab + parapet on every setback, so the steps read as real terraces
+                    b.Sub(S_ROOF).Box(tc + Vector3.up * (th * 0.5f + 0.25f), new Vector3(s.x + 0.6f, 0.5f, s.z + 0.6f), 4f, true, false);
+                    // corner piers give the tower some depth
+                    if (k == 0 && s.x > 8 && s.z > 8)
+                        for (int cx = -1; cx <= 1; cx += 2)
+                            for (int cz = -1; cz <= 1; cz += 2)
+                                b.Sub(S_GLASSDARK).Box(tc + new Vector3(cx * s.x * 0.5f, 0, cz * s.z * 0.5f), new Vector3(0.9f, th, 0.9f), 4f, true, true);
                     // horizontal light bands every few floors (like Dubai towers at night)
                     var band = NeonSlot(R() < 0.6f ? 5 : Ri(neon.Length));
                     for (float y = 3.5f * 4; y < th; y += 3.5f * (4 + Ri(5)))
                         b.Sub(band).Box(tc + Vector3.up * (y - th * 0.5f), new Vector3(s.x + 0.1f, 0.12f, s.z + 0.1f), 1f, true, true);
                     s = new Vector3(s.x * (0.72f + R() * 0.15f), 0, s.z * (0.72f + R() * 0.15f));
                 }
-                b.Sub(NeonSlot(Ri(neon.Length))).Box(ctr + Vector3.up * (height + 0.3f), new Vector3(s.x * 0.5f, 0.6f, s.z * 0.5f), 1f, true, false);
+                // roof plant, a lit crown and a mast with a red aircraft light
+                Vector3 top = ctr + Vector3.up * height;
+                Vector3 last = s / (0.72f + 0.075f);
+                b.Sub(S_ROOF).Box(top + Vector3.up * 1.6f, new Vector3(last.x * 0.45f, 3.2f, last.z * 0.45f), 4f, true, false);
+                b.Sub(NeonSlot(Ri(neon.Length))).Box(top + Vector3.up * 3.4f, new Vector3(last.x * 0.47f, 0.35f, last.z * 0.47f), 1f, true, false);
+                if (height > 80f)
+                {
+                    b.Sub(S_POLE).Box(top + Vector3.up * 9f, new Vector3(0.35f, 12f, 0.35f), 1f, true, false);
+                    b.Sub(NeonSlot(0)).Box(top + Vector3.up * 15.2f, new Vector3(0.7f, 0.7f, 0.7f), 1f, false, false);
+                }
             }
             else
             {
@@ -419,7 +457,7 @@ namespace HMD
         void BuildSkyline()
         {
             // far towers in a ring outside the playable grid, plus one super-tall spire
-            var b = new MeshBuilder(3 + neon.Length);
+            var b = new MeshBuilder(3 + neon.Length + towers.Length);
             Vector3 center = new Vector3(N * Pitch * 0.5f, 0, N * Pitch * 0.5f);
             for (int k = 0; k < 90; k++)
             {
@@ -428,7 +466,8 @@ namespace HMD
                 Vector3 p = center + new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * r;
                 float h = 60f + R() * 220f;
                 float w = 18f + R() * 30f;
-                b.Sub(R() < 0.7f ? 0 : 1).Box(p + Vector3.up * h * 0.5f, new Vector3(w, h, w * (0.7f + R() * 0.6f)), 6f, true, false);
+                if (towers.Length > 0) { int sk = Ri(towers.Length); b.Sub(3 + neon.Length + sk).Box(p + Vector3.up * h * 0.5f, new Vector3(w, h, w * (0.7f + R() * 0.6f)), towerTile[sk] * 1.3f, true, false); }
+                else b.Sub(R() < 0.7f ? 0 : 1).Box(p + Vector3.up * h * 0.5f, new Vector3(w, h, w * (0.7f + R() * 0.6f)), 6f, true, false);
                 var band = 3 + (R() < 0.6f ? 5 : Ri(neon.Length));
                 for (float y = 20; y < h; y += 18f + R() * 30f)
                     b.Sub(band).Box(p + Vector3.up * y, new Vector3(w + 0.3f, 0.6f, w * 0.8f + 0.3f), 2f, true, true);
@@ -439,13 +478,15 @@ namespace HMD
             for (int k = 0; k < 9; k++)
             {
                 float th = 70f - k * 3f;
-                b.Sub(1).Box(sp + Vector3.up * (hh + th * 0.5f), new Vector3(ww, th, ww * 0.8f), 6f, true, false);
+                if (towers.Length > 0) b.Sub(3 + neon.Length).Box(sp + Vector3.up * (hh + th * 0.5f), new Vector3(ww, th, ww * 0.8f), 40f, true, false);
+                else b.Sub(1).Box(sp + Vector3.up * (hh + th * 0.5f), new Vector3(ww, th, ww * 0.8f), 6f, true, false);
                 b.Sub(3 + 5).Box(sp + Vector3.up * (hh + th), new Vector3(ww + 0.5f, 0.8f, ww * 0.8f + 0.5f), 2f, true, true);
                 hh += th; ww *= 0.8f;
             }
             b.Sub(2).Box(sp + Vector3.up * (hh + 60), new Vector3(3, 120, 3), 4f, true, false);
             var mats = new List<Material> { glassTower, glassDark, Res.Glow(new Color(0.9f, 0.85f, 1f), 3f) };
             mats.AddRange(neon);
+            mats.AddRange(towers);
             var go = MeshBuilder.Spawn("Skyline", b.Build("skyline"), mats.ToArray(), transform, false, false);
             go.isStatic = true;
         }

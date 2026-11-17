@@ -122,6 +122,7 @@ namespace HMD
             }
 
             car.Setup(spec);
+            car.shadow = Res.ContactShadow(root.transform, halfW * 2f * 1.22f, L * 1.16f, Mathf.Min(yF - rF, yR - rR) + 0.03f).transform;
 
             // --- lights
             AddLights(root.transform, spec, L, halfW, height, player);
@@ -256,6 +257,7 @@ namespace HMD
                 if (cfg != null && cfg.size != null && cfg.size.Length == 3) { halfW = cfg.size[0] * L * 0.5f; h = cfg.size[1] * L; }
             }
             else MeshBuilder.Cube("Body", go.transform, new Vector3(0, 0.7f, 0), new Vector3(1.8f, 1.2f, L), Res.Mat(paint, 0.8f, 0.3f));
+            Res.ContactShadow(go.transform, halfW * 2f * 1.22f, L * 1.16f, 0.045f);
             var bc = go.AddComponent<BoxCollider>();
             bc.center = new Vector3(0, h * 0.5f, 0);
             bc.size = new Vector3(halfW * 2, h, L);

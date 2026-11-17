@@ -30,8 +30,8 @@ namespace HMD
             if (skyMat != null)
             {
                 var sky = new Material(skyMat);
-                sky.SetFloat("_Exposure", 0.62f);
-                sky.SetColor("_Tint", new Color(0.5f, 0.52f, 0.75f));
+                sky.SetFloat("_Exposure", 0.26f);   // deep night, not dusk
+                sky.SetColor("_Tint", new Color(0.36f, 0.4f, 0.7f));
                 RenderSettings.skybox = sky;
                 cam.clearFlags = CameraClearFlags.Skybox;
             }
@@ -41,12 +41,12 @@ namespace HMD
                 cam.backgroundColor = new Color(0.03f, 0.035f, 0.07f);
             }
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.36f, 0.39f, 0.56f);
+            RenderSettings.ambientSkyColor = new Color(0.27f, 0.3f, 0.46f);
             RenderSettings.ambientEquatorColor = new Color(0.32f, 0.26f, 0.32f);
             RenderSettings.ambientGroundColor = new Color(0.15f, 0.13f, 0.15f);
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.ExponentialSquared;
-            RenderSettings.fogColor = new Color(0.17f, 0.15f, 0.24f);
+            RenderSettings.fogColor = new Color(0.085f, 0.08f, 0.15f);
             RenderSettings.fogDensity = Weather.Raining ? 0.0042f : 0.0024f;
             RenderSettings.defaultReflectionMode = DefaultReflectionMode.Custom;
 

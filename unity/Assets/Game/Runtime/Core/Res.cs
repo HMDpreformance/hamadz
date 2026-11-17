@@ -187,6 +187,63 @@ namespace HMD
             }
         }
 
+        /// <summary>Soft rounded-rectangle alpha, used as the dark contact shadow under cars.</summary>
+        static Texture2D softBox;
+        public static Texture2D SoftBox
+        {
+            get
+            {
+                if (softBox != null) return softBox;
+                const int n = 64;
+                softBox = new Texture2D(n, n, TextureFormat.RGBA32, false);
+                for (int y = 0; y < n; y++)
+                    for (int x = 0; x < n; x++)
+                    {
+                        float dx = Mathf.Abs((x + 0.5f) / n * 2 - 1), dy = Mathf.Abs((y + 0.5f) / n * 2 - 1);
+                        // distance outside an inner rounded box, faded to the edge
+                        float ox = Mathf.Max(0, dx - 0.45f) / 0.55f, oy = Mathf.Max(0, dy - 0.45f) / 0.55f;
+                        float a = Mathf.Clamp01(1 - Mathf.Sqrt(ox * ox + oy * oy));
+                        softBox.SetPixel(x, y, new Color(1, 1, 1, a * a * (3 - 2 * a)));
+                    }
+                softBox.Apply();
+                softBox.wrapMode = TextureWrapMode.Clamp;
+                return softBox;
+            }
+        }
+
+        static Material shadowMat;
+        /// <summary>Shared material of the contact shadow quads (alpha blended black, drawn after the road).</summary>
+        public static Material ShadowMat
+        {
+            get
+            {
+                if (shadowMat != null) return shadowMat;
+                shadowMat = Particle(new Color(0, 0, 0, 0.78f), SoftBox);
+                shadowMat.SetFloat("_SrcBlend", 5f); shadowMat.SetFloat("_DstBlend", 10f); shadowMat.SetFloat("_ZWrite", 0f);
+                shadowMat.SetFloat("_Blend", 0f);
+                shadowMat.DisableKeyword("_ALPHAPREMULTIPLY_ON"); shadowMat.DisableKeyword("_ALPHAMODULATE_ON");
+                shadowMat.renderQueue = 2900;   // after opaque ground and road paint, before glass and glows
+                return shadowMat;
+            }
+        }
+
+        /// <summary>A flat dark shadow quad lying on the ground under something (local y = height above the parent origin).</summary>
+        public static GameObject ContactShadow(Transform parent, float width, float length, float localY)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            Object.Destroy(go.GetComponent<Collider>());
+            go.name = "ContactShadow";
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = new Vector3(0, localY, 0);
+            go.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            go.transform.localScale = new Vector3(width, length, 1);
+            var r = go.GetComponent<Renderer>();
+            r.sharedMaterial = ShadowMat;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            return go;
+        }
+
         static Sprite whiteSprite;
         public static Sprite White
         {

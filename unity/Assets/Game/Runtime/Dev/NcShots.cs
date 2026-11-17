@@ -32,6 +32,13 @@ namespace HMD
                 if (rd.cls == "ramp" && ramps++ < 6) yield return Drive(rd, 110f, false);
             foreach (var rd in nc.roads)
                 if (rd.cls == "main") { yield return Drive(rd, 150f, false); break; }
+            // the Palm: trunk and two fronds (junctions close together near the trunk)
+            int fronds = 0;
+            foreach (var rd in nc.roads)
+            {
+                if (rd.name == "Palm Trunk") yield return Drive(rd, 120f, false);
+                else if (rd.name == "Frond" && fronds++ < 2) yield return Drive(rd, 70f, false);
+            }
             Debug.Log($"[HMD] nc drive summary: bumps={bumps} drops={drops} stops={stops} runoffs={offs}");
 
             // stills

@@ -29,7 +29,7 @@ namespace HMD
         const int M_FAC0 = 6;            // 6..13 facades (midrise)
         const int M_STUCCO = 14, M_SAND = 15, M_CORR = 16, M_SHUTTER = 17, M_ROOF = 18, M_SHOP = 19, M_ROOMS = 20,
                   M_LED_W = 21, M_LED_B = 22, M_LED_P = 23, M_LED_G = 24, M_RED = 25, M_POLE = 26, M_LAMP = 27,
-                  M_BARK = 28, M_LEAF = 29, M_TREE = 30, M_GLASS = 31, M_WALL = 32, M_SIGN0 = 33, M_COUNT = 37;
+                  M_BARK = 28, M_LEAF = 29, M_TREE = 30, M_GLASS = 31, M_WALL = 32, M_SIGN0 = 33, M_SHORE = 37, M_COUNT = 38;
         float[] towerTile = { 34f, 30f, 44f, 26f, 38f, 24f };
 
         public void Build(NewCity nc)
@@ -68,6 +68,7 @@ namespace HMD
             }
             foreach (var lp in lamps) Lamp(Prop(lp.p), lp.p, lp.yaw, lp.highway);
             foreach (var t in trees) if (t.palm) Palm(Prop(t.p), t.p, t.s); else Tree(Prop(t.p), t.p, t.s);
+            PalmShores(nc, Prop);
             foreach (var kv in props) MeshBuilder.Spawn("Props_" + kv.Key.x + "_" + kv.Key.y, kv.Value.Build("props"), mats, transform, false, false).isStatic = true;
             int n = 0;
             foreach (var kv in cells)
@@ -98,6 +99,51 @@ namespace HMD
         }
 
         public static readonly List<(string kind, Vector3 p, float h)> Landmarks = new List<(string, Vector3, float)>();
+
+        /// <summary>Makes the Palm readable at night: a light sand shore strip along both edges of every frond and the
+        /// crescent (12 m from the road, where the land ends), and warm promenade lamps on short posts along them.</summary>
+        void PalmShores(NewCity nc, System.Func<Vector3, MeshBuilder> prop)
+        {
+            int lampsAdded = 0;
+            foreach (var rd in nc.roads)
+            {
+                if (rd.name != "Frond" && rd.name != "Crescent") continue;
+                float off = rd.width * 0.5f + 10.5f;
+                float acc = 0;
+                for (int i = 1; i < rd.pts.Count; i++)
+                {
+                    Vector3 a = rd.pts[i - 1], c = rd.pts[i];
+                    Vector3 d = c - a; d.y = 0; float len = d.magnitude; if (len < 0.1f) continue; d /= len;
+                    Vector3 side = Vector3.Cross(Vector3.up, d);
+                    for (int s = -1; s <= 1; s += 2)
+                    {
+                        // shore: a 3 m wide pale sand band sloping into the water
+                        Vector3 a0 = a + side * s * off, c0 = c + side * s * off;
+                        Vector3 a1 = a + side * s * (off + 3f) + Vector3.down * 1.2f, c1 = c + side * s * (off + 3f) + Vector3.down * 1.2f;
+                        var b = prop(a);
+                        Vector2 u0 = new Vector2(0, 0), u1 = new Vector2(len / 4f, 0), u2 = new Vector2(len / 4f, 1), u3 = new Vector2(0, 1);
+                        if (s > 0) b.Sub(M_SHORE).QuadUV(a0 + Vector3.up * 0.15f, c0 + Vector3.up * 0.15f, c1, a1, Vector3.up, u0, u1, u2, u3);
+                        else b.Sub(M_SHORE).QuadUV(c0 + Vector3.up * 0.15f, a0 + Vector3.up * 0.15f, a1, c1, Vector3.up, u1, u0, u3, u2);
+                    }
+                    // promenade lamps every 28 m on both shores
+                    acc += len;
+                    if (acc >= 28f)
+                    {
+                        acc = 0;
+                        for (int s = -1; s <= 1; s += 2)
+                        {
+                            Vector3 p = c + side * s * (off - 1.2f);
+                            var b = prop(p);
+                            RBox(b, M_POLE, p, new Vector3(0.14f, 3.2f, 0.14f), 0, Vector2.one);
+                            RBox(b, M_LAMP, p + Vector3.up * 3.2f, new Vector3(0.35f, 0.35f, 0.35f), 0, Vector2.one);
+                            lampHeads.Add(p + Vector3.up * 3.4f);
+                            lampsAdded++;
+                        }
+                    }
+                }
+            }
+            Debug.Log($"[HMD] palm shores: {lampsAdded} promenade lamps");
+        }
 
         // ---------------------------------------------------------------- parsing
         static float F(string s) => float.Parse(s, CultureInfo.InvariantCulture);
@@ -173,6 +219,9 @@ namespace HMD
             mats[M_WALL] = Res.Mat(new Color(0.78f, 0.74f, 0.66f), 0.25f);
             var sc = new[] { new Color(1f, 0.15f, 0.2f), new Color(0.1f, 0.85f, 1f), new Color(1f, 0.6f, 0.1f), new Color(0.3f, 1f, 0.45f) };
             for (int k = 0; k < 4; k++) mats[M_SIGN0 + k] = Res.Glow(sc[k], 4.5f);
+            // pale wet sand shore with a faint warm glow, so the Palm's outline shows from above at night
+            mats[M_SHORE] = Res.Mat(new Color(0.78f, 0.7f, 0.55f), 0.55f, 0f);
+            Res.SetEmission(mats[M_SHORE], new Color(0.62f, 0.48f, 0.3f) * 1.1f);
         }
 
         // ---------------------------------------------------------------- geometry helpers

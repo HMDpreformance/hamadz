@@ -90,12 +90,28 @@ namespace HMD
 
         void Materials(GameObject go)
         {
-            var asphalt = Res.TexMat("Tex/asphalt_04", Vector2.one * (10f / 6f), 0.45f, 0f, new Color(0.55f, 0.55f, 0.58f));
+            // ground set (unity_assets/ground, Higgsfield, seamless): asphalt every 4 m, red/grey interlock pavers every
+            // 6 m on the sidewalks (mesh UV 1 = 10 m). Night only: the ground shows through texture and local light, the
+            // tints keep the road dark grey but clearly lighter than before and not navy.
+            var gAsphalt = Res.Tex("Ground/asphalt");
+            var asphalt = Res.TexMat("Tex/asphalt_04", Vector2.one * (10f / (gAsphalt ? 4f : 6f)), 0.45f, 0f, gAsphalt ? new Color(0.7f, 0.67f, 0.63f) : new Color(0.55f, 0.55f, 0.58f));   // a touch warm against the blue night
+            if (gAsphalt) Res.SetMainTex(asphalt, gAsphalt, Vector2.one * (10f / 4f));
             Res.MakeWet(asphalt);
-            var walk = Res.TexMat("Tex/concrete_pavement", Vector2.one * (10f / 3f), 0.35f, 0f, new Color(0.7f, 0.68f, 0.66f));
+            var gPavers = Res.Tex("Ground/pavers");
+            var walk = Res.TexMat("Tex/concrete_pavement", Vector2.one * (10f / (gPavers ? 6f : 3f)), 0.35f, 0f, gPavers ? new Color(0.86f, 0.78f, 0.7f) : new Color(0.7f, 0.68f, 0.66f));
+            if (gPavers) Res.SetMainTex(walk, gPavers, Vector2.one * (10f / 6f));
             Res.MakeWet(walk);
             var concrete = Res.TexMat("Tex/concrete_panels", Vector2.one * (10f / 4f), 0.3f, 0f, new Color(0.62f, 0.62f, 0.64f));
-            var sand = Res.Mat(new Color(0.26f, 0.22f, 0.17f), 0.12f, 0f);   // plain dark sand, no stone pattern
+            // the ground between the roads: was a plain dark sand colour that read as black at night (Hamad 2026-11-17:
+            // "do something about the darkness, change the textures of the ground"). Now a light desert sand texture
+            // (Higgsfield, seamless), tiled every 6 m by world position, with a little warm city spill light.
+            var sandTex = Res.Tex("Ground/sand") ?? Res.Tex("Gen/ground_sand");
+            var sand = Res.Mat(sandTex ? new Color(0.78f, 0.7f, 0.58f) : new Color(0.42f, 0.36f, 0.28f), 0.15f, 0f);
+            if (sandTex) { Res.SetMainTex(sand, sandTex, Vector2.one); Res.SetEmission(sand, new Color(0.34f, 0.27f, 0.19f) * 0.55f, sandTex); }
+            else Res.SetEmission(sand, new Color(0.3f, 0.24f, 0.16f) * 0.3f);
+            var grassTex = Res.Tex("Ground/grass");
+            var grass = Res.Mat(new Color(0.62f, 0.72f, 0.5f), 0.25f, 0f);
+            if (grassTex) { Res.SetMainTex(grass, grassTex, Vector2.one); Res.SetEmission(grass, new Color(0.12f, 0.2f, 0.09f) * 0.95f, grassTex); }
             // sea: lighter blue and mirror-like (the wet-road shader at full wetness gives it the planar reflection)
             var water = Res.Mat(new Color(0.1f, 0.21f, 0.34f), 0.95f, 0f);
             Res.MakeWet(water);
@@ -113,14 +129,45 @@ namespace HMD
                 else if (n.Contains("marking_white")) { m = white; col = false; }
                 else if (n.Contains("marking_yellow")) { m = yellow; col = false; }
                 else if (n.Contains("concrete")) m = concrete;
-                else if (n.Contains("terrain")) m = sand;
+                else if (n.Contains("grass"))
+                {
+                    // lawn verges behind the sidewalks (green districts): grass every 3 m, a dark night green with a small
+                    // floor of light so it never reads black between the lamps; no collider (verges are not driven on)
+                    m = grass; col = false;
+                    WorldUV(mf, 3f);
+                }
+                else if (n.Contains("terrain"))
+                {
+                    m = sand;
+                    WorldUV(mf, 6f);   // the generator writes no UVs for the terrain: one texture tile per 6 m
+                }
                 else if (n.Contains("water")) { m = water; col = false; if (r) WaterY = Mathf.Max(WaterY, r.bounds.max.y); }
                 else if (n.Contains("barrier_red")) m = red;
                 else if (n.Contains("barrier_white")) m = barrierW;
                 if (m != null && r) r.sharedMaterial = m;
-                if (col && mf.sharedMesh != null) mf.gameObject.AddComponent<MeshCollider>().sharedMesh = mf.sharedMesh;
+                if (col && mf.sharedMesh != null)
+                {
+                    var mc = mf.gameObject.AddComponent<MeshCollider>(); mc.sharedMesh = mf.sharedMesh;
+                    // walls and barriers: the body glances off instead of grabbing and spinning (WheelColliders take their
+                    // grip from their own friction curves, so driving on concrete decks is not affected)
+                    if (n.Contains("concrete") || n.Contains("barrier")) mc.sharedMaterial = WallSlide;
+                }
                 Debug.Log($"[HMD] newcity mesh {mf.name}: {(m ? m.name : "?")} verts={mf.sharedMesh?.vertexCount} collider={col}");
             }
+        }
+
+        static PhysicsMaterial wallSlide;
+        static PhysicsMaterial WallSlide => wallSlide ??= new PhysicsMaterial("WallSlide")
+        { dynamicFriction = 0.08f, staticFriction = 0.08f, bounciness = 0.05f, frictionCombine = PhysicsMaterialCombine.Minimum, bounceCombine = PhysicsMaterialCombine.Minimum };
+
+        /// <summary>Planar UVs from world x/z, one texture tile per 'metres' (meshes the generator writes without UVs).</summary>
+        static void WorldUV(MeshFilter mf, float metres)
+        {
+            var tm = mf.sharedMesh;
+            if (tm == null || !tm.isReadable) return;
+            var v = tm.vertices; var uv = new Vector2[v.Length]; var tr = mf.transform;
+            for (int i = 0; i < v.Length; i++) { var w = tr.TransformPoint(v[i]); uv[i] = new Vector2(w.x / metres, w.z / metres); }
+            tm.uv = uv;
         }
 
         public readonly List<Vector3> lampHeads = new List<Vector3>();

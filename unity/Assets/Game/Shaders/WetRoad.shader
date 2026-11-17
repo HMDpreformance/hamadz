@@ -122,7 +122,9 @@ Shader "HMD/WetRoad"
                 float2 gutter = smoothstep(3.2, 0.4, half_ - m) * inRoad;
                 float spot = max(max(gutter.x, gutter.y), inRoad.x * inRoad.y * 0.75);
                 float thr = lerp(0.74, 0.5, spot);
-                float puddle = smoothstep(thr - 0.04, thr + 0.07, n) * _HMD_Wetness;
+                // puddles only on a really wet road: on a dry night (sheen ~0.12) a faint puddle still went mirror-smooth
+                // and reflected the black sky as a dark blob on the asphalt
+                float puddle = smoothstep(thr - 0.04, thr + 0.07, n) * saturate((_HMD_Wetness - 0.35) / 0.4);
                 float wet = saturate(_HMD_Wetness);
 
                 // wet asphalt: darker, smoother; puddles flat and glassy

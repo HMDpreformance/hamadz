@@ -43,6 +43,7 @@ namespace HMD
             else if (part == "profiles") Profiles();
             else if (part == "junctions") yield return JunctionTests();
             else if (part == "bridge") yield return BridgeTests();
+            else if (part == "look") yield return LookShots();
             else if (part == "default")
             {
                 foreach (var rd in nc.roads) if (rd.cls == "highway") yield return Drive(rd, 230f, rd.name == "E11");
@@ -729,6 +730,47 @@ namespace HMD
                 Debug.Log($"[HMD] ramp shots at ramp starting {V(rp.pts[0])}, point {k} {V(p)}");
             }
             Debug.Log("[HMD] test BRIDGE done");
+        }
+
+        /// <summary>-ncdrive look: what the player sees while driving. The car on the right-hand lane of a road in each
+        /// area (villa street, Downtown boulevard, Marina, industrial street, the E11), the chase camera behind it at its
+        /// own height, plus one shot looking along the pavement. Shots nc_30_look_*.</summary>
+        IEnumerator LookShots()
+        {
+            var want = new (string district, string cls, string tag)[]
+            {
+                ("Dubai Hills", "street", "villa_street"), ("Jumeirah", "street", "jumeirah_street"), ("Downtown Dubai", "main", "downtown_blvd"),
+                ("Dubai Marina", "main", "marina"), ("Al Quoz", "street", "industrial"), ("Business Bay", "main", "business_bay"), ("", "highway", "e11")
+            };
+            foreach (var w in want)
+            {
+                Vector3 centre = Vector3.zero; bool found = w.district == "";
+                foreach (var d in nc.districts) if (d.name == w.district) { centre = d.pos; found = true; }
+                if (!found) { Debug.Log($"[HMD] look {w.tag}: no district {w.district}"); continue; }
+                NewCity.Road best = null; int bi = 0; float bd = float.MaxValue;
+                foreach (var rd in nc.roads)
+                {
+                    if (rd.cls != w.cls || rd.pts.Count < 6) continue;
+                    if (w.cls == "highway" && rd.name != "E11") continue;
+                    for (int i = 3; i < rd.pts.Count - 3; i++)
+                    {
+                        float dd = w.district == "" ? Mathf.Abs(rd.pts[i].x - 2000f) : new Vector2(rd.pts[i].x - centre.x, rd.pts[i].z - centre.z).sqrMagnitude;
+                        if (dd < bd) { bd = dd; best = rd; bi = i; }
+                    }
+                }
+                if (best == null) { Debug.Log($"[HMD] look {w.tag}: no {w.cls} road"); continue; }
+                var dir = Dir(best, bi); var side = Vector3.Cross(Vector3.up, dir);
+                var p = best.pts[bi] + side * Mathf.Max(1.8f, best.width * 0.25f);   // right-hand lane
+                Park(p, dir); g.rig.SnapChase();
+                yield return new WaitForSeconds(0.8f);
+                var s = NewCity.Surface(p);
+                Cam(s - dir * 7.5f + Vector3.up * 2.3f, s + dir * 30f + Vector3.up * 1.2f); yield return Shot($"nc_30_look_{w.tag}");
+                // along the pavement: from the kerb at eye height
+                var kerb = s + side * (best.width * 0.5f + 1.5f);
+                Cam(kerb + Vector3.up * 1.7f - dir * 4f, kerb + dir * 35f + Vector3.up * 1.5f); yield return Shot($"nc_30_look_{w.tag}_kerb");
+                g.rig.mode = CameraRig.Mode.Chase;
+                Debug.Log($"[HMD] look {w.tag}: {best.name} ({best.cls}) at {V(p)}");
+            }
         }
 
         void Profiles()

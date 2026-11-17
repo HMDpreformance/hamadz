@@ -58,8 +58,9 @@ namespace HMD
                 cam.backgroundColor = new Color(0.03f, 0.035f, 0.07f);
             }
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.27f, 0.3f, 0.46f);
-            RenderSettings.ambientEquatorColor = new Color(0.32f, 0.26f, 0.32f);
+            // near-neutral night ambient: the strong blue tinted every road and pavement navy; the sky itself stays blue
+            RenderSettings.ambientSkyColor = new Color(0.24f, 0.25f, 0.31f);
+            RenderSettings.ambientEquatorColor = new Color(0.28f, 0.25f, 0.25f);
             RenderSettings.ambientGroundColor = new Color(0.15f, 0.13f, 0.15f);
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.ExponentialSquared;
@@ -72,9 +73,11 @@ namespace HMD
             moon.transform.SetParent(transform, false);
             moon.type = LightType.Directional;
             moon.transform.rotation = Quaternion.Euler(52, -35, 0);
-            moon.color = new Color(0.55f, 0.62f, 0.85f);
+            moon.color = new Color(0.6f, 0.64f, 0.74f);   // pale moonlight, much less blue (roads read neutral grey)
             moon.intensity = 0.9f;
-            moon.shadows = LightShadows.Soft;
+            // no moon shadows: in a lit city at night they add little, cost frame time, and one stray soft shadow
+            // showed as a dark blob on a Business Bay road
+            moon.shadows = LightShadows.None;
             moon.shadowStrength = 0.75f;
             RenderSettings.sun = moon;
 
@@ -150,7 +153,7 @@ namespace HMD
             // street-racer night grade: teal shadows, warm orange highlights
             var split = profile.Add<SplitToning>(true);
             nightGrade = split;
-            split.shadows.Override(new Color(0.18f, 0.48f, 0.55f));
+            split.shadows.Override(new Color(0.34f, 0.44f, 0.48f));   // a hint of teal in the shadows, not a navy wash
             split.highlights.Override(new Color(0.85f, 0.55f, 0.3f));
             split.balance.Override(-15f);
             var smh = profile.Add<ShadowsMidtonesHighlights>(true);

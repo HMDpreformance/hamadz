@@ -31,7 +31,7 @@ namespace HMD
         const int M_STUCCO = 14, M_SAND = 15, M_CORR = 16, M_SHUTTER = 17, M_ROOF = 18, M_SHOP = 19, M_ROOMS = 20,
                   M_LED_W = 21, M_LED_B = 22, M_LED_P = 23, M_LED_G = 24, M_RED = 25, M_POLE = 26, M_LAMP = 27,
                   M_BARK = 28, M_LEAF = 29, M_TREE = 30, M_GLASS = 31, M_WALL = 32, M_SIGN0 = 33, M_SHORE = 37, M_LAND = 38, M_SHALLOW = 39, M_ARCH = 40, M_LAMP_LED = 41, M_SIGN_GREEN = 42, M_SIGN_WHITE = 43, M_STEEL = 44,
-                  M_PLOT_SAND = 45, M_PLOT_CONC = 46, M_PLOT_TILE = 47, M_POOL = 48, M_COUNT = 49;
+                  M_PLOT_SAND = 45, M_PLOT_CONC = 46, M_PLOT_TILE = 47, M_POOL = 48, M_POOL_COOL = 49, M_METRO = 50, M_COUNT = 51;
         float[] towerTile = { 34f, 30f, 44f, 26f, 38f, 24f };
 
         public void Build(NewCity nc)
@@ -86,7 +86,14 @@ namespace HMD
                 return b;
             }
             foreach (var lp in lamps) Lamp(Prop(lp.p), lp.p, lp.yaw, lp.highway);
-            foreach (var t in trees) if (t.palm) Palm(Prop(t.p), t.p, t.s); else Tree(Prop(t.p), t.p, t.s);
+            LoadTreeModels();
+            int treeModels = 0;
+            foreach (var t in trees)
+            {
+                if (t.palm && PlaceTree(t.p, t.s)) { treeModels++; continue; }
+                if (t.palm) Palm(Prop(t.p), t.p, t.s); else Tree(Prop(t.p), t.p, t.s);
+            }
+            if (palmModels.Count > 0) Debug.Log($"[HMD] palm models: {palmModels.Count} loaded, {treeModels} palms placed as models");
             PalmShores(nc, Prop);
             // green overhead sign gantries across the highways, and the elevated metro beside the E11
             foreach (var gt in gantries) Gantry(Prop(gt.p), gt.p, gt.yaw, gt.width);
@@ -325,8 +332,17 @@ namespace HMD
                     var src = mats[i];
                     Texture tex = src != null ? (src.HasProperty("_BaseMap") ? src.GetTexture("_BaseMap") : src.HasProperty("baseColorTexture") ? src.GetTexture("baseColorTexture") : src.mainTexture) : null;
                     var m = Res.Mat(Tints[t], 0.35f, 0f);
-                    if (tex) { Res.SetMainTex(m, tex, Vector2.one); Res.SetEmission(m, Color.white * 0.9f, tex); if (i == 0 && t == 0) avg = AverageColour(tex); }
+                    // painted-in windows glow: brighter so near buildings light the street level
+                    if (tex) { Res.SetMainTex(m, tex, Vector2.one); Res.SetEmission(m, Color.white * 1.25f, tex); if (i == 0 && t == 0) avg = AverageColour(tex); }
                     else if (src != null && src.HasProperty("_BaseColor")) Res.SetColor(m, src.GetColor("_BaseColor") * Tints[t]);
+                    // glTF alpha "mask" (frond cards, railings): keep the cut-out, both sides
+                    bool cut = src != null && (src.IsKeywordEnabled("_ALPHATEST_ON") || (src.HasProperty("_AlphaClip") && src.GetFloat("_AlphaClip") > 0.5f) || (src.HasProperty("alphaCutoff") && src.renderQueue >= 2450 && src.renderQueue < 3000));
+                    if (cut)
+                    {
+                        m.SetFloat("_AlphaClip", 1f); m.EnableKeyword("_ALPHATEST_ON");
+                        m.SetFloat("_Cutoff", src.HasProperty("alphaCutoff") ? src.GetFloat("alphaCutoff") : 0.5f);
+                        m.SetFloat("_Cull", 0f); m.renderQueue = 2450;
+                    }
                     m.enableInstancing = true;
                     variants[t][i] = m;
                 }
@@ -398,8 +414,60 @@ namespace HMD
             return true;
         }
 
+        // ---------------------------------------------------------------- palm models (unity_assets/trees)
+        [System.Serializable] class TModelJson { public string id, kind; public float h, weight = 1f; public bool emissive; }
+        [System.Serializable] class TModelsJson { public TModelJson[] models; }
+        readonly List<(TModelJson j, BModel m)> palmModels = new List<(TModelJson, BModel)>();
+        Transform treeRoot;
+
+        void LoadTreeModels()
+        {
+            var ta = Res.Load<TextAsset>("Trees/trees");
+            if (ta == null) return;
+            TModelsJson list = null;
+            try { list = JsonUtility.FromJson<TModelsJson>(ta.text); } catch (System.Exception e) { Debug.LogWarning("[HMD] trees.json: " + e.Message); }
+            if (list?.models == null) return;
+            foreach (var j in list.models)
+            {
+                if (j.kind != "palm") continue;
+                var prefab = Res.Load<GameObject>("Trees/" + j.id);
+                if (prefab == null) { Debug.LogWarning($"[HMD] tree model {j.id}: no GLB"); continue; }
+                var m = Bake(prefab, new BModelJson { id = j.id, h = j.h });
+                if (m == null) continue;
+                // fronds read green under the lamps; the light-wrapped palm glows
+                foreach (var mt in m.variants[0])
+                {
+                    var tex = mt.HasProperty("_BaseMap") ? mt.GetTexture("_BaseMap") : null;
+                    Res.SetEmission(mt, Color.white * (j.emissive ? 0.9f : 0.3f), tex);
+                }
+                palmModels.Add((j, m));
+            }
+        }
+
+        /// <summary>A palm model at a json tree spot: height h x the spot's scale, random yaw, picked by weight; culled
+        /// when small on screen (about 300 m for a 9 m palm). No collider (trees never stop the car).</summary>
+        bool PlaceTree(Vector3 p, float s)
+        {
+            if (palmModels.Count == 0) return false;
+            float tot = 0; foreach (var pm in palmModels) tot += Mathf.Max(0f, pm.j.weight);
+            float r = R() * tot; var pick = palmModels[0];
+            foreach (var pm in palmModels) { r -= Mathf.Max(0f, pm.j.weight); if (r <= 0f) { pick = pm; break; } }
+            var m = pick.m;
+            float sc = pick.j.h * Mathf.Max(0.3f, s) / Mathf.Max(0.01f, m.size.y);
+            if (treeRoot == null) { treeRoot = new GameObject("PalmModels").transform; treeRoot.SetParent(transform, false); }
+            var go = new GameObject("palm_" + pick.j.id); go.transform.SetParent(treeRoot, false);
+            go.transform.SetPositionAndRotation(p, Quaternion.Euler(0, R() * 360f, 0)); go.transform.localScale = Vector3.one * sc;
+            go.AddComponent<MeshFilter>().sharedMesh = m.mesh;
+            var mr = go.AddComponent<MeshRenderer>(); mr.sharedMaterials = m.variants[0];
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            var lg = go.AddComponent<LODGroup>(); lg.SetLODs(new[] { new LOD(0.025f, new Renderer[] { mr }) });
+            go.isStatic = true;
+            return true;
+        }
+
         // ---------------------------------------------------------------- lot ground and light pools
         readonly Dictionary<Vector2Int, MeshBuilder> plots = new Dictionary<Vector2Int, MeshBuilder>();
+        int plotLogs;
 
         /// <summary>The ground of a lot (the flat navy between buildings read as empty): pavers, a concrete yard or granite
         /// paving by style, 1.5 m past the footprint; and a soft warm pool of light on the ground at the road-side front
@@ -410,8 +478,21 @@ namespace HMD
             if (!plots.TryGetValue(k, out var b)) { b = new MeshBuilder(M_COUNT); plots[k] = b; }
             int mat = l.style == "villa" ? M_PLOT_SAND : l.style == "warehouse" ? M_PLOT_CONC : M_PLOT_TILE;
             var q = Quaternion.Euler(0, l.yaw, 0);
-            float hx = l.w * 0.5f + 1.5f, hz = l.d * 0.5f + 1.5f, y = 0.05f;
-            Vector3 c = l.p + Vector3.up * y;
+            float hx = l.w * 0.5f + 1.5f, hz = l.d * 0.5f + 1.5f, y = 0.12f;
+            // sit on the real terrain: the json lot height can be a little under it, which hid the plot entirely
+            // average of the terrain under the lot (the highest point left the plot floating up to 1 m on slopes: its
+            // edge cast a black line across the sand)
+            float sum = 0; int hits = 0;
+            for (int ix = -1; ix <= 1; ix++)
+                for (int iz = -1; iz <= 1; iz++)
+                {
+                    var pr = l.p + q * new Vector3(ix * hx * 0.9f, 0, iz * hz * 0.9f);
+                    if (Physics.Raycast(pr + Vector3.up * 15f, Vector3.down, out var hit, 30f) && hit.collider.name.ToLowerInvariant().Contains("terrain") && Mathf.Abs(hit.point.y - l.p.y) < 3f)
+                    { sum += hit.point.y; hits++; }
+                }
+            float gy = hits > 0 ? Mathf.Max(l.p.y, sum / hits) : l.p.y;
+            Vector3 c = new Vector3(l.p.x, gy + y, l.p.z);
+            if (plotLogs++ < 3) Debug.Log($"[HMD] plot {l.style} at ({l.p.x:F0},{l.p.y:F2},{l.p.z:F0}): terrain top {gy:F2}");
             Vector3 p0 = c + q * new Vector3(-hx, 0, -hz), p1 = c + q * new Vector3(-hx, 0, hz), p2 = c + q * new Vector3(hx, 0, hz), p3 = c + q * new Vector3(hx, 0, -hz);
             float u = hx * 2f / 4f, v = hz * 2f / 4f;   // 4 m texture repeat
             UpQuad(b, mat, p0, p1, p2, p3, Vector2.zero, new Vector2(0, v), new Vector2(u, v), new Vector2(u, 0));
@@ -421,7 +502,7 @@ namespace HMD
             {
                 float ox = pools == 1 ? 0f : (i == 0 ? -l.w * 0.25f : l.w * 0.25f);
                 float pw = Mathf.Min(l.w * (pools == 1 ? 0.7f : 0.4f), 16f), pd = 7f;
-                Vector3 pc = l.p + q * new Vector3(ox, 0, l.d * 0.5f + pd * 0.35f) + Vector3.up * (y + 0.03f);
+                Vector3 pc = new Vector3(l.p.x, gy, l.p.z) + q * new Vector3(ox, 0, l.d * 0.5f + pd * 0.35f) + Vector3.up * (y + 0.05f);
                 Vector3 a0 = pc + q * new Vector3(-pw * 0.5f, 0, -pd * 0.5f), a1 = pc + q * new Vector3(-pw * 0.5f, 0, pd * 0.5f);
                 Vector3 a2 = pc + q * new Vector3(pw * 0.5f, 0, pd * 0.5f), a3 = pc + q * new Vector3(pw * 0.5f, 0, -pd * 0.5f);
                 UpQuad(b, M_POOL, a0, a1, a2, a3, Vector2.zero, new Vector2(0, 1), Vector2.one, new Vector2(1, 0));
@@ -548,7 +629,7 @@ namespace HMD
                 }
                 // small lamps under the boards light them softly
                 for (int k = 0; k < 3; k++)
-                    RBox(b, M_LAMP_LED, p + side * cx[k] * f + fwd * f * 0.9f + Vector3.up * (clear - 0.35f), new Vector3(bw[k] * 0.7f, 0.1f, 0.15f), yaw, Vector2.one);
+                    RBox(b, M_LED_W, p + side * cx[k] * f + fwd * f * 0.9f + Vector3.up * (clear - 0.35f), new Vector3(bw[k] * 0.7f, 0.08f, 0.12f), yaw, Vector2.one);
             }
         }
 
@@ -564,10 +645,10 @@ namespace HMD
                 float yaw = Quaternion.LookRotation(d / len).eulerAngles.y;
                 Vector3 mid = (a + c) * 0.5f, side = Vector3.Cross(Vector3.up, d / len);
                 var b = prop(mid);
-                RBox(b, M_ROOF, mid - Vector3.up * 1.8f, new Vector3(w, 1.8f, len + 0.4f), yaw, new Vector2(6, 6));            // deck slab
+                RBox(b, M_METRO, mid - Vector3.up * 1.8f, new Vector3(w, 1.8f, len + 0.4f), yaw, new Vector2(6, 6));            // deck slab
                 for (int s = -1; s <= 1; s += 2)
                 {
-                    RBox(b, M_ROOF, mid + side * s * (w * 0.5f - 0.2f), new Vector3(0.4f, 1.3f, len + 0.4f), yaw, new Vector2(6, 2));   // parapet
+                    RBox(b, M_METRO, mid + side * s * (w * 0.5f - 0.2f), new Vector3(0.4f, 1.3f, len + 0.4f), yaw, new Vector2(6, 2));   // parapet
                     RBox(b, M_LED_B, mid + side * s * (w * 0.5f + 0.03f) - Vector3.up * 0.9f, new Vector3(0.06f, 0.12f, len + 0.4f), yaw, Vector2.one, false);
                 }
             }
@@ -580,10 +661,10 @@ namespace HMD
                 float pyaw = dl.sqrMagnitude > 0.01f ? Quaternion.LookRotation(dl).eulerAngles.y : 0f;
                 float h = top - 1.8f - pl.y; if (h < 1f) continue;
                 var b = solid(pl);
-                // round-ish pillar: two crossed boxes give an octagon from far, plus a flared head under the deck
-                RBox(b, M_ROOF, pl - Vector3.up * 0.5f, new Vector3(1.8f, h - 1.2f + 0.5f, 1.8f), 0, new Vector2(4, 4));
-                RBox(b, M_ROOF, pl - Vector3.up * 0.5f, new Vector3(1.8f, h - 1.2f + 0.5f, 1.8f), 45, new Vector2(4, 4));
-                RBox(b, M_ROOF, pl + Vector3.up * (h - 1.2f), new Vector3(w * 0.75f, 1.2f, 2.6f), pyaw, new Vector2(4, 4));
+                // round slim pillar (1.3 m, like the Dubai metro) and a flared head under the deck
+                float ph = h - 1.2f + 0.5f;
+                b.Sub(M_METRO).Add(UnitCylinder(), Matrix4x4.TRS(pl + Vector3.up * (ph * 0.5f - 0.5f), Quaternion.identity, new Vector3(1.3f, ph * 0.5f, 1.3f)), M_METRO);
+                RBox(b, M_METRO, pl + Vector3.up * (h - 1.2f), new Vector3(w * 0.7f, 1.2f, 2.2f), pyaw, new Vector2(4, 4));
             }
         }
 
@@ -626,30 +707,51 @@ namespace HMD
             mats[M_LED_P] = Res.Glow(new Color(0.75f, 0.2f, 1f), 5f);
             mats[M_LED_G] = Res.Glow(new Color(1f, 0.75f, 0.35f), 4f);
             mats[M_RED] = Res.Glow(new Color(1f, 0.03f, 0.02f), 7f);
-            mats[M_POLE] = Res.Mat(new Color(0.22f, 0.23f, 0.25f), 0.6f, 0.7f);
+            mats[M_POLE] = Res.Mat(new Color(0.42f, 0.43f, 0.45f), 0.55f, 0.75f);   // dark grey metal, not black
+            // metro viaduct: light grey concrete with a little spill light from the road lamps
+            mats[M_METRO] = Res.TexMat("Tex/concrete_panels", Vector2.one, 0.3f, 0f, new Color(0.82f, 0.82f, 0.84f));
+            Res.SetEmission(mats[M_METRO], new Color(0.2f, 0.2f, 0.21f) * 1.4f, mats[M_METRO].GetTexture("_BaseMap"));
             mats[M_LAMP] = Res.Glow(new Color(1f, 0.66f, 0.3f), 8f);       // sodium
             mats[M_LAMP_LED] = Res.Glow(new Color(0.85f, 0.93f, 1f), 9f);  // highway LED
             // highway sign boards: Dubai green, softly lit from below; white arrows and panels glow a little
             mats[M_SIGN_GREEN] = Res.Mat(new Color(0.02f, 0.3f, 0.14f), 0.55f, 0f);
-            Res.SetEmission(mats[M_SIGN_GREEN], new Color(0.02f, 0.3f, 0.12f) * 0.9f);
-            mats[M_SIGN_WHITE] = Res.Glow(new Color(0.95f, 0.97f, 1f), 1.6f);
+            // softly lit at night (at 0.9 / 1.6 the boards glowed like screens)
+            Res.SetEmission(mats[M_SIGN_GREEN], new Color(0.02f, 0.3f, 0.12f) * 0.16f);
+            mats[M_SIGN_WHITE] = Res.Glow(new Color(0.95f, 0.97f, 1f), 0.55f);
             mats[M_STEEL] = Res.Mat(new Color(0.55f, 0.57f, 0.6f), 0.55f, 0.8f);
             // ground under the lots: sand-coloured pavers round villas, concrete yards in industry, granite round towers
             mats[M_PLOT_SAND] = Res.TexMat("Tex/patterned_paving", Vector2.one, 0.3f, 0f, new Color(0.86f, 0.76f, 0.6f));
             mats[M_PLOT_CONC] = Res.TexMat("Tex/hangar_concrete_floor", Vector2.one, 0.35f, 0f, new Color(0.62f, 0.62f, 0.64f));
             mats[M_PLOT_TILE] = Res.TexMat("Tex/granite_tile", Vector2.one, 0.55f, 0f, new Color(0.7f, 0.7f, 0.72f));
-            foreach (int s in new[] { M_PLOT_SAND, M_PLOT_CONC, M_PLOT_TILE }) Res.SetEmission(mats[s], new Color(0.16f, 0.12f, 0.08f) * 0.25f);   // a little city spill light
+            // the Higgsfield ground set when present (plot UVs run 1 per 4 m): villa tiles 8 m, concrete yard 12 m, granite 8 m
+            // towers: the granite bands aliased into strong black and white stripes at a distance, so tower plazas use
+            // the villa tiles at a larger size in a cool grey tint
+            foreach (var (slot, name, metres) in new[] { (M_PLOT_SAND, "Ground/villa_tiles", 8f), (M_PLOT_CONC, "Ground/yard_concrete", 12f), (M_PLOT_TILE, "Ground/villa_tiles", 10f) })
+            {
+                var gt = Res.Tex(name);
+                if (gt == null) continue;
+                var gm = Res.Mat(slot == M_PLOT_TILE ? new Color(0.7f, 0.72f, 0.76f) : new Color(0.85f, 0.83f, 0.8f), slot == M_PLOT_TILE ? 0.45f : 0.3f, 0f);
+                Res.SetMainTex(gm, gt, Vector2.one * (4f / metres));
+                mats[slot] = gm;
+            }
+            // city spill light on the lot ground: at 0.04 it vanished into the night; the texture shows through now
+            foreach (int s in new[] { M_PLOT_SAND, M_PLOT_CONC, M_PLOT_TILE })
+            {
+                var t = mats[s].HasProperty("_BaseMap") ? mats[s].GetTexture("_BaseMap") : null;
+                Res.SetEmission(mats[s], (s == M_PLOT_CONC ? new Color(0.2f, 0.2f, 0.21f) : new Color(0.26f, 0.21f, 0.15f)) * 0.55f, t);
+            }
             // warm light spilling on the ground at shop fronts and villa gates (soft, additive, no real light)
-            mats[M_POOL] = Res.Particle(new Color(1f, 0.72f, 0.42f, 0.32f), Res.SoftDot);
+            mats[M_POOL] = Res.Particle(new Color(1f, 0.7f, 0.4f, 0.7f), Res.SoftDot);
+            mats[M_POOL_COOL] = Res.Particle(new Color(0.75f, 0.85f, 1f, 0.5f), Res.SoftDot);
             var bark = Res.Tex("Gen/bark");
-            mats[M_BARK] = Res.Mat(new Color(0.45f, 0.36f, 0.27f), 0.15f);
+            mats[M_BARK] = Res.Mat(new Color(0.58f, 0.44f, 0.31f), 0.15f);
             if (bark) Res.SetMainTex(mats[M_BARK], bark, new Vector2(1, 4));
             // Dubai boulevards uplight their palms: warm trunks and green-lit fronds instead of black cut-outs
-            Res.SetEmission(mats[M_BARK], new Color(0.55f, 0.38f, 0.22f) * 0.45f, bark);
+            Res.SetEmission(mats[M_BARK], new Color(0.55f, 0.38f, 0.22f) * 0.75f, bark);
             var frond = Res.Tex("Gen/frond");
-            var leaf = Res.Mat(new Color(0.55f, 0.65f, 0.4f), 0.3f);
+            var leaf = Res.Mat(new Color(0.42f, 0.55f, 0.32f), 0.3f);
             if (frond) { Res.SetMainTex(leaf, frond, Vector2.one); leaf.SetFloat("_AlphaClip", 1f); leaf.SetFloat("_Cutoff", 0.4f); leaf.EnableKeyword("_ALPHATEST_ON"); }
-            Res.SetEmission(leaf, new Color(0.32f, 0.5f, 0.2f) * 0.42f, frond);
+            Res.SetEmission(leaf, new Color(0.16f, 0.28f, 0.1f) * 0.5f);   // uniform: the frond texture is dark, only its alpha shapes the leaves
             leaf.SetFloat("_Cull", 0f); leaf.renderQueue = 2450;
             mats[M_LEAF] = leaf;
             mats[M_TREE] = Res.Mat(new Color(0.12f, 0.22f, 0.1f), 0.2f);
@@ -892,23 +994,41 @@ namespace HMD
             return unitCube = b.Build("cube");
         }
 
+        static Mesh unitCyl;
+        /// <summary>Unity's cylinder: radius 0.5, height 2, centred.</summary>
+        static Mesh UnitCylinder()
+        {
+            if (unitCyl != null) return unitCyl;
+            var tmp = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            unitCyl = Object.Instantiate(tmp.GetComponent<MeshFilter>().sharedMesh);
+            Object.DestroyImmediate(tmp);
+            return unitCyl;
+        }
+
         // ---------------------------------------------------------------- lamps and trees
         void Lamp(MeshBuilder b, Vector3 p, float yaw, bool highway)
         {
             float h = highway ? 12f : 8f;
-            RBox(b, M_POLE, p - Vector3.up * 0.5f, new Vector3(0.25f, h + 0.5f, 0.25f), yaw, new Vector2(1, 4));
+            RBox(b, M_POLE, p - Vector3.up * 0.5f, new Vector3(0.15f, h + 0.5f, 0.15f), yaw, new Vector2(1, 4));   // slim pole
             var q = Quaternion.Euler(0, yaw, 0);
             int arms = highway ? 2 : 1;
             for (int a = 0; a < arms; a++)
             {
                 Vector3 dir = q * (a == 0 ? Vector3.forward : Vector3.back);
                 float len = highway ? 2.6f : 2.2f;
-                b.Sub(M_POLE).Add(UnitCube(), Matrix4x4.TRS(p + Vector3.up * h + dir * len * 0.5f, Quaternion.LookRotation(dir), new Vector3(0.15f, 0.15f, len)), M_POLE);
+                b.Sub(M_POLE).Add(UnitCube(), Matrix4x4.TRS(p + Vector3.up * h + dir * len * 0.5f, Quaternion.LookRotation(dir), new Vector3(0.09f, 0.09f, len)), M_POLE);
                 Vector3 head = p + Vector3.up * (h - 0.2f) + dir * len;
                 // highways: cool white LED heads; streets: warm sodium
                 int hm = highway ? M_LAMP_LED : M_LAMP;
                 b.Sub(hm).Add(UnitCube(), Matrix4x4.TRS(head, Quaternion.LookRotation(dir), new Vector3(0.45f, 0.18f, 0.8f)), hm);
                 lampHeads.Add(head); lampCool.Add(highway);
+                // a glow pool on the road under every lamp (only the nearest 40 are real lights): the street reads lit
+                if (Physics.Raycast(head + Vector3.down * 0.5f, Vector3.down, out var hit, 20f))
+                {
+                    float r = highway ? 7.5f : 5.5f; Vector3 g = hit.point + Vector3.up * 0.06f;
+                    UpQuad(b, highway ? M_POOL_COOL : M_POOL, g + new Vector3(-r, 0, -r), g + new Vector3(-r, 0, r), g + new Vector3(r, 0, r), g + new Vector3(r, 0, -r),
+                        Vector2.zero, new Vector2(0, 1), Vector2.one, new Vector2(1, 0));
+                }
             }
         }
 
@@ -920,7 +1040,7 @@ namespace HMD
             {
                 float t0 = k / 3f, t1 = (k + 1) / 3f;
                 Vector3 p = basePos + Vector3.up * h * (t0 + t1) * 0.5f + lean * (t0 + t1) * 0.5f;
-                float w = Mathf.Lerp(0.42f, 0.26f, (t0 + t1) * 0.5f) * scale;
+                float w = Mathf.Lerp(0.3f, 0.18f, (t0 + t1) * 0.5f) * scale;   // slimmer trunk
                 b.Sub(M_BARK).Box(p, new Vector3(w, h / 3f + 0.05f, w), 1f, true, true);
             }
             // Dubai at night: many palms wrapped in warm fairy lights up the trunk, the rest have a small uplight
@@ -928,7 +1048,7 @@ namespace HMD
             {
                 for (float y = 0.5f; y < h * 0.72f; y += 0.5f * scale)
                 {
-                    float t = y / h; float w = Mathf.Lerp(0.42f, 0.26f, t) * scale * 1.12f;
+                    float t = y / h; float w = Mathf.Lerp(0.3f, 0.18f, t) * scale * 1.12f;
                     b.Sub(M_LED_G).Box(basePos + Vector3.up * y + lean * t, new Vector3(w, 0.05f, w), 1f, false, false);
                 }
             }

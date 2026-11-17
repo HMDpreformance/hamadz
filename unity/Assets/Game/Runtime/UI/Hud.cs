@@ -13,6 +13,8 @@ namespace HMD
     {
         public System.Action OnGarage;
         public CarController car;
+        /// <summary>Hide the FPS readout (video recordings: frame capture slows the screen, not the game clock).</summary>
+        public static bool HideFps;
         Canvas canvas;
         Text fps, speed, gear;
         Image nitroFill;
@@ -113,6 +115,7 @@ namespace HMD
             // the full map screen hides the dials and the NOS bar
             bool mapOpen = map != null && map.IsOpen;
             if (sp && sp.gameObject.activeSelf == mapOpen) { sp.gameObject.SetActive(!mapOpen); nframe.gameObject.SetActive(!mapOpen); nlbl.gameObject.SetActive(!mapOpen); }
+            if (fps && fps.gameObject.activeSelf == HideFps) fps.gameObject.SetActive(!HideFps);
             fpsFrames++; fpsAccum += Time.unscaledDeltaTime; fpsTimer += Time.unscaledDeltaTime;
             if (fpsTimer > 0.5f)
             {

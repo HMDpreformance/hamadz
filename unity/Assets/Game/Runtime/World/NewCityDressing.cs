@@ -742,7 +742,7 @@ namespace HMD
             }
             // warm light spilling on the ground at shop fronts and villa gates (soft, additive, no real light)
             mats[M_POOL] = Res.Particle(new Color(1f, 0.7f, 0.4f, 0.7f), Res.SoftDot);
-            mats[M_POOL_COOL] = Res.Particle(new Color(0.75f, 0.85f, 1f, 0.5f), Res.SoftDot);
+            mats[M_POOL_COOL] = Res.Particle(new Color(0.78f, 0.88f, 1f, 0.85f), Res.SoftDot);   // highway pools read on the road from the chase cam
             var bark = Res.Tex("Gen/bark");
             mats[M_BARK] = Res.Mat(new Color(0.58f, 0.44f, 0.31f), 0.15f);
             if (bark) Res.SetMainTex(mats[M_BARK], bark, new Vector2(1, 4));
@@ -1025,7 +1025,7 @@ namespace HMD
                 // a glow pool on the road under every lamp (only the nearest 40 are real lights): the street reads lit
                 if (Physics.Raycast(head + Vector3.down * 0.5f, Vector3.down, out var hit, 20f))
                 {
-                    float r = highway ? 7.5f : 5.5f; Vector3 g = hit.point + Vector3.up * 0.06f;
+                    float r = highway ? 10f : 6f; Vector3 g = hit.point + Vector3.up * 0.06f;
                     UpQuad(b, highway ? M_POOL_COOL : M_POOL, g + new Vector3(-r, 0, -r), g + new Vector3(-r, 0, r), g + new Vector3(r, 0, r), g + new Vector3(r, 0, -r),
                         Vector2.zero, new Vector2(0, 1), Vector2.one, new Vector2(1, 0));
                 }

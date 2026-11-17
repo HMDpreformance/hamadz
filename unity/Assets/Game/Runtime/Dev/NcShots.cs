@@ -792,6 +792,7 @@ namespace HMD
             PutOn(car, e11, si, back); g.rig.mode = CameraRig.Mode.Chase; g.rig.SnapChase();
             yield return new WaitForSeconds(0.5f);
             var vdir = Path.Combine(dir, "video"); Directory.CreateDirectory(vdir);
+            Hud.HideFps = true;   // frame capture slows the screen, not the 60 fps game clock
             Application.targetFrameRate = -1; QualitySettings.vSyncCount = 0;
             Time.captureFramerate = 60;
             int frame = 0; bool done = false;

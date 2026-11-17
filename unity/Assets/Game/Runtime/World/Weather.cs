@@ -17,7 +17,7 @@ namespace HMD
         ParticleSystem rain, rainFar, splash;
         Transform follow;
         /// <summary>Road sheen on a dry night (0 = matte, 1 = soaked). 0.3 read as rain on dry nights; 0.12 is a light sheen.</summary>
-        public const float DrySheen = 0.12f;
+        public const float DrySheen = 0.2f;   // 0.12 left the highway a dull dark band; 0.2 reflects lamps and towers, still clearly dry
 
         public void Setup(Transform cam, bool? force = null)
         {

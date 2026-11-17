@@ -111,7 +111,7 @@ namespace HMD
                     l.transform.position = heads[h];
                     bool c = Cool(h);
                     // highway LED poles are 12 m tall: a wider, stronger, cooler pool
-                    l.color = c ? Led : Sodium; l.intensity = c ? 52f : 34f; l.range = c ? 32f : 24f; l.spotAngle = c ? 124f : 118f;
+                    l.color = c ? Led : Sodium; l.intensity = c ? 75f : 40f; l.range = c ? 38f : 26f; l.spotAngle = c ? 124f : 118f;
                 }
             }
         }

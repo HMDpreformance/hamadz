@@ -177,3 +177,8 @@ Retest on the rebuilt city (a24f9bc), 2026-11-17 evening: underpass passes both 
 - Hamad 01:48: did not like the loading screen music, Block Shaker, Main Theme, Night Rollin. Replaced; he picks loading music A, B or C.
 - Hamad 02:01: check that the NOS works like it is supposed to.
 - Hamad 02:03: going to sleep. Finish all the tasks, test that everything works, then create the APK.
+
+## 2026-11-18 02:12 Dubai (phone test, b6)
+- The car shows more than 4 wheels while driving: fix it.
+- Some trees stand under/in the street: remove them, they are not correct.
+  Done in tools/build_city.py: palm rows used the wrong side direction on bends, and no tree may stand on, under or beside a bridge, ramp, underpass or junction (86 of 1380 removed).

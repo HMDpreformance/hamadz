@@ -708,7 +708,8 @@ for R in roads:
                     for sd in (1, -1):
                         for ds in (step * 0.33, step * 0.66):
                             if s_at + ds < R.s[-1] - 4 and not in_junction(R, s_at + ds, 6):
-                                pc = R.at(s_at + ds) + N[i] * sd * (R.w / 2 + 2.0)
+                                j = min(int(np.searchsorted(R.s, s_at + ds)), len(R.P) - 1)     # the normal AT the palm (not at the lamp: on a bend that put palms on the road)
+                                pc = R.at(s_at + ds) + N[j] * sd * (R.w / 2 + 2.0)
                                 trees.append([round(float(pc[0]), 1), round(float(np.interp(s_at + ds, R.s, R.h)) + KERB, 2), round(float(pc[1]), 1), "palm", round(float(rng.uniform(0.85, 1.2)), 2)])
         s_at += step; q += 1
 # garden trees between the villas of Dubai Hills (the green area), and palms on the Palm
@@ -720,6 +721,18 @@ for _ in range(1400):
     if idx and (np.linalg.norm(allP[np.array(idx)] - [X, Z], axis=1) < allE[np.array(idx)] + 2).any(): continue
     if any(abs(X - b["x"]) < b["w"] / 2 + b["d"] / 2 and abs(Z - b["z"]) < b["w"] / 2 + b["d"] / 2 for b in lots): continue
     trees.append([round(X, 1), round(th(X, Z), 2), round(Z, 1), "tree" if dn == "Dubai Hills" else "palm", round(float(rng.uniform(0.8, 1.3)), 2)])
+# no tree may stand on, under or through a road: not on any carriageway (bridges and ramps too, whatever their height),
+# not inside a junction, not where the ground is below the road beside it
+allW = np.concatenate([np.full(len(r.P), r.w / 2) for r in roads])
+def tree_ok(t):
+    c = np.array([t[0], t[2]]); idx = tree.query_ball_point(c, 34.0)
+    if idx:
+        ia = np.array(idx); d = np.linalg.norm(allP[ia] - c, axis=1)
+        if (d < allW[ia] + 1.2).any(): return False
+        if (np.abs(allD[ia]) > 0.5)[d < allW[ia] + 6.0].any(): return False      # beside or under a bridge, ramp or underpass
+    return not any(math.hypot(t[0] - J["pos"][0], t[2] - J["pos"][1]) < J["r"] + 2.0 for J in junctions)
+n0 = len(trees); trees = [t for t in trees if tree_ok(t)]
+print("trees on or under a road removed: %d of %d" % (n0 - len(trees), n0))
 # green sign gantries over the highways, and the metro viaduct beside the E11 (like the Red Line on Sheikh Zayed Road)
 gantries, metro = [], []
 for R in roads:

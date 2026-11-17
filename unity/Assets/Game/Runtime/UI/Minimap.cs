@@ -68,46 +68,85 @@ namespace HMD
             var bigRt = UIKit.Rect("BigMap", root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             UIKit.Stretch(bigRt);
             big = bigRt.gameObject;
-            var dim = big.AddComponent<Image>(); dim.color = new Color(0, 0, 0, 0.82f);
+            // the city behind, blurred: a low-res capture of the game camera stretched to the screen, darkened
+            blurImg = new GameObject("Blur", typeof(RectTransform)).AddComponent<RawImage>();
+            blurImg.transform.SetParent(bigRt, false); UIKit.Stretch(blurImg.rectTransform); blurImg.raycastTarget = true;
+            var dim = UIKit.Img("Dim", bigRt, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.01f, 0.02f, 0.06f, 0.55f));
+            UIKit.Stretch(dim.rectTransform); dim.raycastTarget = false;
+            // the map window: picture aspect, fitted inside 1640 x 860 reference pixels
+            Texture shown = bigTex != null ? bigTex : tex;
+            float aspect = shown != null ? (float)shown.width / shown.height : 1f;
+            Vector2 view = aspect > 1640f / 860f ? new Vector2(1640, 1640 / aspect) : new Vector2(860 * aspect, 860);
+            // chrome + flame-blue frame like the dials
+            Vector2 fc = new Vector2(0.5f, 0.5f), off = new Vector2(0, -36);
+            foreach (var (grow, col) in new[] { (22f, new Color(0.5f, 0.54f, 0.6f, 1f)), (18f, new Color(0.96f, 0.97f, 1f, 1f)), (12f, new Color(0.62f, 0.67f, 0.74f, 1f)), (7f, new Color(0.15f, 0.55f, 1f, 1f)), (3f, new Color(0.01f, 0.02f, 0.06f, 1f)) })
+            { var f = UIKit.Img("Frame", bigRt, fc, fc, off, view + Vector2.one * grow * 2f, col, UIKit.RoundedSprite); f.type = Image.Type.Sliced; f.raycastTarget = false; }
+            // title bar on top of the frame (no second title: the picture has its own)
+            var bar = UIKit.Img("Bar", bigRt, fc, new Vector2(0.5f, 0f), off + new Vector2(0, view.y * 0.5f + 26f), new Vector2(view.x + 44f, 58f), new Color(0.02f, 0.05f, 0.12f, 0.92f), UIKit.RoundedSprite);
+            bar.type = Image.Type.Sliced;
+            UIKit.Img("BarLine", bar.transform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(view.x + 20f, 3f), new Color(0.24f, 0.63f, 1f), Res.White);
+            UIKit.Label("Hint", bar.transform, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(24, 0), new Vector2(760, 50), "DRAG TO MOVE  ·  PINCH OR WHEEL TO ZOOM", 24, new Color(0.78f, 0.93f, 1f), TextAnchor.MiddleLeft, Res.TitleFont);
+            // viewport with mask; inside it the zoomable, draggable map
+            var vp = UIKit.Img("Viewport", bigRt, fc, fc, off, view, Color.black);
+            vp.gameObject.AddComponent<RectMask2D>();
+            var content = UIKit.Rect("Content", vp.transform, fc, fc, Vector2.zero, view);
             var bi = new GameObject("Map", typeof(RectTransform)).AddComponent<RawImage>();
-            bi.transform.SetParent(bigRt, false);
-            bi.rectTransform.anchorMin = bi.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-            bi.rectTransform.sizeDelta = pictureMap ? new Vector2(1320, 1320f * 1150f / 1600f) : new Vector2(940, 940);
-            bi.texture = bigTex != null ? bigTex : tex;
+            bi.transform.SetParent(content, false);
+            UIKit.Stretch(bi.rectTransform);
+            bi.texture = shown;
+            bi.raycastTarget = false;
             bigImg = bi;
-            bigGarage = UIKit.Img("Garage", bi.transform, new Vector2(0, 0), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(60, 60), Color.white, WrenchSprite).rectTransform;
-            bigPlayer = UIKit.Img("Player", bi.transform, new Vector2(0, 0), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40, 46), new Color(0.55f, 0.85f, 1f), UIKit.ArrowSprite).rectTransform;
-            // district labels (white with a soft shadow) and a north arrow, like a real city map
-            string[] names = { "MARINA", "JUMEIRAH", "AL BARSHA", "BUSINESS BAY", "DOWNTOWN", "DEIRA", "AL QUOZ", "KARAMA", "LSX MOTORSPORT" };
-            Vector2[] spots = { new Vector2(0.16f, 0.16f), new Vector2(0.16f, 0.5f), new Vector2(0.5f, 0.16f), new Vector2(0.84f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.84f, 0.84f), new Vector2(0.16f, 0.84f), new Vector2(0.5f, 0.84f), Vector2.zero };
-            if (pictureMap) { names = new[] { "" }; spots = new[] { Vector2.zero }; }   // the picture has its own names
-            else if (ncity != null && ncity.districts.Count > 0)
-            {
-                // real district names at their places in the new city
-                names = new string[ncity.districts.Count + 1]; spots = new Vector2[ncity.districts.Count + 1];
-                for (int n = 0; n < ncity.districts.Count; n++)
-                {
-                    names[n] = ncity.districts[n].name.ToUpperInvariant();
-                    var dp = ncity.districts[n].pos;
-                    spots[n] = new Vector2((dp.x - worldMin) / worldSize, (dp.z - worldMin) / worldSize);
-                }
-            }
-            for (int n = 0; n < names.Length - 1; n++)
-            {
-                var lb = UIKit.Label("District", bi.transform, spots[n], new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(260, 40), names[n], 26, new Color(1f, 1f, 1f, 0.92f), TextAnchor.MiddleCenter, Res.TitleFont);
-                var sh = lb.GetComponent<Shadow>() ?? lb.gameObject.AddComponent<Shadow>();
-                sh.effectColor = new Color(0, 0, 0, 0.85f); sh.effectDistance = new Vector2(2, -2);
-            }
-            if (!pictureMap) { var na = UIKit.Img("North", bi.transform, new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-50, -60), new Vector2(34, 40), Color.white, UIKit.ArrowSprite);
-            UIKit.Label("NorthN", bi.transform, new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-50, -22), new Vector2(40, 30), "N", 26, Color.white, TextAnchor.MiddleCenter, Res.TitleFont); }
-            UIKit.Label("Title", bigRt, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -20), new Vector2(800, 60), "DUBAI  ·  NIGHT CITY", 44, Color.white, TextAnchor.MiddleCenter, Res.TitleFont);
-            UIKit.Btn("GoGarage", bigRt, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-40, 40), new Vector2(380, 96), "GO TO GARAGE", () => { Close(); OnGoGarage?.Invoke(); }, new Color(0.95f, 0.1f, 0.1f), 38);
-            UIKit.Btn("Close", bigRt, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-40, -30), new Vector2(200, 86), "CLOSE", Close, Color.white, 36);
+            var pz = vp.gameObject.AddComponent<MapPanZoom>(); pz.content = content; pz.view = view;
+            // LSX wrench with a pulsing glow ring
+            bigGarage = UIKit.Rect("GarageMark", bi.transform, Vector2.zero, fc, Vector2.zero, new Vector2(60, 60));
+            garagePulse = UIKit.Img("Pulse", bigGarage, fc, fc, Vector2.zero, new Vector2(70, 70), new Color(1f, 0.25f, 0.2f, 0.8f), UIKit.RingSprite).rectTransform;
+            UIKit.Img("Garage", bigGarage, fc, fc, Vector2.zero, new Vector2(56, 56), Color.white, WrenchSprite);
+            // player: soft glow, a heading cone and the arrow
+            bigPlayer = UIKit.Rect("PlayerMark", bi.transform, Vector2.zero, fc, Vector2.zero, new Vector2(40, 46));
+            UIKit.Img("Glow", bigPlayer, fc, fc, Vector2.zero, new Vector2(110, 110), new Color(0.3f, 0.75f, 1f, 0.55f), Res.ToSprite(Res.SoftDot));
+            var cone = UIKit.Img("Cone", bigPlayer, fc, fc, Vector2.zero, new Vector2(260, 260), new Color(0.35f, 0.8f, 1f, 0.28f), UIKit.CircleSprite);
+            cone.type = Image.Type.Filled; cone.fillMethod = Image.FillMethod.Radial360; cone.fillOrigin = (int)Image.Origin360.Top; cone.fillAmount = 50f / 360f;
+            cone.rectTransform.localEulerAngles = new Vector3(0, 0, 25f);   // centred on straight ahead (the wedge starts at top and runs clockwise)
+            UIKit.Img("Player", bigPlayer, fc, fc, Vector2.zero, new Vector2(40, 46), new Color(0.6f, 0.9f, 1f), UIKit.ArrowSprite);
+            foreach (var gfx in big.GetComponentsInChildren<Graphic>()) if (gfx.transform.IsChildOf(content)) gfx.raycastTarget = false;
+            vp.raycastTarget = true;
+            UIKit.Btn("GoGarage", bigRt, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-40, 34), new Vector2(380, 90), "GO TO GARAGE", () => { Close(); OnGoGarage?.Invoke(); }, new Color(0.24f, 0.63f, 1f), 36);
+            UIKit.Btn("Close", bar.transform, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-10, 0), new Vector2(170, 46), "CLOSE", Close, Color.white, 28);
             big.SetActive(false);
         }
 
         public void OnPointerClick(PointerEventData e) => Open();
-        public void Open() { big.SetActive(true); }
+        static Sprite vignette;
+        static Sprite VignetteSprite
+        {
+            get
+            {
+                if (vignette) return vignette;
+                const int n = 128; var t = new Texture2D(n, n, TextureFormat.RGBA32, false);
+                for (int y = 0; y < n; y++) for (int x = 0; x < n; x++)
+                {
+                    float d = new Vector2(x + 0.5f - n * 0.5f, y + 0.5f - n * 0.5f).magnitude / (n * 0.5f);
+                    float a = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.62f, 1f, d)) * 0.9f;
+                    t.SetPixel(x, y, new Color(0.01f, 0.02f, 0.06f, a));
+                }
+                t.Apply(); t.wrapMode = TextureWrapMode.Clamp;
+                return vignette = Sprite.Create(t, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f));
+            }
+        }
+
+        public void Open()
+        {
+            // blurred background: render the game camera once into a small texture (bilinear upscale = soft blur)
+            var cam = Camera.main;
+            if (cam != null)
+            {
+                if (blurRT == null) blurRT = new RenderTexture(192, 108, 16, RenderTextureFormat.DefaultHDR) { filterMode = FilterMode.Bilinear };
+                var prev = cam.targetTexture; cam.targetTexture = blurRT; cam.Render(); cam.targetTexture = prev;
+                blurImg.texture = blurRT;
+            }
+            big.SetActive(true);
+        }
+        RenderTexture blurRT; RawImage blurImg; RectTransform garagePulse;
         public void Close() { big.SetActive(false); }
         public bool IsOpen => big != null && big.activeSelf;
 
@@ -145,10 +184,13 @@ namespace HMD
 
             if (big.activeSelf)
             {
-                Vector2 s = bigImg.rectTransform.sizeDelta;
+                Vector2 s = bigImg.rectTransform.rect.size;
                 bigPlayer.anchoredPosition = Vector2.Scale(ToUV(player.position), s);
                 bigPlayer.localRotation = Quaternion.Euler(0, 0, -player.eulerAngles.y);
                 bigGarage.anchoredPosition = Vector2.Scale(ToUV(g), s);
+                float k = Mathf.Repeat(Time.unscaledTime, 1.4f) / 1.4f;
+                garagePulse.localScale = Vector3.one * (1f + k * 1.2f);
+                garagePulse.GetComponent<Image>().color = new Color(1f, 0.25f, 0.2f, 0.85f * (1f - k));
             }
         }
 
@@ -368,5 +410,53 @@ namespace HMD
     {
         public Minimap map;
         public void OnPointerClick(PointerEventData e) => map.Open();
+    }
+}
+
+namespace HMD
+{
+    /// <summary>Drag to move and wheel / pinch to zoom the full map (zoom 1..3.5, kept inside the window).</summary>
+    public class MapPanZoom : MonoBehaviour, UnityEngine.EventSystems.IDragHandler, UnityEngine.EventSystems.IScrollHandler
+    {
+        public RectTransform content;
+        public Vector2 view;
+        float zoom = 1f;
+
+        public void OnDrag(UnityEngine.EventSystems.PointerEventData e)
+        {
+            if (Input.touchCount >= 2) return;
+            var canvas = GetComponentInParent<Canvas>();
+            float sf = canvas != null ? canvas.scaleFactor : 1f;
+            content.anchoredPosition += e.delta / Mathf.Max(0.01f, sf);
+            Clamp();
+        }
+
+        public void OnScroll(UnityEngine.EventSystems.PointerEventData e) => SetZoom(zoom * (1f + e.scrollDelta.y * 0.12f));
+
+        void Update()
+        {
+            if (Input.touchCount == 2)
+            {
+                var a = Input.GetTouch(0); var b = Input.GetTouch(1);
+                float now = (a.position - b.position).magnitude, before = ((a.position - a.deltaPosition) - (b.position - b.deltaPosition)).magnitude;
+                if (before > 1f) SetZoom(zoom * now / before);
+            }
+        }
+
+        void SetZoom(float z)
+        {
+            zoom = Mathf.Clamp(z, 1f, 3.5f);
+            content.sizeDelta = view * zoom;
+            Clamp();
+        }
+
+        void Clamp()
+        {
+            Vector2 lim = (content.sizeDelta - view) * 0.5f;
+            var p = content.anchoredPosition;
+            content.anchoredPosition = new Vector2(Mathf.Clamp(p.x, -lim.x, lim.x), Mathf.Clamp(p.y, -lim.y, lim.y));
+        }
+
+        void OnEnable() { zoom = 1f; if (content) { content.sizeDelta = view; content.anchoredPosition = Vector2.zero; } }
     }
 }

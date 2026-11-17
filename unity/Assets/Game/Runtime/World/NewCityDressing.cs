@@ -49,6 +49,14 @@ namespace HMD
             Vector3 g = nc.Garage;
             int skipped = 0, onRoad = 0;
             Physics.SyncTransforms();
+            // around LSX: an industrial car district (sheds with roller doors, tyre and parts signs)
+            for (int i = 0; i < lots.Count; i++)
+            {
+                var l0 = lots[i];
+                if ((new Vector2(l0.p.x - g.x, l0.p.z - g.z)).magnitude < 200f * (nc.Scale / 0.75f) && l0.style != "warehouse" && !l0.style.StartsWith("tower"))
+                { l0.style = "warehouse"; l0.h = Mathf.Clamp(l0.h, 7f, 12f); l0.shops = true; lots[i] = l0; }
+                else if ((new Vector2(l0.p.x - g.x, l0.p.z - g.z)).magnitude < 200f * (nc.Scale / 0.75f) && l0.style == "warehouse") { l0.shops = true; lots[i] = l0; }
+            }
             foreach (var l in lots)
             {
                 float rr = Mathf.Max(l.w, l.d) * 0.5f;
@@ -111,7 +119,7 @@ namespace HMD
                 bool frond = rd.name == "Frond", cres = rd.name == "Crescent", trunk = rd.name == "Palm Trunk";
                 if (!frond && !cres && !trunk) continue;
                 float edge = rd.width * 0.5f;                 // road edge
-                float land = trunk ? 22f : 11.5f;             // land beyond the road edge
+                float land = (trunk ? 22f : 11.5f) * (nc.Scale / 0.75f);   // land beyond the road edge (scales with the plan)
                 float acc = 0, accV = 0, accB = 0;
                 for (int i = 1; i < rd.pts.Count; i++)
                 {

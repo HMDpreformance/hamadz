@@ -20,6 +20,32 @@ namespace HMD
         public float Scale = 0.75f;
         public class Road { public string name, cls; public float width; public List<Vector3> pts = new List<Vector3>(); }
         public readonly List<Road> roads = new List<Road>();
+        /// <summary>Height of the sea surface (top of the water meshes; they have no collider).</summary>
+        public static float WaterY = -999f;
+
+        /// <summary>A safe place to put a car back: the right-hand lane of the nearest road (not a ramp), on the deck
+        /// at that road's own height, facing along the road in the direction closest to <paramref name="heading"/>.</summary>
+        public bool NearestLane(Vector3 p, Vector3 heading, out Vector3 pos, out Quaternion rot)
+        {
+            float best = float.MaxValue; Road br = null; int bi = 0;
+            foreach (var rd in roads)
+            {
+                if (rd.cls == "ramp" || rd.pts.Count < 2) continue;
+                for (int i = 0; i + 1 < rd.pts.Count; i++)
+                {
+                    var q = rd.pts[i]; float d = (q.x - p.x) * (q.x - p.x) + (q.z - p.z) * (q.z - p.z);
+                    if (d < best) { best = d; br = rd; bi = i; }
+                }
+            }
+            pos = p; rot = Quaternion.identity;
+            if (br == null) return false;
+            var dir = br.pts[bi + 1] - br.pts[bi]; dir.y = 0; dir = dir.sqrMagnitude > 0.01f ? dir.normalized : Vector3.forward;
+            heading.y = 0;
+            if (heading.sqrMagnitude > 0.01f && Vector3.Dot(heading, dir) < 0) dir = -dir;
+            var c = Vector3.Lerp(br.pts[bi], br.pts[bi + 1], 0.5f) + Vector3.Cross(Vector3.up, dir) * br.width * 0.25f;
+            pos = Surface(c); rot = Quaternion.LookRotation(dir);
+            return true;
+        }
         public Vector3 Garage { get; private set; }
         public Vector3 SpawnPos { get; private set; }
         public Quaternion SpawnRot { get; private set; }
@@ -88,7 +114,7 @@ namespace HMD
                 else if (n.Contains("marking_yellow")) { m = yellow; col = false; }
                 else if (n.Contains("concrete")) m = concrete;
                 else if (n.Contains("terrain")) m = sand;
-                else if (n.Contains("water")) { m = water; col = false; }
+                else if (n.Contains("water")) { m = water; col = false; if (r) WaterY = Mathf.Max(WaterY, r.bounds.max.y); }
                 else if (n.Contains("barrier_red")) m = red;
                 else if (n.Contains("barrier_white")) m = barrierW;
                 if (m != null && r) r.sharedMaterial = m;

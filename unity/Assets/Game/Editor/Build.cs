@@ -67,7 +67,7 @@ namespace HMD.EditorTools
             CopyDir("unity_assets/tower", Imp + "/Tower", "*.jpg");
             CopyDir("unity_assets/gen", Imp + "/Gen", "*.jpg", "*.png");
             CopyDir("unity_assets/props", Imp + "/Props", "*.glb");
-            CopyDir("unity_assets/city", Imp + "/City", "city_part1.glb", "city_part1.json", "map_full.jpg", "map_base.jpg");
+            CopyDir("unity_assets/city", Imp + "/City", "city_part1.glb", "city_part1.json", "map_full.jpg", "map_base.jpg", "map_base.png", "map_full.png");
             CopyDir("audio/engines", Imp + "/Audio/engines", "*.wav");
             CopyDir("audio/car", Imp + "/Audio/car", "*.wav");
             CopyDir("audio/music", Imp + "/Audio/music", "*.ogg");
@@ -94,7 +94,15 @@ namespace HMD.EditorTools
                     changed = true;
                 }
                 if ((path.Contains("/Art/") || name == "frond" || name.StartsWith("lsx")) && !ti.alphaIsTransparency) { ti.alphaIsTransparency = true; changed = true; }
-                if (ti.maxTextureSize != 2048) { ti.maxTextureSize = 2048; changed = true; }
+                bool cityMap = path.Contains("/City/") && name.StartsWith("map_");
+                if (cityMap)
+                {
+                    // the game maps: full resolution, no compression
+                    if (ti.maxTextureSize != 4096) { ti.maxTextureSize = 4096; changed = true; }
+                    if (ti.textureCompression != TextureImporterCompression.Uncompressed) { ti.textureCompression = TextureImporterCompression.Uncompressed; changed = true; }
+                    if (ti.npotScale != TextureImporterNPOTScale.None) { ti.npotScale = TextureImporterNPOTScale.None; changed = true; }
+                }
+                else                 if (ti.maxTextureSize != 2048) { ti.maxTextureSize = 2048; changed = true; }
                 bool gauge = name.StartsWith("gauge_");
                 if (gauge)
                 {

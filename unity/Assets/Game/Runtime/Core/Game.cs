@@ -94,6 +94,7 @@ namespace HMD
             garage = new GameObject("LSX_Garage").AddComponent<GarageBuilding>();
             garage.transform.rotation = Quaternion.identity;
             garage.Build(garageDoor, car.transform);
+            if (newCity != null) Driveway(garageDoor);
             garage.OnEnter = () => StartCoroutine(EnterGarage());
 
             shop = new GameObject("Workshop").AddComponent<Workshop>();
@@ -143,6 +144,28 @@ namespace HMD
             yield return Fade(1, 0, 1.2f);
 
             if (AutoShots) { if (newCity) gameObject.AddComponent<NcShots>(); else gameObject.AddComponent<AutoShots>(); }
+        }
+
+        /// <summary>New city: a concrete driveway from the LSX forecourt down/up to the road in front (door faces -Z).</summary>
+        void Driveway(Vector3 door)
+        {
+            Physics.SyncTransforms();
+            Vector3 road = door + Vector3.back * 12f;
+            for (float dz = 12f; dz < 40f; dz += 1f)
+            {
+                var p = door + Vector3.back * dz;
+                if (Physics.Raycast(p + Vector3.up * 15f, Vector3.down, out var hit, 40f) && (hit.collider.name.ToLowerInvariant().Contains("asphalt")))
+                { road = hit.point; break; }
+            }
+            Vector3 a = door + Vector3.back * 11.5f, b = road + Vector3.back * 1.5f;
+            float len = Vector3.Distance(new Vector3(a.x, 0, a.z), new Vector3(b.x, 0, b.z));
+            var slab = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            slab.name = "LSX_Driveway";
+            slab.transform.position = (a + b) * 0.5f + Vector3.down * 0.12f;
+            slab.transform.rotation = Quaternion.LookRotation(b - a);
+            slab.transform.localScale = new Vector3(14f, 0.3f, Mathf.Max(1f, (b - a).magnitude));
+            slab.GetComponent<Renderer>().sharedMaterial = Res.TexMat("Tex/concrete_pavement", Vector2.one / 4f, 0.45f, 0f, new Color(0.62f, 0.62f, 0.62f));
+            Debug.Log($"[HMD] LSX driveway: door y {door.y:F2}, road at {road} ({len:F1} m, rise {road.y - door.y:F2} m)");
         }
 
         IEnumerator Fade(float from, float to, float time)
@@ -253,6 +276,8 @@ namespace HMD
             yield return Fade(1, 0, 0.6f);
         }
 
+        float stuckT;
+
         void Update()
         {
             // in the garage, tapping the TV zooms in on it
@@ -264,8 +289,21 @@ namespace HMD
             // fell off the world or flipped: put the car back on the road
             if (state == State.Drive && car != null)
             {
-                if (car.transform.position.y < -5f || (Vector3.Dot(car.transform.up, Vector3.up) < 0.2f && car.SpeedKmh < 3f))
-                    car.Teleport(newCity ? NewCity.Surface(car.transform.position) + Vector3.up * 0.8f : new Vector3(car.transform.position.x, 0.8f, car.transform.position.z), Quaternion.Euler(0, car.transform.eulerAngles.y, 0));
+                var cp = car.transform.position;
+                bool flipped = Vector3.Dot(car.transform.up, Vector3.up) < 0.2f && car.SpeedKmh < 3f;
+                bool inWater = newCity && cp.y < NewCity.WaterY - 0.3f;   // the sea has no collider: the car sinks to the bed
+                stuckT = (flipped || inWater) ? stuckT + Time.deltaTime : 0f;
+                if (cp.y < -5f || stuckT > (inWater ? 0.8f : 1.2f))
+                {
+                    stuckT = 0;
+                    Vector3 pos; Quaternion rot;
+                    if (newCity && newCity.NearestLane(cp, car.transform.forward, out pos, out rot))
+                        car.Teleport(pos + Vector3.up * 0.8f, rot);   // back on the nearest road lane, on its own deck
+                    else
+                        car.Teleport(newCity ? NewCity.Surface(cp) + Vector3.up * 0.8f : new Vector3(cp.x, 0.8f, cp.z), Quaternion.Euler(0, car.transform.eulerAngles.y, 0));
+                    rig.SnapChase();
+                    Debug.Log($"[HMD] car reset from ({cp.x:F0},{cp.y:F1},{cp.z:F0}) to ({car.transform.position.x:F0},{car.transform.position.y:F1},{car.transform.position.z:F0}) ({(cp.y < -5f ? "fell" : inWater ? "water" : "flipped")})");
+                }
             }
         }
     }

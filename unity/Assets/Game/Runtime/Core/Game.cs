@@ -16,6 +16,7 @@ namespace HMD
         public State state;
 
         public City city;
+        public NewCity newCity;
         public GarageBuilding garage;
         public Workshop shop;
         public CarController car;
@@ -57,15 +58,32 @@ namespace HMD
 
             gfx = new GameObject("Gfx").AddComponent<GfxSetup>();
 
-            city = new GameObject("City").AddComponent<City>();
-            city.Build();
-            new GameObject("StreetProps").AddComponent<StreetProps>().Build(city);
-            wx.Setup(camGo.transform, forceRain);
-            gfx.Setup(rig.Cam);
-            new GameObject("LampLights").AddComponent<LampLights>().Setup(city, camGo.transform);
-            yield return null;
+            Vector3 startPos; Quaternion startRot; Vector3 garageDoor;
+            if (NewCity.Wanted)
+            {
+                // -newcity: part 1 of the Dubai city instead of the grid (no grid props, lamps or traffic yet)
+                newCity = new GameObject("NewCity").AddComponent<NewCity>();
+                newCity.Build();
+                wx.Setup(camGo.transform, forceRain);
+                gfx.Setup(rig.Cam);
+                new GameObject("LampLights").AddComponent<LampLights>().Setup(newCity.lampHeads, camGo.transform);
+                yield return null;
+                startPos = newCity.SpawnPos; startRot = newCity.SpawnRot;
+                garageDoor = new Vector3(0, 0, -6000f);   // the LSX building is not placed in the new city yet: parked far away
+            }
+            else
+            {
+                city = new GameObject("City").AddComponent<City>();
+                city.Build();
+                new GameObject("StreetProps").AddComponent<StreetProps>().Build(city);
+                wx.Setup(camGo.transform, forceRain);
+                gfx.Setup(rig.Cam);
+                new GameObject("LampLights").AddComponent<LampLights>().Setup(city, camGo.transform);
+                yield return null;
+                startPos = city.PlayerStart; startRot = city.PlayerStartRot; garageDoor = city.GarageDoor;
+            }
 
-            car = CarFactory.Build(carId, city.PlayerStart, city.PlayerStartRot, true);
+            car = CarFactory.Build(carId, startPos, startRot, true);
             car.gameObject.AddComponent<PlayerInput>();
             car.Body.isKinematic = false;
             car.Body.ResetInertiaTensor();   // recompute now that only the body box and wheels are left
@@ -73,7 +91,7 @@ namespace HMD
 
             garage = new GameObject("LSX_Garage").AddComponent<GarageBuilding>();
             garage.transform.rotation = Quaternion.identity;
-            garage.Build(city.GarageDoor, car.transform);
+            garage.Build(garageDoor, car.transform);
             garage.OnEnter = () => StartCoroutine(EnterGarage());
 
             shop = new GameObject("Workshop").AddComponent<Workshop>();
@@ -81,8 +99,8 @@ namespace HMD
             dyno = shop.gameObject.AddComponent<Dyno>();
             dyno.Setup(shop, rig);
 
-            traffic = new GameObject("Traffic").AddComponent<Traffic>();
-            traffic.Setup(car.transform);
+            if (!NewCity.Wanted) { traffic = new GameObject("Traffic").AddComponent<Traffic>();
+            traffic.Setup(car.transform); }
 
             hud = new GameObject("HUD").AddComponent<Hud>();
             hud.Build(car, car.transform);
@@ -122,7 +140,7 @@ namespace HMD
             rig.StartIntro();
             yield return Fade(1, 0, 1.2f);
 
-            if (AutoShots) gameObject.AddComponent<AutoShots>();
+            if (AutoShots) { if (newCity) gameObject.AddComponent<NcShots>(); else gameObject.AddComponent<AutoShots>(); }
         }
 
         IEnumerator Fade(float from, float to, float time)
@@ -198,7 +216,7 @@ namespace HMD
         void ReTarget()
         {
             garage.SetPlayer(car.transform);
-            traffic.SetPlayer(car.transform);
+            if (traffic) traffic.SetPlayer(car.transform);
         }
 
         void RunDyno()
@@ -245,7 +263,7 @@ namespace HMD
             if (state == State.Drive && car != null)
             {
                 if (car.transform.position.y < -5f || (Vector3.Dot(car.transform.up, Vector3.up) < 0.2f && car.SpeedKmh < 3f))
-                    car.Teleport(new Vector3(car.transform.position.x, 0.8f, car.transform.position.z), Quaternion.Euler(0, car.transform.eulerAngles.y, 0));
+                    car.Teleport(newCity ? NewCity.Surface(car.transform.position) + Vector3.up * 0.8f : new Vector3(car.transform.position.x, 0.8f, car.transform.position.z), Quaternion.Euler(0, car.transform.eulerAngles.y, 0));
             }
         }
     }

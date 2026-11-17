@@ -51,7 +51,8 @@ namespace HMD
 
             // blue flame analog dials bottom-right (above the pedals): speedometer with a needle,
             // a smaller rev counter up-left of it, the gear in a round badge and a small digital speed
-            var sp = UIKit.Rect("Speedo", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-200, 350), new Vector2(320, 320));   // centre at 360 px from the right edge
+            var sp = UIKit.Rect("Speedo", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-200, 310), new Vector2(320, 320));
+            sp.localScale = Vector3.one * 0.85f;   // the whole dial group at 85%, 40 px lower (Hamad); scales towards the bottom-right pivot
             var mid = new Vector2(0.5f, 0.5f);
             UIKit.Img("SpeedFace", sp, mid, mid, Vector2.zero, new Vector2(320, 320), Color.white, GaugeSprite("gauge_speed"));
             var tach = UIKit.Rect("Tach", sp, mid, mid, new Vector2(197, 108), new Vector2(196, 196));   // rev counter up-right, at the screen edge
@@ -76,13 +77,13 @@ namespace HMD
             gear.GetComponent<Shadow>().enabled = false;
             // nitro bar under the speedo
             // thin chrome frame around a night-blue track, flame-blue fill (same set as the dials)
-            var nframe = UIKit.Img("NitroFrame", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-211, 324),   /* centred under the speedo */ new Vector2(298, 24), new Color(0.82f, 0.86f, 0.92f, 0.95f), UIKit.RoundedSprite);
+            var nframe = UIKit.Img("NitroFrame", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-187, 280),   /* centred under the speedo */ new Vector2(298, 24), new Color(0.82f, 0.86f, 0.92f, 0.95f), UIKit.RoundedSprite);
             nframe.type = Image.Type.Sliced;
             var nb = UIKit.Img("NitroBg", nframe.transform, mid, mid, Vector2.zero, new Vector2(292, 18), new Color(0.01f, 0.03f, 0.09f, 0.95f), UIKit.RoundedSprite);
             nb.type = Image.Type.Sliced;
             nitroFill = UIKit.Img("Nitro", nb.transform, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(2, 0), new Vector2(288, 12), flameBlue, Res.White);
             nitroFill.type = Image.Type.Filled; nitroFill.fillMethod = Image.FillMethod.Horizontal;
-            UIKit.Label("NitroLbl", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-92, 320), new Vector2(110, 32), "NOS", 28, ice, TextAnchor.MiddleLeft, Res.TitleFont);   // right of the bar, clear of the touch NOS button
+            UIKit.Label("NitroLbl", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-68, 276), new Vector2(110, 32), "NOS", 28, ice, TextAnchor.MiddleLeft, Res.TitleFont);   // right of the bar, clear of the touch NOS button
 
             BuildTouch(root);
         }

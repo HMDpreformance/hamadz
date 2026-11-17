@@ -126,6 +126,13 @@ namespace HMD
                 var wr = well.GetComponent<Renderer>();
                 wr.sharedMaterial = LinerMat;
                 wr.shadowCastingMode = ShadowCastingMode.Off;
+                // thin black trim ring over the arch at the fender face: hides the ragged cut edge of the body
+                var trim = new GameObject("ArchTrim");
+                trim.transform.SetParent(holder, false);
+                trim.transform.localPosition = new Vector3((left ? -1 : 1) * (x + tw * 0.5f + 0.012f), wpos.y, wpos.z);
+                trim.AddComponent<MeshFilter>().sharedMesh = ArchTrimMesh(r * 1.04f, r * 1.2f);
+                var trr = trim.AddComponent<MeshRenderer>();
+                trr.sharedMaterial = TrimMat; trr.shadowCastingMode = ShadowCastingMode.Off;
             }
 
             car.Setup(spec);
@@ -155,6 +162,29 @@ namespace HMD
         }
 
         static (List<LampFinder.Lens> tail, List<LampFinder.Lens> head) foundLamps;
+
+        static readonly Dictionary<string, Mesh> trimMeshes = new Dictionary<string, Mesh>();
+        /// <summary>A flat half ring in the Y/Z plane over the top of a wheel (from just below the axle in front to just below it behind).</summary>
+        static Mesh ArchTrimMesh(float rIn, float rOut)
+        {
+            string key = rIn.ToString("F3") + rOut.ToString("F3");
+            if (trimMeshes.TryGetValue(key, out var m)) return m;
+            var v = new List<Vector3>(); var t = new List<int>();
+            const int n = 28;
+            for (int i = 0; i <= n; i++)
+            {
+                float a = Mathf.Lerp(-12f, 192f, i / (float)n) * Mathf.Deg2Rad;
+                var d = new Vector3(0, Mathf.Sin(a), Mathf.Cos(a));
+                v.Add(d * rIn); v.Add(d * rOut);
+                if (i > 0) { int b = i * 2; t.AddRange(new[] { b - 2, b - 1, b, b - 1, b + 1, b }); }
+            }
+            m = new Mesh { name = "archtrim" };
+            m.SetVertices(v); m.SetTriangles(t, 0); m.RecalculateNormals(); m.RecalculateBounds();
+            trimMeshes[key] = m;
+            return m;
+        }
+        static Material trimMat;
+        static Material TrimMat { get { if (trimMat == null) { trimMat = Res.UnlitMat(new Color(0.01f, 0.01f, 0.012f)); trimMat.SetFloat("_Cull", 0f); } return trimMat; } }
 
         public const int CarLayer = 9;
 
@@ -224,7 +254,12 @@ namespace HMD
             {
                 // measured on the real lenses: same place, same shape
                 foreach (var lens in foundLamps.tail)
-                    cl.tailSprites.Add(Sprite(lights, "TailLamp", lens.centre + Vector3.back * 0.03f, false, lens.size * 1.05f + Vector2.one * 0.01f, roundLamps ? roundMat : tailMat));
+                {
+                    // a tall lamp (pickup) wraps round the body corner: centre the glow on the rear lens, not the side strip
+                    Vector3 lc = lens.centre;
+                    if (lens.size.y > lens.size.x * 1.6f) lc.x -= Mathf.Sign(lc.x) * lens.size.x * 0.3f;
+                    cl.tailSprites.Add(Sprite(lights, "TailLamp", lc + Vector3.back * 0.03f, false, lens.size * 1.05f + Vector2.one * 0.01f, roundLamps ? roundMat : tailMat));
+                }
             }
             else
                 foreach (var lamp in TailLamps(spec.id))

@@ -11,13 +11,15 @@ namespace HMD
     public class LampLights : MonoBehaviour
     {
         readonly List<Light> pool = new List<Light>();
-        City city;
+        List<Vector3> heads;
         Transform cam;
         float timer;
 
-        public void Setup(City c, Transform camT)
+        public void Setup(City c, Transform camT) => Setup(c.lampHeads, camT);
+
+        public void Setup(List<Vector3> lampHeads, Transform camT)
         {
-            city = c; cam = camT;
+            heads = lampHeads; cam = camT;
             int n = GfxSetup.IsMobile ? 10 : 24;
             for (int i = 0; i < n; i++)
             {
@@ -38,7 +40,7 @@ namespace HMD
         /// <summary>A soft glow sprite around every lamp head (the wet air catching the light). One static particle each.</summary>
         void Halos()
         {
-            var heads = city.lampHeads;
+
             if (heads == null || heads.Count == 0) return;
             var go = new GameObject("LampHalos");
             go.transform.SetParent(transform, false);
@@ -75,12 +77,12 @@ namespace HMD
 
         void Update()
         {
-            if (city == null || cam == null) return;
+            if (heads == null || cam == null) return;
             timer -= Time.deltaTime;
             if (timer > 0) return;
             timer = 0.5f;
             Vector3 p = cam.position;
-            var heads = city.lampHeads;
+
             // pick the nearest lamps (partial selection is plenty fast for a few hundred lamps)
             var best = new List<int>(pool.Count);
             var dist = new List<float>(pool.Count);

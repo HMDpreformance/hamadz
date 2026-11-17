@@ -125,6 +125,11 @@ namespace HMD
                 g.rig.SetFixed(w.position - car.transform.right * 1.7f + car.transform.forward * 0.25f + Vector3.up * 0.15f, w.position, false);
                 yield return new WaitForSeconds(0.4f);
                 yield return Shot("wheel_" + car.spec.id);
+                // 3/4 view of the whole car in the workshop
+                Vector3 cc = car.transform.position; float Lw = car.spec.length;
+                g.rig.SetFixed(cc + car.transform.forward * Lw * 0.85f - car.transform.right * Lw * 0.75f + Vector3.up * 1.3f, cc + Vector3.up * 0.5f, false);
+                yield return new WaitForSeconds(0.4f);
+                yield return Shot("car34_" + car.spec.id);
             }
             g.rig.SetFixed(g.shop.transform.TransformPoint(new Vector3(-10, 3.2f, 2)), g.shop.transform.TransformPoint(new Vector3(4, 1.5f, 22)), false);
             yield return new WaitForSeconds(0.5f);

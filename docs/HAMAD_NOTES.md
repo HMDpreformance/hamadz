@@ -84,3 +84,9 @@ Tool: `tools/fix_proportions.py <src> <out> <length> <width> <height> real <rear
 - Shortcuts and a few jump and drift spots.
 - A tunnel under the creek and a mountain road with switchbacks (part 2).
 - Road rules: wide lanes, smooth arcs, slopes up to about 6%, flat junctions, no steps, smooth barriers.
+
+## Map must look like the generated map picture (2026-11-17)
+
+Hamad asked why the game map did not look like the Higgsfield map picture. Rule: the game map and the real city follow that picture's layout and style as closely as the real roads allow.
+- Done: streets everywhere, blue glowing sea, only highways yellow, Downtown above the E11 near the sea, bigger Palm. The game uses `unity_assets/city/map_full.jpg` and `map_base.jpg`, drawn from the same plan as the roads.
+- Still to do: round highway junctions (cloverleaf look), water inside the Marina, thicker Palm fronds, Jebel Ali port piers, a mountain area in the south.

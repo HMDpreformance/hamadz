@@ -162,3 +162,9 @@ Retest on the rebuilt city (a24f9bc), 2026-11-17 evening: underpass passes both 
 - Swerve test at 80 and 140 km/h on the E11 left the road and hit things beside it (metro pillars). Fix: a 0.85 m concrete safety barrier along both highway edges on the ground, open at slip roads and junctions (6.1 km), and metro pillars 9 m from the edge.
 - 2026-11-17 19:08: Hamad agrees the darkness needs work: change the ground textures (use the internet and Higgsfield). The game stays night time only, no day time.
 - 2026-11-17 19:45: in the game now: 8 Higgsfield ground textures (asphalt, brick sidewalks, sand, villa tiles, yard concrete, granite, grass), 25 km of grass verges, 1,369 Higgsfield 3D date palms (a third wrapped in lights), neutral dark grey roads, matte highway signs, slim lamp posts, light grey metro on round pillars, moon shadows off. Highway barrier rebuilt (0.95 m, vertical, no tapered ends, continuous over flyovers) after the car climbed it at 80 km/h.
+
+## 2026-11-18 01:30 Dubai: first phone test of the Unity game (b6)
+- Hamad's words: "the game when ever i press anything at opens the map always for me fix that problem more then that the fps is low".
+- b5 was wrong ("u gave me very old update"): the Dubai city only loaded with a test option. Fixed, the Dubai city is now the default.
+- Map bug fixed in code (click handler was on the HUD root). Road mirror effect is off on phones. A phone speed pass is in progress.
+- Rule reminder: show him the changes before the next APK. Always test the game with no start options before any APK.

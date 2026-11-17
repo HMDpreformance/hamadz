@@ -365,23 +365,24 @@ namespace HMD
 
         void Props()
         {
+            // the generated models are widest along their own Z and face +X; yaw turns that front into the room
             // rolling tool chests beside the bays and at the dyno
-            Prop("tool_chest", new Vector3(-12.4f, 0, 15.2f), 90, 1.25f, new Vector3(0.8f, 1.2f, 1.4f));
-            Prop("tool_chest", new Vector3(1.2f, 0, 21.5f), 200, 1.25f, new Vector3(1.4f, 1.2f, 0.8f));
-            Prop("tool_chest", new Vector3(12.6f, 0, 14f), -90, 1.25f, new Vector3(0.8f, 1.2f, 1.4f));
+            Prop("tool_chest", new Vector3(-12.4f, 0, 15.2f), 0, 1.25f, new Vector3(0.8f, 1.2f, 1.5f));
+            Prop("tool_chest", new Vector3(1.2f, 0, 21.5f), 30, 1.25f, new Vector3(0.8f, 1.2f, 1.5f));
+            Prop("tool_chest", new Vector3(12.6f, 0, 14f), 180, 1.25f, new Vector3(0.8f, 1.2f, 1.5f));
             // tyre stacks
             Prop("tyre_stack", new Vector3(12.6f, 0, 10.5f), 20, 1.0f, new Vector3(0.75f, 1f, 0.75f));
             Prop("tyre_stack", new Vector3(12.5f, 0, 11.6f), 70, 1.0f, new Vector3(0.75f, 1f, 0.75f));
             Prop("tyre_stack", new Vector3(-12.6f, 0, 30.5f), 10, 1.0f, new Vector3(0.75f, 1f, 0.75f));
             Prop("tyre_stack", new Vector3(-11.6f, 0, 31.6f), 120, 1.0f, new Vector3(0.75f, 1f, 0.75f));
-            // a two-post lift in the third bay
-            Prop("lift", new Vector3(4.5f, 0, 9f), 0, 3.4f);
+            // a two-post lift in the third bay (posts left and right of the bay)
+            Prop("lift", new Vector3(4.5f, 0, 9f), 90, 3.4f);
             // engine on a stand, workbenches, oil drums
-            Prop("engine_stand", new Vector3(-3.5f, 0, 30.5f), 160, 1.35f, new Vector3(1.1f, 1.3f, 1.1f));
-            Prop("workbench", new Vector3(5.5f, 0, 1.0f), 180, 1.05f, new Vector3(2.2f, 1f, 0.9f));
-            Prop("workbench", new Vector3(-12.9f, 0, 25f), 90, 1.05f, new Vector3(0.9f, 1f, 2.2f));
-            Prop("oil_drums", new Vector3(12.4f, 0, 32.4f), 30, 1.05f, new Vector3(1.5f, 1f, 1.5f));
-            Prop("oil_drums", new Vector3(-12.6f, 0, 2f), 200, 1.05f, new Vector3(1.5f, 1f, 1.5f));
+            Prop("engine_stand", new Vector3(-3.5f, 0, 30.5f), 160, 1.35f, new Vector3(0.8f, 1.3f, 1.1f));
+            Prop("workbench", new Vector3(5.5f, 0, 1.0f), -90, 1.05f, new Vector3(0.7f, 1f, 1.3f));
+            Prop("workbench", new Vector3(-12.9f, 0, 25f), 0, 1.05f, new Vector3(0.7f, 1f, 1.3f));
+            Prop("oil_drums", new Vector3(12.4f, 0, 32.4f), 30, 1.05f, new Vector3(1.1f, 1f, 1.2f));
+            Prop("oil_drums", new Vector3(-12.6f, 0, 2f), 200, 1.05f, new Vector3(1.1f, 1f, 1.2f));
         }
 
         void Banners()

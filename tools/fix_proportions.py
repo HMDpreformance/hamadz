@@ -6,14 +6,15 @@ arches stay rigid, so the arches stay round.
 
   fix_proportions.py <src.glb> <out.glb> <length_scale> <width_scale> [height_scale] [ends]
 
-With "ends" only the front and rear overhangs grow (the wheelbase stays). The wheel fit
+With "real <rear overhang> <wheelbase> <front overhang>" (any unit, e.g. mm of the real car) the axles are
+moved to the real car's places. With "ends" only the front and rear overhangs grow (the wheelbase stays). The wheel fit
 for the new body is written next to it as <out minus .glb>.json.
 
 Needs <src minus .glb>.json with the wheel fit (tools/fit_wheels.py)."""
 import sys, json
 import numpy as np, trimesh
 
-def main(src, out, sl, sw, sh=1.0, ends=False):
+def main(src, out, sl, sw, sh=1.0, ends=False, real=None):
     full = json.load(open(src[:-4] + ".json")); cfg = full["fit"]
     m = trimesh.load(src, force="mesh")
     v = np.array(m.vertices)
@@ -26,7 +27,14 @@ def main(src, out, sl, sw, sh=1.0, ends=False):
     k = 1.3                                          # rigid zone: 1.3 wheel radii each side of the axle
     bp = [-0.5, ws[0]["z"] - k * ws[0]["r"], ws[0]["z"] + k * ws[0]["r"], ws[1]["z"] - k * ws[1]["r"], ws[1]["z"] + k * ws[1]["r"], 0.5]
     rigid = (bp[2] - bp[1]) + (bp[4] - bp[3])
-    if ends:
+    if real:                                         # real car: (rear overhang, wheelbase, front overhang) as parts of its length
+        ro, wb, fo = [x / sum(real) * sl for x in real]
+        if ws[0]["z"] > 0 or cfg.get("front_low"): pass
+        front_hi = full.get("front", 1) > 0            # front at +axis?
+        e0, e4 = (ro, fo) if front_hi else (fo, ro)
+        scale = [(e0 - k * ws[0]["r"]) / (bp[1] - bp[0]), 1, (wb - k * ws[0]["r"] - k * ws[1]["r"]) / (bp[3] - bp[2]), 1, (e4 - k * ws[1]["r"]) / (bp[5] - bp[4])]
+        s = scale[2]
+    elif ends:
         flex = (bp[1] - bp[0]) + (bp[5] - bp[4]); s = 1 + (sl - 1) / flex
         scale = [s, 1, 1, 1, s]
     else:
@@ -39,11 +47,14 @@ def main(src, out, sl, sw, sh=1.0, ends=False):
     newL = nb[-1] - nb[0]
     for w in cfg["wheels"]:                          # the wheel fit in the new body's own lengths
         w["z"] = round(float(np.interp(w["z"], bp, nb) - mid) / newL, 4)
-        w["r"] = round(w["r"] / newL, 4); w["y"] = round(w["y"] * sh / newL, 4); w["x"] = round(w["x"] * sw / newL, 4)
+        w["r"] = round(w["r"] / newL, 4); w["y"] = round(w["y"] / newL, 4); w["x"] = round(w["x"] * sw / newL, 4)
     json.dump(full, open(out[:-4] + ".json", "w"))
     v[:, ax] = c[ax] + a2 * L
     v[:, lt] = c[lt] + (v[:, lt] - c[lt]) * sw
-    v[:, 1] = mn[1] + (v[:, 1] - mn[1]) * sh
+    # height: only the body above the wheel arches grows, so the wheels and arches stay round
+    H = mx[1] - mn[1]; y0 = 2.1 * max(w["r"] for w in ws) * L
+    yy = v[:, 1] - mn[1]; sf = (H * sh - y0) / (H - y0)
+    v[:, 1] = mn[1] + np.where(yy > y0, y0 + (yy - y0) * sf, yy)
     m.vertices = v
     m.export(out, include_normals=True)
     e = v.max(0) - v.min(0)
@@ -51,4 +62,6 @@ def main(src, out, sl, sw, sh=1.0, ends=False):
 
 if __name__ == "__main__":
     a = sys.argv[3:]; ends = "ends" in a
-    main(sys.argv[1], sys.argv[2], *[float(x) for x in a if x != "ends"], ends=ends)
+    real = [float(x) for x in a[a.index("real") + 1:a.index("real") + 4]] if "real" in a else None
+    if real: a = a[:a.index("real")]
+    main(sys.argv[1], sys.argv[2], *[float(x) for x in a if x != "ends"], ends=ends, real=real)

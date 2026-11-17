@@ -32,17 +32,18 @@ namespace HMD
         {
             car = c;
             string eng = c.spec.engine;
-            var all = Resources.LoadAll<AudioClip>(Res.Root + "Audio/engines");
-            var byRpm = new SortedDictionary<int, AudioClip[]>();
-            foreach (var clip in all)
+            // new engine loops (Higgsfield, longer and steadier) when there are enough rpm points for this engine,
+            // made seamless at load; otherwise the old recorded set
+            var byRpm = Collect(Resources.LoadAll<AudioClip>(Res.Root + "AudioHD/engines"), eng);
+            // opt-in until Hamad has heard the new V8 next to the old one (-newengine on the command line)
+            hdEngine = byRpm.Count >= 3 && System.Environment.CommandLine.Contains("-newengine");
+            if (hdEngine)
             {
-                // name: <engine>_<rpm>_<on|off>
-                var parts = clip.name.Split('_');
-                if (parts.Length != 3 || parts[0] != eng) continue;
-                if (!int.TryParse(parts[1], out int rpm)) continue;
-                if (!byRpm.TryGetValue(rpm, out var pair)) { pair = new AudioClip[2]; byRpm[rpm] = pair; }
-                pair[parts[2] == "on" ? 0 : 1] = clip;
+                var looped = new SortedDictionary<int, AudioClip[]>();
+                foreach (var kv in byRpm) looped[kv.Key] = new[] { MakeLoop(kv.Value[0]), MakeLoop(kv.Value[1]) };
+                byRpm = looped;
             }
+            else byRpm = Collect(Resources.LoadAll<AudioClip>(Res.Root + "Audio/engines"), eng);
             foreach (var kv in byRpm)
             {
                 var l = new Layer { rpm = kv.Key, on = Src(kv.Value[0], player), off = Src(kv.Value[1] ?? kv.Value[0], player) };
@@ -70,8 +71,55 @@ namespace HMD
                 var hd = new List<string>();
                 foreach (var n in new[] { "tire_squeal", "brake_squeal", "wind", "road", "amb_city", "turbo_spool", "bov", "crash", "nitro", "backfire" })
                     if (Res.Load<AudioClip>("AudioHD/" + n) != null) hd.Add(n);
-                Debug.Log($"[HMD] car audio: engine {eng} with {layers.Count} rpm layers; HD effects loaded: {(hd.Count > 0 ? string.Join(", ", hd) : "none")}");
+                Debug.Log($"[HMD] car audio: engine {eng} with {layers.Count} rpm layers ({(hdEngine ? "new seamless loops" : "old loops")}); HD effects loaded: {(hd.Count > 0 ? string.Join(", ", hd) : "none")}");
             }
+        }
+
+        bool hdEngine;
+
+        /// <summary>Clips named <engine>_<rpm>_<on|off>, grouped by rpm: [0] = on load, [1] = off load.</summary>
+        static SortedDictionary<int, AudioClip[]> Collect(AudioClip[] all, string eng)
+        {
+            var byRpm = new SortedDictionary<int, AudioClip[]>();
+            foreach (var clip in all)
+            {
+                var parts = clip.name.Split('_');
+                if (parts.Length != 3 || parts[0] != eng) continue;
+                if (!int.TryParse(parts[1], out int rpm)) continue;
+                if (!byRpm.TryGetValue(rpm, out var pair)) { pair = new AudioClip[2]; byRpm[rpm] = pair; }
+                pair[parts[2] == "on" ? 0 : 1] = clip;
+            }
+            return byRpm;
+        }
+
+        /// <summary>A seamless loop from a generated clip: trims 0.2 s off both ends (fades), then crossfades the last
+        /// 0.35 s into the start with equal-power weights, so the loop point has no click or level dip.</summary>
+        static AudioClip MakeLoop(AudioClip c)
+        {
+            if (c == null) return null;
+            if (c.loadState != AudioDataLoadState.Loaded) c.LoadAudioData();
+            int ch = c.channels, f = c.frequency, n = c.samples;
+            var src = new float[n * ch];
+            if (!c.GetData(src, 0)) return c;
+            int trim = Mathf.Min((int)(0.2f * f), n / 6), xf = Mathf.Min((int)(0.35f * f), n / 4);
+            int start = trim, len = n - 2 * trim - xf;
+            if (len < f / 2) return c;
+            var dst = new float[len * ch];
+            for (int i = 0; i < len; i++)
+                for (int k = 0; k < ch; k++)
+                {
+                    float a = src[(start + i) * ch + k];
+                    if (i < xf)
+                    {
+                        float t = (float)i / xf;
+                        float b = src[(start + len + i) * ch + k];   // the tail that flows into the start
+                        a = a * Mathf.Sin(t * Mathf.PI * 0.5f) + b * Mathf.Cos(t * Mathf.PI * 0.5f);
+                    }
+                    dst[i * ch + k] = a;
+                }
+            var o = AudioClip.Create(c.name + "_loop", len, ch, f, false);
+            o.SetData(dst, 0);
+            return o;
         }
 
         /// <summary>Hits: a crash sound scaled by the impact (walls, barriers, buildings).</summary>

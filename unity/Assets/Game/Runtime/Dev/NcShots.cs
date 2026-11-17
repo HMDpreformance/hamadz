@@ -44,6 +44,7 @@ namespace HMD
             else if (part == "junctions") yield return JunctionTests();
             else if (part == "bridge") yield return BridgeTests();
             else if (part == "look") yield return LookShots();
+            else if (part == "video") yield return VideoDrive();
             else if (part == "default")
             {
                 foreach (var rd in nc.roads) if (rd.cls == "highway") yield return Drive(rd, 230f, rd.name == "E11");
@@ -771,6 +772,42 @@ namespace HMD
                 g.rig.mode = CameraRig.Mode.Chase;
                 Debug.Log($"[HMD] look {w.tag}: {best.name} ({best.cls}) at {V(p)}");
             }
+        }
+
+        /// <summary>-ncdrive video: a chase-camera drive along the E11 eastwards past the Downtown tower wall towards
+        /// Business Bay, recorded frame by frame at a fixed 60 fps game clock (Time.captureFramerate) as JPEGs in
+        /// Shots/video/ (the Editor's MediaEncoder turns them into an MP4). -vidsecs N sets the length (default 36).</summary>
+        IEnumerator VideoDrive()
+        {
+            NewCity.Road e11 = null; foreach (var rd in nc.roads) if (rd.name == "E11") { e11 = rd; break; }
+            if (e11 == null) { Debug.Log("[HMD] video: no E11"); yield break; }
+            float secs = 36f;
+            var argv = System.Environment.GetCommandLineArgs();
+            for (int a = 0; a + 1 < argv.Length; a++) if (argv[a] == "-vidsecs") float.TryParse(argv[a + 1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out secs);
+            // start near x 1550 so the run passes the tower wall and ends by Business Bay (about 1.1 km at 110 km/h)
+            int si = 0; float bd = float.MaxValue;
+            for (int i = 1; i < e11.pts.Count - 2; i++) { float d = Mathf.Abs(e11.pts[i].x - 1550f); if (d < bd) { bd = d; si = i; } }
+            bool back = e11.pts[Mathf.Min(e11.pts.Count - 1, si + 3)].x < e11.pts[si].x;   // drive towards +x
+            if (back) si = Mathf.Min(e11.pts.Count - 2, si + 1);
+            PutOn(car, e11, si, back); g.rig.mode = CameraRig.Mode.Chase; g.rig.SnapChase();
+            yield return new WaitForSeconds(0.5f);
+            var vdir = Path.Combine(dir, "video"); Directory.CreateDirectory(vdir);
+            Application.targetFrameRate = -1; QualitySettings.vSyncCount = 0;
+            Time.captureFramerate = 60;
+            int frame = 0; bool done = false;
+            StartCoroutine(Follow(car, e11, si, 110f, secs + 2f, t => done ? new Vector3(9, 0, 0) : new Vector3(0, 0, -1), back));
+            yield return new WaitForSeconds(1.5f);   // get up to speed first
+            int total = Mathf.RoundToInt(secs * 60f);
+            while (frame < total)
+            {
+                yield return new WaitForEndOfFrame();
+                var tex = ScreenCapture.CaptureScreenshotAsTexture();
+                File.WriteAllBytes(Path.Combine(vdir, $"f{frame:D5}.jpg"), tex.EncodeToJPG(88));
+                Destroy(tex);
+                frame++;
+            }
+            done = true; Time.captureFramerate = 0;
+            Debug.Log($"[HMD] video: {frame} frames at 60 fps in {vdir}, ended at {V(car.transform.position)} ({car.SpeedKmh:F0} km/h)");
         }
 
         void Profiles()

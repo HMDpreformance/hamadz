@@ -69,6 +69,7 @@ namespace HMD.EditorTools
             CopyDir("unity_assets/props", Imp + "/Props", "*.glb");
             if (Directory.Exists(Path.Combine(RepoRoot, "unity_assets/buildings"))) CopyDir("unity_assets/buildings", Imp + "/Buildings", "*.glb", "*.json");
             if (Directory.Exists(Path.Combine(RepoRoot, "unity_assets/sfx"))) CopyDir("unity_assets/sfx", Imp + "/AudioHD", "*.mp3", "*.wav", "*.ogg");
+            if (Directory.Exists(Path.Combine(RepoRoot, "unity_assets/sfx/engines"))) CopyDir("unity_assets/sfx/engines", Imp + "/AudioHD/engines", "*.mp3", "*.wav", "*.ogg");
             if (Directory.Exists(Path.Combine(RepoRoot, "unity_assets/trees"))) CopyDir("unity_assets/trees", Imp + "/Trees", "*.glb", "*.json");
             if (Directory.Exists(Path.Combine(RepoRoot, "unity_assets/ground"))) CopyDir("unity_assets/ground", Imp + "/Ground", "*.jpg", "*.png");
             if (Directory.Exists(Path.Combine(RepoRoot, "unity_assets/buildings/landmarks"))) CopyDir("unity_assets/buildings/landmarks", Imp + "/Buildings/Landmarks", "*.glb", "*.json");

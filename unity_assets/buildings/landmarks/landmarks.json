@@ -1,0 +1,59 @@
+{
+ "note": "One model per landmark kind in city_part1.json. Scale the model so its height is h (metres), keep proportions, bottom centre on the landmark x/y/z. Never cull by distance. yaw not checked.",
+ "models": [
+  {
+   "kind": "needle_tower",
+   "id": "needle_tower",
+   "h": 420,
+   "yaw": 90
+  },
+  {
+   "kind": "sail_hotel",
+   "id": "sail_hotel",
+   "h": 160,
+   "yaw": 90
+  },
+  {
+   "kind": "arch_hotel",
+   "id": "arch_hotel",
+   "h": 95,
+   "yaw": 90
+  },
+  {
+   "kind": "big_wheel",
+   "id": "big_wheel",
+   "h": 125,
+   "yaw": 90
+  },
+  {
+   "kind": "twisted_tower",
+   "id": "twisted_tower",
+   "h": 240,
+   "yaw": 90
+  },
+  {
+   "kind": "ski_mall",
+   "id": "ski_mall",
+   "h": 60,
+   "yaw": 90
+  },
+  {
+   "kind": "twin_spire_towers",
+   "id": "twin_spire_towers",
+   "h": 330,
+   "yaw": 90
+  },
+  {
+   "kind": "future_museum",
+   "id": "future_museum",
+   "h": 78,
+   "yaw": 90
+  },
+  {
+   "kind": "gold_frame",
+   "id": "gold_frame",
+   "h": 150,
+   "yaw": 90
+  }
+ ]
+}

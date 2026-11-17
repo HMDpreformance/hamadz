@@ -1,15 +1,243 @@
 {
-  "note": "w/d/h are real size in metres (x, z, y). weight is the pick chance among models of the same lot style (default 1). yaw turns the model so its front faces +Z; not checked yet.",
-  "models": [
-    {"id": "marina_tower",   "w": 56, "d": 37, "h": 170, "styles": ["tower_res"],          "yaw": 0, "weight": 1},
-    {"id": "hotel_tower",    "w": 66, "d": 89, "h": 130, "styles": ["tower", "tower_res"], "yaw": 0, "weight": 1},
-    {"id": "office_tower",   "w": 46, "d": 58, "h": 150, "styles": ["tower"],              "yaw": 0, "weight": 1},
-    {"id": "beige_tower",    "w": 38, "d": 55, "h": 95,  "styles": ["tower_beige"],        "yaw": 0, "weight": 1},
-    {"id": "midrise_shops",  "w": 18, "d": 23, "h": 28,  "styles": ["midrise"],            "yaw": 0, "weight": 1},
-    {"id": "shop_row",       "w": 10, "d": 26, "h": 7,   "styles": ["midrise", "villa"],   "yaw": 0, "weight": 0.08},
-    {"id": "villa_white",    "w": 22, "d": 21, "h": 14.6, "styles": ["villa"],             "yaw": 0, "weight": 1},
-    {"id": "mosque",         "w": 29, "d": 27, "h": 30,  "styles": ["villa"],              "yaw": 0, "weight": 0.03},
-    {"id": "warehouse_a",    "w": 30, "d": 30, "h": 16.5, "styles": ["warehouse"],         "yaw": 0, "weight": 1},
-    {"id": "petrol_station", "w": 21, "d": 22, "h": 10,  "styles": ["warehouse", "midrise"], "yaw": 0, "weight": 0.05}
-  ]
+ "note": "w/d/h are real size in metres (x, z, y). weight is the pick chance among models of the same lot style (default 1). yaw turns the model so its front faces +Z (90 checked in Unity for the first ten).",
+ "models": [
+  {
+   "id": "marina_tower",
+   "w": 56,
+   "d": 37,
+   "h": 170,
+   "styles": [
+    "tower_res"
+   ],
+   "yaw": 90,
+   "weight": 1
+  },
+  {
+   "id": "hotel_tower",
+   "w": 66,
+   "d": 89,
+   "h": 130,
+   "styles": [
+    "tower",
+    "tower_res"
+   ],
+   "yaw": 90,
+   "weight": 1
+  },
+  {
+   "id": "office_tower",
+   "w": 46,
+   "d": 58,
+   "h": 150,
+   "styles": [
+    "tower"
+   ],
+   "yaw": 90,
+   "weight": 1
+  },
+  {
+   "id": "deco_tower",
+   "w": 59,
+   "d": 54,
+   "h": 160,
+   "styles": [
+    "tower"
+   ],
+   "yaw": 90,
+   "weight": 1
+  },
+  {
+   "id": "twin_towers_bridge",
+   "w": 68,
+   "d": 112,
+   "h": 170,
+   "styles": [
+    "tower_res",
+    "tower"
+   ],
+   "yaw": 90,
+   "weight": 0.5
+  },
+  {
+   "id": "green_tower",
+   "w": 41,
+   "d": 38,
+   "h": 110,
+   "styles": [
+    "tower_beige",
+    "tower_res"
+   ],
+   "yaw": 90,
+   "weight": 1
+  },
+  {
+   "id": "beige_tower",
+   "w": 38,
+   "d": 55,
+   "h": 95,
+   "styles": [
+    "tower_beige"
+   ],
+   "yaw": 90,
+   "weight": 1
+  },
+  {
+   "id": "midrise_shops",
+   "w": 18,
+   "d": 23,
+   "h": 28,
+   "styles": [
+    "midrise"
+   ],
+   "yaw": 90,
+   "weight": 1
+  },
+  {
+   "id": "old_block",
+   "w": 9.4,
+   "d": 22,
+   "h": 18,
+   "styles": [
+    "midrise"
+   ],
+   "yaw": 90,
+   "weight": 1
+  },
+  {
+   "id": "car_park",
+   "w": 18.5,
+   "d": 29,
+   "h": 18,
+   "styles": [
+    "midrise"
+   ],
+   "yaw": 90,
+   "weight": 0.12
+  },
+  {
+   "id": "shop_row",
+   "w": 10,
+   "d": 26,
+   "h": 7,
+   "styles": [
+    "midrise",
+    "villa"
+   ],
+   "yaw": 90,
+   "weight": 0.08
+  },
+  {
+   "id": "street_restaurant",
+   "w": 10.4,
+   "d": 10.5,
+   "h": 9,
+   "styles": [
+    "midrise",
+    "villa"
+   ],
+   "yaw": 90,
+   "weight": 0.05
+  },
+  {
+   "id": "villa_white",
+   "w": 22,
+   "d": 21,
+   "h": 14.6,
+   "styles": [
+    "villa"
+   ],
+   "yaw": 90,
+   "weight": 1
+  },
+  {
+   "id": "villa_dark",
+   "w": 16,
+   "d": 16,
+   "h": 9.5,
+   "styles": [
+    "villa"
+   ],
+   "yaw": 90,
+   "weight": 1
+  },
+  {
+   "id": "villa_windtower",
+   "w": 14.7,
+   "d": 13.5,
+   "h": 14,
+   "styles": [
+    "villa"
+   ],
+   "yaw": 90,
+   "weight": 1
+  },
+  {
+   "id": "mosque",
+   "w": 29,
+   "d": 27,
+   "h": 30,
+   "styles": [
+    "villa"
+   ],
+   "yaw": 90,
+   "weight": 0.03
+  },
+  {
+   "id": "warehouse_a",
+   "w": 30,
+   "d": 30,
+   "h": 16.5,
+   "styles": [
+    "warehouse"
+   ],
+   "yaw": 90,
+   "weight": 1
+  },
+  {
+   "id": "warehouse_logistics",
+   "w": 22,
+   "d": 34,
+   "h": 12,
+   "styles": [
+    "warehouse"
+   ],
+   "yaw": 90,
+   "weight": 1
+  },
+  {
+   "id": "tyre_shop",
+   "w": 14.6,
+   "d": 15,
+   "h": 8,
+   "styles": [
+    "warehouse"
+   ],
+   "yaw": 90,
+   "weight": 0.5
+  },
+  {
+   "id": "car_showroom",
+   "w": 21,
+   "d": 16,
+   "h": 10,
+   "styles": [
+    "warehouse",
+    "midrise"
+   ],
+   "yaw": 90,
+   "weight": 0.12
+  },
+  {
+   "id": "petrol_station",
+   "w": 21,
+   "d": 22,
+   "h": 10,
+   "styles": [
+    "warehouse",
+    "midrise"
+   ],
+   "yaw": 90,
+   "weight": 0.05
+  }
+ ]
 }

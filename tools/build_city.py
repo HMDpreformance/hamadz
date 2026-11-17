@@ -584,8 +584,8 @@ for k in order:
             p = R.at(s_at); dn = district(p[0], p[1]); style, wr, dr, hr, gap = STYLE[dn]
             if R.cls == "highway":
                 # the highway wall of towers in the tall areas (thin line of towers, low city behind); nothing elsewhere
-                if dn not in ("Downtown Dubai", "Dubai Marina", "Al Barsha", "JBR"): s_at += 40; continue
-                style, wr, dr, hr, gap = "tower", (32, 48), (32, 48), (120, 300), 26
+                if dn not in ("Downtown Dubai", "Business Bay", "Dubai Marina", "Al Barsha", "JBR"): s_at += 40; continue
+                style, wr, dr, hr, gap = "tower", (32, 48), (32, 48), (120, 300), 15
             if R.cls == "street" and style != "villa":     # the small streets take smaller footprints
                 wr, dr = (min(wr[0], 20), min(wr[1], 28)), (min(dr[0], 18), min(dr[1], 24))
                 if style.startswith("tower"): hr = (hr[0] * 0.6, hr[1] * 0.75)
@@ -613,11 +613,26 @@ landmark("arch_hotel", 600, 2225, 110, 30, 95)            # at the top of the Pa
 landmark("big_wheel", 330, 1640, 20, 120, 125)            # observation wheel off the Marina and JBR
 landmark("twisted_tower", 470, 1290, 30, 30, 240)         # Marina, on the quay
 landmark("ski_mall", 680, 820, 140, 90, 60)               # Al Barsha, the long sloped box, in a block with no streets (KEEPOUT in city_plan.py)
+def landmark_near(kind, px, py, w, d, h, rad=None):
+    """Put a landmark on the free spot nearest to the wanted place: on land, clear of every road."""
+    X0, Z0 = px * S, py * S; rad = rad or max(w, d) / 2 + 8
+    for r in np.arange(0, 400, 10.0):
+        for a in np.arange(0, 2 * math.pi, math.pi / 12 if r else 7):
+            X, Z = X0 + r * math.cos(a), Z0 + r * math.sin(a)
+            if min(th(X + u, Z + v) for u in (-rad, 0, rad) for v in (-rad, 0, rad)) < 1.0: continue
+            idx = tree.query_ball_point([X, Z], rad + 30)
+            if idx and (np.linalg.norm(allP[np.array(idx)] - [X, Z], axis=1) < allE[np.array(idx)] + rad).any(): continue
+            landmarks.append({"kind": kind, "x": round(X, 1), "z": round(Z, 1), "y": round(th(X, Z), 2), "w": w, "d": d, "h": h})
+            print("landmark %s placed %.0f m from the wanted spot" % (kind, r)); return
+    print("landmark %s: no free spot" % kind)
+landmark_near("twin_spire_towers", 2130, 1045, 100, 60, 330)   # the two pointed towers beside the E11, north-east of Downtown
+landmark_near("future_museum", 2250, 1095, 90, 60, 78)         # the silver ring, next to them on the E11
+landmark_near("gold_frame", 2160, 1400, 95, 22, 150, 30)           # the big frame, in the park between Downtown and the creek
 for L_ in landmarks:   # buildings make way for a landmark
     lots[:] = [b for b in lots if math.hypot(b["x"] - L_["x"], b["z"] - L_["z"]) > (max(L_["w"], L_["d"]) + max(b["w"], b["d"])) / 2 + 6]
 
 lamps, trees = [], []
-GREEN = ("Downtown Dubai", "Dubai Marina", "JBR", "Jumeirah", "Al Wasl", "Palm Jumeirah", "Dubai Hills")
+GREEN = ("Downtown Dubai", "Business Bay", "Al Barsha", "Dubai Marina", "JBR", "Jumeirah", "Al Wasl", "Palm Jumeirah", "Dubai Hills")
 for R in roads:
     T, N = R.frame()
     step = 46.0 if R.cls == "highway" else 34.0 if R.cls == "main" else 38.0
@@ -648,6 +663,34 @@ for _ in range(1400):
     if idx and (np.linalg.norm(allP[np.array(idx)] - [X, Z], axis=1) < allE[np.array(idx)] + 2).any(): continue
     if any(abs(X - b["x"]) < b["w"] / 2 + b["d"] / 2 and abs(Z - b["z"]) < b["w"] / 2 + b["d"] / 2 for b in lots): continue
     trees.append([round(X, 1), round(th(X, Z), 2), round(Z, 1), "tree" if dn == "Dubai Hills" else "palm", round(float(rng.uniform(0.8, 1.3)), 2)])
+# green sign gantries over the highways, and the metro viaduct beside the E11 (like the Red Line on Sheikh Zayed Road)
+gantries, metro = [], []
+for R in roads:
+    if R.cls != "highway": continue
+    T, N = R.frame(); s_at = 180.0
+    while s_at < R.s[-1] - 120:
+        i = min(int(np.searchsorted(R.s, s_at)), len(R.P) - 1)
+        if not in_junction(R, s_at, 40):
+            p = R.at(s_at)
+            gantries.append([round(float(p[0]), 1), round(float(np.interp(s_at, R.s, R.h)), 2), round(float(p[1]), 1), round(math.degrees(math.atan2(T[i][0], T[i][1])), 1), R.w])
+            s_at += 650.0
+        else: s_at += 40.0
+    if R.name == "E11":
+        OFF, UP = R.w / 2 + 8.0, 12.0
+        pts, pil = [], []
+        for i in range(0, len(R.P), 3):
+            c = R.P[i] - N[i] * OFF
+            pts.append([round(float(c[0]), 1), round(float(R.h[i]) + UP, 2), round(float(c[1]), 1)])
+        s_at = 10.0
+        while s_at < R.s[-1] - 10:
+            i = min(int(np.searchsorted(R.s, s_at)), len(R.P) - 1); c = R.at(s_at) - N[i] * OFF
+            idx = tree.query_ball_point(c, 30.0)
+            clear = not idx or not (np.linalg.norm(allP[np.array(idx)] - c, axis=1) < allE[np.array(idx)] + 1.6).any()
+            if clear and th(c[0], c[1]) > 0.5:
+                pil.append([round(float(c[0]), 1), round(float(th(c[0], c[1])), 2), round(float(c[1]), 1)]); s_at += 32.0
+            else: s_at += 4.0
+        metro.append({"pts": pts, "pillars": pil, "width": 8.0})
+print("gantries", len(gantries), "| metro", sum(len(m["pts"]) for m in metro), "pts,", sum(len(m["pillars"]) for m in metro), "pillars")
 from collections import Counter
 print("lots", len(lots), dict(Counter(b["style"] for b in lots)), "| lamps", len(lamps), "| trees", len(trees), "| landmarks", len(landmarks))
 
@@ -660,7 +703,7 @@ info = {
     "junctions": [{"x": round(float(J["pos"][0]), 1), "z": round(float(J["pos"][1]), 1), "y": round(J["h"], 2), "r": float(J["r"]), "roads": sorted({int(k) for k, s in J["members"]})} for J in junctions],
     "blocks": blocks,
     "garage": {"x": g["x"] * S, "z": g["y"] * S, "y": round(ground(g["x"] * S, g["y"] * S), 2)},
-    "lots": lots, "landmarks": landmarks, "lamps": lamps, "trees": trees,
+    "lots": lots, "landmarks": landmarks, "lamps": lamps, "trees": trees, "gantries": gantries, "metro": metro,
     "districts": [{"name": d["name"], "x": d["x"] * S, "z": d["y"] * S} for d in plan["districts"] if d["x"] <= PX],
 }
 json.dump(info, open(out[:-4] + ".json", "w"), separators=(",", ":"))

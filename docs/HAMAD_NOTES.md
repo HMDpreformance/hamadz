@@ -173,3 +173,4 @@ Retest on the rebuilt city (a24f9bc), 2026-11-17 evening: underpass passes both 
 - Hamad 01:34: light rain all the time, streets wet from rain and reflecting, like before.
 - Hamad 01:37: where are the old-school loading screen (like MC3/NFS), the intro and the radio music? Keep the girl voice for races/story for later.
 - Hamad 01:38: when you enter a different place, show its name small in the corner, then it disappears.
+- Hamad 01:40: loading screen music similar to the Midnight Club 3 loading music. 01:41: use mid-2000s old-school music for the game.

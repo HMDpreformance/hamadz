@@ -115,3 +115,5 @@ Differences found and their state:
 Next: rich map picture made with Higgsfield from the plan render; cloverleafs; more small streets.
 
 Rich map pictures (2026-11-17): `unity_assets/city/map_full.jpg` (with names) and `map_base.jpg` (no text, for the small map) are now made with Higgsfield from the plan render, 2224x1600, roads in the same places as the plan. Do NOT overwrite them with `tools/city_plan.py`; write the plain render to `map_full_plain.jpg` instead. When the road plan changes, render the plain map again, restyle it with Higgsfield (GPT Image 2.6, reference = plain render, "keep every road exactly"), then make the no-text copy from the result. The cloud cannot reach the Higgsfield upload host, so the laptop does the upload PUT.
+
+Minimap (2026-11-17): Hamad said the small map looks cheap. He wants it in the same style as the dials, or with the sides removed and a see-through fade from the edge to the middle. Done in code: no frame, no chrome ring, the map is a soft disc (solid in the middle, clear at the rim).

@@ -51,33 +51,33 @@ road("Hills Link", "highway", [(1020, 0), (1000, 300), (1040, 560), (1010, 900),
 road("Beach Road", "main", [(60, 1480), (400, 1560), (760, 1640), (1150, 1700), (1550, 1750), (1950, 1780), (2300, 1850), (2650, 1930), (3000, 2040)])
 road("Al Wasl", "main", [(250, 1300), (700, 1420), (1150, 1500), (1600, 1540), (2000, 1560), (2350, 1640)])
 road("Marina Loop", "main", ring(430, 1330, 250, 150, 14, 40), smooth=False)
-road("Downtown Ring", "main", ring(1620, 1130, 250, 190, 0, 48), smooth=False)
+road("Downtown Ring", "main", ring(1625, 1562, 240, 158, 4, 48), smooth=False)   # between the E11 and the sea, like the map picture
 road("Business Bay", "main", [(1870, 1130), (2050, 1000), (2250, 960), (2420, 1050), (2500, 1240), (2380, 1420)])
 road("Al Quoz Road", "main", [(560, 470), (620, 760), (760, 1000), (800, 1240), (760, 1420), (700, 1640)])
 road("Al Khail", "main", [(0, 720), (500, 800), (1010, 900), (1500, 880), (2000, 860), (2580, 1000), (3200, 1060)])
 road("Hills Ring", "main", ring(1500, 310, 300, 180, 0, 48), smooth=False)
 road("Deira Road", "main", [(2640, 1420), (2800, 1500), (2980, 1700), (3050, 1900), (3000, 2040)])
 road("Airport Road", "main", [(2850, 520), (2950, 800), (3050, 1060), (3100, 1350), (3200, 1640)])
-road("Downtown Blvd", "main", [(1500, 1330), (1560, 1230), (1620, 1130), (1640, 980), (1600, 880)])
+road("Downtown Blvd", "main", [(1600, 880), (1630, 1080), (1640, 1330), (1630, 1562), (1650, 1750)])   # from Al Khail, under the E11, through Downtown to the Beach Road
 road("Jebel Ali Road", "main", [(120, 0), (160, 250), (140, 470), (200, 720), (180, 980), (250, 1300)])
 road("Nad Al Sheba", "main", [(1800, 640), (1900, 420), (2100, 250), (2440, 330)])
 road("Ras Al Khor", "main", [(2000, 860), (2150, 760), (2400, 620)])
 # the Palm: trunk from the Beach Road out to sea, fronds, and the crescent
 PX, PY = 620, 1700
-road("Palm Trunk", "main", [(PX, PY - 60), (PX + 10, PY + 120), (PX, PY + 330)])
+road("Palm Trunk", "main", [(PX, PY - 60), (PX + 10, PY + 120), (PX, PY + 380)])
 for k in range(-4, 5):
     if k == 0: continue
     y0 = PY + 150 + 22 * (4 - abs(k)); a = math.radians(90 - 17 * k)
-    road("Frond", "street", [(PX, y0), (PX + 90 * math.cos(a) + 25 * k, y0 + 60 + 10 * abs(k)), (PX + 46 * k + 150 * math.cos(a), y0 + 110 + 26 * abs(k))])
-road("Crescent", "street", ring(PX, PY + 290, 330, 230, 0, 40, -25, 205), smooth=False)
+    road("Frond", "street", [(PX, y0), (PX + 110 * math.cos(a) + 32 * k, y0 + 70 + 12 * abs(k)), (PX + 60 * k + 185 * math.cos(a), y0 + 130 + 30 * abs(k))])
+road("Crescent", "street", ring(PX, PY + 315, 410, 262, 0, 44, -25, 205), smooth=False)
 
 # districts: local street grids, turned and clipped to an ellipse
 districts = [
-    ("Jebel Ali", 180, 250, 170, 220, 8, 80), ("Dubai Marina", 430, 1330, 230, 135, 14, 70), ("JBR", 330, 1500, 220, 50, 14, 60),
-    ("Al Quoz", 760, 640, 230, 150, 5, 100), ("Jumeirah", 1150, 1610, 420, 85, 7, 75), ("Downtown Dubai", 1620, 1130, 230, 175, 20, 70),
+    ("Jebel Ali", 250, 250, 170, 220, 8, 80), ("Dubai Marina", 430, 1330, 230, 135, 14, 70), ("JBR", 330, 1500, 220, 50, 14, 60),
+    ("Al Quoz", 760, 640, 230, 150, 5, 100), ("Jumeirah", 1020, 1640, 420, 85, 7, 75), ("Downtown Dubai", 1625, 1562, 225, 145, 4, 66),
     ("Business Bay", 2180, 1180, 210, 130, -15, 80), ("Dubai Hills", 1500, 310, 280, 165, 0, 85), ("Deira", 2900, 1850, 190, 170, 25, 65),
     ("Ras Al Khor", 2850, 820, 180, 160, 10, 105), ("Nad Al Sheba", 2060, 420, 220, 120, -10, 100), ("Al Wasl", 1150, 1410, 330, 70, 5, 85),
-    ("Al Barsha", 500, 1020, 190, 130, 12, 85), ("DXB Airport", 3060, 1300, 110, 210, 12, 140),
+    ("Al Barsha", 560, 950, 190, 130, 12, 85), ("DXB Airport", 2960, 1300, 110, 210, 12, 140),
 ]
 def clipped_grid(cx, cy, rx, ry, rot, pitch):
     c, s = math.cos(math.radians(rot)), math.sin(math.radians(rot))
@@ -91,7 +91,7 @@ def clipped_grid(cx, cy, rx, ry, rot, pitch):
         if abs(u) < ry * 0.97:
             hw = rx * math.sqrt(1 - (u / ry) ** 2)
             if hw > pitch * 0.6: yield [w(-hw, u), w(hw, u)]
-RINGED = {"Dubai Marina": (430, 1330, 250, 150, 14), "Downtown Dubai": (1620, 1130, 250, 190, 0), "Dubai Hills": (1500, 310, 300, 180, 0)}
+RINGED = {"Dubai Marina": (430, 1330, 250, 150, 14), "Downtown Dubai": (1625, 1562, 240, 158, 4), "Dubai Hills": (1500, 310, 300, 180, 0)}
 for name, cx, cy, rx, ry, rot, pitch in districts:
     if name not in RINGED: continue                 # the other areas are covered by the city-wide street net below
     for seg in clipped_grid(cx, cy, rx, ry, rot, pitch):
@@ -162,7 +162,7 @@ def terrain(x, y):
     and Nad Al Sheba, a low rise under Downtown."""
     inland = max(0.0, coast_y(x) - y)
     h = 1.5 + 9.0 * min(1.0, inland / 1500.0) ** 1.3
-    for cx, cy, r, amp in ((1500, 310, 450, 8), (1250, 120, 360, 4), (2060, 420, 330, 6), (1620, 1130, 300, 3), (300, 250, 300, 4)):
+    for cx, cy, r, amp in ((1500, 310, 450, 8), (1250, 120, 360, 4), (2060, 420, 330, 6), (1625, 1562, 300, 2), (300, 250, 300, 4)):
         h += amp * math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * (r * 0.55) ** 2))
     return h
 
@@ -218,7 +218,7 @@ SCALE = 0.75          # plan units to game metres: the game city is 2.4 km x 1.7
 PHASE1_X = 1900       # built first: everything west of this line; roads are blocked there until phase 2
 plan = {"size": [W, H], "scale": SCALE, "phase1_x": PHASE1_X, "coast": COAST, "roads": roads, "water": water, "levels": levels, "terrain": [[round(terrain(x, y), 1) for x in range(0, W + 1, 50)] for y in range(0, H + 1, 50)],
         "districts": [{"name": d[0], "x": d[1], "y": d[2]} for d in districts] + [{"name": "Palm Jumeirah", "x": PX, "y": PY + 300}],
-        "garage": {"name": "LSXmotorsport", "x": 760, "y": 700}, "landmark": {"name": "Sky Tower", "x": 1620, "y": 1130}}
+        "garage": {"name": "LSXmotorsport", "x": 760, "y": 700}, "landmark": {"name": "Sky Tower", "x": 1700, "y": 1600}}
 os.makedirs(os.path.join(ROOT, "unity_assets", "city"), exist_ok=True)
 json.dump(plan, open(os.path.join(ROOT, "unity_assets", "city", "plan.json"), "w"), separators=(",", ":"))
 
@@ -236,7 +236,7 @@ PALM = [r for r in roads if r["name"] in ("Palm Trunk", "Frond", "Crescent")]
 def shore(dr, col, grow):
     dr.polygon(land, fill=col)
     if grow: dr.line(land[:len(COAST)], fill=col, width=grow)
-    for r in PALM: fat(dr, r["pts"], col, (30 if r["name"] == "Frond" else 46) + grow)
+    for r in PALM: fat(dr, r["pts"], col, (40 if r["name"] == "Frond" else 50) + grow)
 glow = Image.new("RGB", im.size, SEA); shore(ImageDraw.Draw(glow), (70, 190, 255), 44)
 im = glow.filter(ImageFilter.GaussianBlur(16))          # light-blue glow along every shore
 d = ImageDraw.Draw(im)
@@ -294,7 +294,7 @@ g = plan["garage"]; cx, cy = g["x"] / 2, (H - g["y"]) / 2
 if not os.environ.get("PLAIN") and not MODE:
     d.ellipse([cx - 16, cy - 16, cx + 16, cy + 16], fill=(215, 30, 30), outline=(255, 255, 255), width=3)
     label(g["x"], g["y"] - 60, "LSX GARAGE", FS, (255, 120, 110))
-cx, cy = 1620 / 2, (H - 1150) / 2
+cx, cy = 1700 / 2, (H - 1600) / 2
 d.polygon([(cx, cy - 46), (cx + 7, cy), (cx - 7, cy)], fill=(255, 255, 255), outline=(0, 0, 0))
 T = ImageFont.truetype(os.path.join(ROOT, "fonts", "russoone_RussoOne-Regular.ttf"), 54)
 d.text((im.width - 40, 36), "DUBAI", font=T, fill=(230, 232, 236), anchor="ra", stroke_width=3, stroke_fill=(0, 0, 0))

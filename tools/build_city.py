@@ -30,7 +30,7 @@ def ground(X, Z):
     d = coast_y(x) - y
     if d < 0: return max(-5.0, 1.5 + d * 0.09)
     h = 1.5 + 9.0 * min(1.0, d / 1500.0) ** 1.3
-    for cx, cy, r, amp in ((1500, 310, 450, 8), (1250, 120, 360, 4), (2060, 420, 330, 6), (1620, 1130, 300, 3), (300, 250, 300, 4)):
+    for cx, cy, r, amp in ((1500, 310, 450, 8), (1250, 120, 360, 4), (2060, 420, 330, 6), (1625, 1562, 300, 2), (300, 250, 300, 4)):
         h += amp * math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * (r * 0.55) ** 2))
     return h
 
@@ -502,9 +502,9 @@ landmarks = []
 def landmark(kind, px, py, w, d, h):
     X, Z = px * S, py * S
     landmarks.append({"kind": kind, "x": round(X, 1), "z": round(Z, 1), "y": round(max(th(X, Z), 0.0), 2), "w": w, "d": d, "h": h})
-landmark("needle_tower", 1700, 1175, 60, 60, 420)        # the tallest tower, inside the Downtown ring
+landmark("needle_tower", 1700, 1600, 60, 60, 420)        # the tallest tower, inside the Downtown ring
 landmark("sail_hotel", 1420, 1900, 60, 40, 160)           # on its own island off Jumeirah
-landmark("arch_hotel", 620, 2215, 150, 40, 95)            # at the top of the Palm crescent
+landmark("arch_hotel", 620, 2262, 150, 40, 95)            # at the top of the Palm crescent
 landmark("big_wheel", 250, 1720, 20, 120, 125)            # observation wheel off JBR
 landmark("twisted_tower", 520, 1440, 30, 30, 240)         # Marina
 landmark("ski_mall", 560, 1130, 140, 90, 60)              # Al Barsha, the long sloped box

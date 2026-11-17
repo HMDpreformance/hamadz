@@ -37,7 +37,8 @@ namespace HMD
         {
             var b = new MeshBuilder(4);
             float hw = W * 0.5f;
-            float rr = R * 0.66f;          // rim radius (low profile tyre)
+            // rim radius: low-profile sports tyre (big rim), taller truck sidewall (smaller rim)
+            float rr = R * (style == Style.Split5 ? 0.74f : style == Style.Deep6 ? 0.6f : 0.68f);
             const int seg = 40;
 
             // tyre: walk around the cross-section with the outside on the left
@@ -95,12 +96,28 @@ namespace HMD
                 new Vector2(face + 0.005f, rr * 0.26f),
                 new Vector2(face + 0.012f, rr * 0.2f),
             }, 24, Vector3.zero);
-            b.Sub(3).Disc(new Vector3(face + 0.013f, 0, 0), rr * 0.2f, 24, 1f);
+            b.Sub(1).Disc(new Vector3(face + 0.013f, 0, 0), rr * 0.2f, 24, 1f);   // centre cap in the rim finish (it used the caliper red)
             for (int i = 0; i < 5; i++)
             {
                 var rot = Quaternion.Euler(i * 72f + 36f, 0, 0);
                 b.Sub(1).Add(UnitCube(), Matrix4x4.TRS(rot * new Vector3(face + 0.005f, rr * 0.15f, 0), rot, new Vector3(0.02f, 0.022f, 0.022f)), 1);
             }
+
+            // tread blocks across the crown and a raised lettering band on both sidewalls: real rubber, not a plain cylinder
+            int blocks = 56;
+            for (int i = 0; i < blocks; i++)
+            {
+                var rot = Quaternion.Euler(i * 360f / blocks, 0, 0);
+                for (int k = -1; k <= 1; k += 2)
+                {
+                    var xf = Matrix4x4.TRS(rot * new Vector3(k * hw * 0.36f + (i % 2) * k * hw * 0.08f, R * 1.004f, 0), rot * Quaternion.Euler(0, k * 18f, 0), new Vector3(hw * 0.56f, 0.012f, R * 0.06f));
+                    b.Sub(0).Add(UnitCube(), xf, 0);
+                }
+            }
+            for (int k = -1; k <= 1; k += 2)
+                b.Sub(2).Lathe(k > 0
+                    ? new[] { new Vector2(hw * 1.035f, R * 0.84f), new Vector2(hw * 1.035f, R * 0.78f) }
+                    : new[] { new Vector2(-hw * 1.035f, R * 0.78f), new Vector2(-hw * 1.035f, R * 0.84f) }, seg, Vector3.zero);
 
             // brake disc (behind the spokes) and caliper
             b.Sub(2).Disc(new Vector3(face - 0.07f, 0, 0), rr * 0.82f, seg, 1f);
@@ -116,7 +133,7 @@ namespace HMD
         {
             if (tyreMat == null)
             {
-                tyreMat = Res.Mat(new Color(0.035f, 0.035f, 0.038f), 0.32f, 0f);
+                tyreMat = Res.Mat(new Color(0.05f, 0.05f, 0.052f), 0.22f, 0f);
                 discMat = Res.Mat(new Color(0.22f, 0.22f, 0.23f), 0.55f, 0.9f);
             }
             var rim = Res.Mat(rimColor, 0.86f, 1f);

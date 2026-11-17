@@ -29,6 +29,7 @@ namespace HMD
             float halfW = 0.95f, height = 1.35f;
             var holder = new GameObject("Body").transform;
             holder.SetParent(root.transform, false);
+            foundLamps = default;
             var prefab = Res.Load<GameObject>("Cars/" + id);
             if (prefab != null)
             {
@@ -37,6 +38,7 @@ namespace HMD
                 model.transform.localPosition = Vector3.zero;
                 model.transform.localRotation = Quaternion.identity;
                 model.transform.localScale = Vector3.one * L;
+                foundLamps = LampFinder.Find(id, model, root.transform, L);   // before repaint: lens colours from the original texture
                 ApplyPaint(model, id, cfg, spec);
                 foreach (var c in model.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(c);
             }
@@ -80,16 +82,17 @@ namespace HMD
             var car = root.AddComponent<CarController>();
             var wheelRoot = new GameObject("Wheels").transform;
             wheelRoot.SetParent(root.transform, false);
-            var style = id == "classic" ? WheelMesh.Style.Classic : id == "suv" ? WheelMesh.Style.Deep6 : id == "muscle" ? WheelMesh.Style.Deep6 : id == "exotic" || id == "euro" ? WheelMesh.Style.Split5 : WheelMesh.Style.Mesh10;
-            Color rimCol = id == "classic" ? new Color(0.95f, 0.95f, 0.97f) : id == "tuner" ? new Color(0.12f, 0.12f, 0.13f) : new Color(0.55f, 0.56f, 0.6f);
-            var wheelMats = WheelMesh.Materials(rimCol, id == "exotic" ? new Color(0.95f, 0.75f, 0.05f) : new Color(0.75f, 0.04f, 0.04f));
+            var style = id == "classic" ? WheelMesh.Style.Classic : id == "suv" || id == "pickup" ? WheelMesh.Style.Deep6 : id == "muscle" ? WheelMesh.Style.Deep6 : id == "exotic" || id == "euro" || id == "sport" ? WheelMesh.Style.Split5 : WheelMesh.Style.Mesh10;
+            Color rimCol = id == "classic" ? new Color(0.95f, 0.95f, 0.97f) : id == "tuner" ? new Color(0.12f, 0.12f, 0.13f) : id == "pickup" ? new Color(0.88f, 0.89f, 0.92f) : id == "sport" ? new Color(0.72f, 0.74f, 0.78f) : new Color(0.55f, 0.56f, 0.6f);   // pickup polished chrome, sport silver
+            var wheelMats = WheelMesh.Materials(rimCol, id == "exotic" ? new Color(0.95f, 0.75f, 0.05f) : id == "pickup" ? new Color(0.12f, 0.12f, 0.13f) : new Color(0.75f, 0.04f, 0.04f));
             var wellMat = Res.Mat(new Color(0.012f, 0.012f, 0.014f), 0.05f, 0f);
 
             for (int i = 0; i < 4; i++)
             {
                 bool front = i < 2, left = i % 2 == 0;
                 float r = front ? rF : rR;
-                float x = (front ? xF : xR) - tyreW * 0.5f;
+                float tw = front ? tyreW : tyreW * (id == "sport" ? 1.18f : 1f);   // wide rear tyres on the sports car
+                float x = (front ? xF : xR) - tw * 0.5f;
                 var wpos = new Vector3(left ? -x : x, front ? yF : yR, front ? zF : zR);
 
                 var wcGo = new GameObject((front ? "F" : "R") + (left ? "L" : "R") + "_collider");
@@ -105,7 +108,7 @@ namespace HMD
                 var mesh = new GameObject("Mesh");
                 mesh.transform.SetParent(vis.transform, false);
                 mesh.transform.localScale = new Vector3(left ? -1 : 1, 1, 1);
-                mesh.AddComponent<MeshFilter>().sharedMesh = WheelMesh.Get(r, tyreW, style);
+                mesh.AddComponent<MeshFilter>().sharedMesh = WheelMesh.Get(r, tw, style);
                 var mr = mesh.AddComponent<MeshRenderer>();
                 mr.sharedMaterials = wheelMats;
                 car.wheelVisuals[i] = vis.transform;
@@ -116,8 +119,8 @@ namespace HMD
                 Object.DestroyImmediate(well.GetComponent<Collider>());
                 well.name = "ArchLiner";
                 well.transform.SetParent(holder, false);
-                float linerW = tyreW * 1.7f;
-                well.transform.localPosition = new Vector3((left ? -1 : 1) * Mathf.Max(0.2f, x - tyreW * 0.55f), wpos.y + 0.03f, wpos.z);
+                float linerW = tw * 1.7f;
+                well.transform.localPosition = new Vector3((left ? -1 : 1) * Mathf.Max(0.2f, x - tw * 0.55f), wpos.y + 0.03f, wpos.z);
                 well.transform.localRotation = Quaternion.Euler(0, 0, 90);
                 well.transform.localScale = new Vector3(r * 2.35f, linerW * 0.5f, r * 2.35f);   // a little bigger than the tyre, stays inside the body   // cylinder: y scale is half its length
                 var wr = well.GetComponent<Renderer>();
@@ -134,13 +137,13 @@ namespace HMD
             if (player)
             {
                 // soft key light over the player car (racing-game trick): the paint reads at night without lighting the street
-                var key = new GameObject("CarKeyLight").AddComponent<Light>();
-                key.transform.SetParent(root.transform, false);
-                key.transform.localPosition = new Vector3(0, height + 1.6f, -L * 0.15f);
-                key.type = LightType.Point; key.range = Mathf.Max(5f, L * 1.1f); key.intensity = 2.2f;
-                key.color = new Color(0.82f, 0.9f, 1f); key.shadows = LightShadows.None;
-                key.renderMode = LightRenderMode.ForcePixel;
-                key.cullingMask = 1 << 0;
+                // the car body lives on its own layer (9), so these lights touch only the car, never the street
+                foreach (var r in holder.GetComponentsInChildren<Renderer>(true)) r.gameObject.layer = CarLayer;
+                CarLight(root.transform, "CarKeyLight", new Vector3(0, height + 2.4f, L * 0.1f), Mathf.Max(6f, L * 1.3f), 3.6f, new Color(0.85f, 0.9f, 1f));
+                // rim lights low behind and at the rear quarters: the chase camera sees the tail and flanks
+                CarLight(root.transform, "CarRimRear", new Vector3(0, height * 0.7f, -L * 0.95f), Mathf.Max(4f, L * 0.9f), 4f, new Color(0.7f, 0.8f, 1f));
+                CarLight(root.transform, "CarRimL", new Vector3(-halfW * 2.6f, height * 0.9f, -L * 0.2f), Mathf.Max(4f, L * 0.8f), 3f, new Color(1f, 0.75f, 0.55f));
+                CarLight(root.transform, "CarRimR", new Vector3(halfW * 2.6f, height * 0.9f, -L * 0.2f), Mathf.Max(4f, L * 0.8f), 3f, new Color(0.6f, 0.8f, 1f));
             }
             if (player)
             {
@@ -149,6 +152,21 @@ namespace HMD
                 root.AddComponent<CarFx>().Setup(car);
             }
             return car;
+        }
+
+        static (List<LampFinder.Lens> tail, List<LampFinder.Lens> head) foundLamps;
+
+        public const int CarLayer = 9;
+
+        static void CarLight(Transform root, string name, Vector3 pos, float range, float intensity, Color c)
+        {
+            var l = new GameObject(name).AddComponent<Light>();
+            l.transform.SetParent(root, false);
+            l.transform.localPosition = pos;
+            l.type = LightType.Point; l.range = range; l.intensity = intensity; l.color = c;
+            l.shadows = LightShadows.None;
+            l.renderMode = LightRenderMode.ForcePixel;
+            l.cullingMask = 1 << CarLayer;
         }
 
         static void AddLights(Transform root, CarSpec spec, float L, float halfW, float h, bool player, float groundY)
@@ -172,6 +190,17 @@ namespace HMD
                     li.shadows = LightShadows.None;
                     cl.heads.Add(li);
                     // small lens glow on the lamp
+                    var hl = foundLamps.head != null ? foundLamps.head.Find(l => l.centre.x * s > 0) : default;
+                    if (foundLamps.head != null && hl.size.x > 0)
+                    {
+                        // a wide cluster takes in the chrome grille too: the lamp is its outer end
+                        Vector3 hc = hl.centre;
+                        if (hl.size.x > 0.4f) hc.x = Mathf.Sign(hc.x) * (Mathf.Abs(hc.x) + hl.size.x * 0.5f - 0.17f);
+                        hc.y += hl.size.y * 0.2f;   // the lens itself is the upper part of the clear area (the lower part is bumper trim)
+                        go.transform.localPosition = hc;
+                        cl.headGlows.Add(Sprite(lights, "HeadGlow", hc + Vector3.forward * 0.2f, true, new Vector2(Mathf.Min(hl.size.x, 0.3f), Mathf.Min(hl.size.y, 0.16f)), HeadGlowMat));
+                    }
+                    else
                     cl.headGlows.Add(Sprite(lights, "HeadGlow", new Vector3(s * halfW * 0.64f, h * 0.5f, L * 0.455f), true, new Vector2(0.3f, 0.13f), HeadGlowMat));   // on the real lamps (they sit back on top of the bumper)
                 }
                 // two long soft light pools on the road ahead (the beams), they shine on the wet asphalt
@@ -190,12 +219,17 @@ namespace HMD
             // per car: where the lamps are and their shape (x as a fraction of half width, y of height, size in metres)
             var tailMat = Res.Particle(new Color(1f, 0.08f, 0.05f, 0.85f), Res.SoftBox);
             var roundMat = Res.Particle(new Color(1f, 0.08f, 0.05f, 0.85f), Res.SoftDot);
-            foreach (var lamp in TailLamps(spec.id))
-                for (int s = -1; s <= 1; s += 2)
-                {
-                    var r = Sprite(lights, "TailLamp", new Vector3(s * halfW * lamp.x, h * lamp.y, -L * 0.5f + lamp.z), false, new Vector2(lamp.w, lamp.hgt), lamp.round ? roundMat : tailMat);
-                    cl.tailSprites.Add(r);
-                }
+            bool roundLamps = spec.id == "sport";
+            if (foundLamps.tail != null && foundLamps.tail.Count >= 2)
+            {
+                // measured on the real lenses: same place, same shape
+                foreach (var lens in foundLamps.tail)
+                    cl.tailSprites.Add(Sprite(lights, "TailLamp", lens.centre + Vector3.back * 0.03f, false, lens.size * 1.05f + Vector2.one * 0.01f, roundLamps ? roundMat : tailMat));
+            }
+            else
+                foreach (var lamp in TailLamps(spec.id))
+                    for (int s = -1; s <= 1; s += 2)
+                        cl.tailSprites.Add(Sprite(lights, "TailLamp", new Vector3(s * halfW * lamp.x, h * lamp.y, -L * 0.5f + lamp.z), false, new Vector2(lamp.w, lamp.hgt), lamp.round ? roundMat : tailMat));
         }
 
         struct Lamp { public float x, y, z, w, hgt; public bool round; public Lamp(float x, float y, float z, float w, float h, bool r) { this.x = x; this.y = y; this.z = z; this.w = w; hgt = h; round = r; } }
@@ -205,7 +239,7 @@ namespace HMD
             switch (id)
             {
                 case "sport": return new[] { new Lamp(0.48f, 0.67f, 0.05f, 0.24f, 0.24f, true), new Lamp(0.76f, 0.67f, 0.11f, 0.24f, 0.24f, true) };   // four round lamps
-                case "pickup": return new[] { new Lamp(0.93f, 0.66f, 0.02f, 0.14f, 0.42f, false) };   // tall vertical lamps on the bed corners
+                case "pickup": return new[] { new Lamp(0.93f, 0.66f, -0.06f, 0.15f, 0.42f, false) };   // tall vertical lamps on the bed corners
                 default: return new[] { new Lamp(0.72f, 0.66f, -0.03f, 0.44f, 0.1f, false) };
             }
         }
@@ -239,7 +273,7 @@ namespace HMD
             }
         }
         static Material HeadGlowMat => headGlowMat ? headGlowMat : (headGlowMat = Res.Particle(new Color(1f, 0.95f, 0.85f, 0.9f) * 1.6f, Res.SoftDot));
-        static Material BeamMat => beamMat ? beamMat : (beamMat = Res.Particle(new Color(1f, 0.92f, 0.78f, 0.16f), Res.SoftDot));
+        static Material BeamMat => beamMat ? beamMat : (beamMat = Res.Particle(new Color(1f, 0.92f, 0.78f, 0.08f), Res.SoftDot));
 
         /// <summary>Glossy clear-coated paint from the model's own texture. Cars with a key colour get repainted.</summary>
         static void ApplyPaint(GameObject model, string id, CarModelCfg cfg, CarSpec spec)
@@ -259,7 +293,7 @@ namespace HMD
                         if (tex != null && cfg != null && !string.IsNullOrEmpty(cfg.key) && ColorUtility.TryParseHtmlString(cfg.key, out var key))
                             tex = Repaint.Recolor(tex, key, spec.paint);
                         var m = Res.Paint(Color.white);   // clear-coated paint, works with any model texture
-                        if (tex != null) Res.SetMainTex(m, tex, Vector2.one);
+                        if (tex != null) { Res.SetMainTex(m, tex, Vector2.one); Res.SetEmission(m, Color.white * 0.06f, tex); }   // a touch of self light: the paint colour never sinks to black at night
                         if (nrm != null) { m.SetTexture("_BumpMap", nrm); m.SetFloat("_BumpScale", 0.3f); m.EnableKeyword("_NORMALMAP"); }   // baked normal map is noisy: keep it subtle so panels read smooth
                         // the clear coat: high smoothness, environment reflections on
                         m.SetFloat("_EnvironmentReflections", 1f);
@@ -386,7 +420,7 @@ namespace HMD
             }
             bool braking = car.brake > 0.1f || car.handbrake;
             if (tail) tail.intensity = System.Environment.CommandLine.Contains("-notail") ? 0f : (braking ? 2.4f : 0.5f);
-            float k = braking ? 3.6f : 1.1f;   // dim lamp bar when cruising, bright when braking
+            float k = braking ? 2.2f : 0.9f;   // dim lamp bar when cruising, bright when braking
             foreach (var r in tailSprites)
             {
                 r.GetPropertyBlock(mpb);

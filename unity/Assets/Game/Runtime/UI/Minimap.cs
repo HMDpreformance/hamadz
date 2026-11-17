@@ -41,8 +41,11 @@ namespace HMD
             mapImg = ri;
             garageIcon = UIKit.Img("Garage", rotor, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(46, 46), Color.white, WrenchSprite).rectTransform;
             // chrome outer ring + flame-blue inner ring, matching the blue flame dials
-            var chrome = UIKit.Img("Chrome", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(Size + 20, Size + 20), new Color(0.82f, 0.86f, 0.92f, 0.95f), UIKit.RingSprite);
-            chrome.raycastTarget = false;
+            // bezel like the dials: bright chrome outer band, dark gap, flame-blue inner ring
+            var c0 = new Vector2(0.5f, 0.5f);
+            int bzi = 0;
+            foreach (var (sz, col) in new[] { (Size + 34f, new Color(0.55f, 0.58f, 0.64f, 1f)), (Size + 30f, new Color(0.97f, 0.98f, 1f, 1f)), (Size + 24f, new Color(0.7f, 0.74f, 0.8f, 1f)), (Size + 19f, new Color(0.02f, 0.04f, 0.1f, 1f)) })
+                { var bz = UIKit.Img("Bezel", frame.transform, c0, c0, Vector2.zero, new Vector2(sz, sz), col, UIKit.CircleSprite); bz.raycastTarget = false; bz.transform.SetSiblingIndex(bzi++); }   // behind the map
             var ring = UIKit.Img("Ring", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(Size + 14, Size + 14), new Color(0.15f, 0.55f, 1f, 0.95f), UIKit.RingSprite);
             ring.raycastTarget = false;
             var me = UIKit.Img("Player", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(30, 34), new Color(0.55f, 0.85f, 1f), UIKit.ArrowSprite);
@@ -64,7 +67,18 @@ namespace HMD
             bi.texture = tex;
             bigImg = bi;
             bigGarage = UIKit.Img("Garage", bi.transform, new Vector2(0, 0), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(60, 60), Color.white, WrenchSprite).rectTransform;
-            bigPlayer = UIKit.Img("Player", bi.transform, new Vector2(0, 0), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40, 46), new Color(1f, 0.85f, 0.1f), UIKit.ArrowSprite).rectTransform;
+            bigPlayer = UIKit.Img("Player", bi.transform, new Vector2(0, 0), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40, 46), new Color(0.55f, 0.85f, 1f), UIKit.ArrowSprite).rectTransform;
+            // district labels (white with a soft shadow) and a north arrow, like a real city map
+            string[] names = { "MARINA", "JUMEIRAH", "AL BARSHA", "BUSINESS BAY", "DOWNTOWN", "DEIRA", "AL QUOZ", "KARAMA", "LSX MOTORSPORT" };
+            Vector2[] spots = { new Vector2(0.16f, 0.16f), new Vector2(0.16f, 0.5f), new Vector2(0.5f, 0.16f), new Vector2(0.84f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.84f, 0.84f), new Vector2(0.16f, 0.84f), new Vector2(0.5f, 0.84f), Vector2.zero };
+            for (int n = 0; n < names.Length - 1; n++)
+            {
+                var lb = UIKit.Label("District", bi.transform, spots[n], new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(260, 40), names[n], 26, new Color(1f, 1f, 1f, 0.92f), TextAnchor.MiddleCenter, Res.TitleFont);
+                var sh = lb.GetComponent<Shadow>() ?? lb.gameObject.AddComponent<Shadow>();
+                sh.effectColor = new Color(0, 0, 0, 0.85f); sh.effectDistance = new Vector2(2, -2);
+            }
+            var na = UIKit.Img("North", bi.transform, new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-50, -60), new Vector2(34, 40), Color.white, UIKit.ArrowSprite);
+            UIKit.Label("NorthN", bi.transform, new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-50, -22), new Vector2(40, 30), "N", 26, Color.white, TextAnchor.MiddleCenter, Res.TitleFont);
             UIKit.Label("Title", bigRt, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -20), new Vector2(800, 60), "DUBAI  ·  NIGHT CITY", 44, Color.white, TextAnchor.MiddleCenter, Res.TitleFont);
             UIKit.Btn("GoGarage", bigRt, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-40, 40), new Vector2(380, 96), "GO TO GARAGE", () => { Close(); OnGoGarage?.Invoke(); }, new Color(0.95f, 0.1f, 0.1f), 38);
             UIKit.Btn("Close", bigRt, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-40, -30), new Vector2(200, 86), "CLOSE", Close, Color.white, 36);
@@ -126,30 +140,52 @@ namespace HMD
 
         Texture2D DrawMap()
         {
+            // a street map, not blocks: dark ground, faint building footprints, roads as smooth light bands with a
+            // darker kerb edge, rounded corners at the crossings, main roads a little wider and brighter
             var t = new Texture2D(TexSize, TexSize, TextureFormat.RGBA32, true);
             var px = new Color32[TexSize * TexSize];
-            Color32 bg = new Color32(14, 18, 28, 255), block = new Color32(30, 36, 52, 255), road = new Color32(120, 128, 140, 255), median = new Color32(70, 90, 70, 255), gar = new Color32(140, 30, 30, 255);
+            // dark game-map style (Hamad's Dubai reference): near-black with a faint grid, dark-grey blocks, light grey
+            // streets, warm yellow main roads, dark blue water/edge with a soft light-blue glow line
+            Color bg = new Color(0.03f, 0.07f, 0.13f), ground = new Color(0.07f, 0.075f, 0.085f), bld = new Color(0.12f, 0.125f, 0.14f);
+            Color edge = new Color(0.04f, 0.04f, 0.045f), road = new Color(0.62f, 0.64f, 0.67f), main = new Color(0.98f, 0.76f, 0.25f);
+            Color glow = new Color(0.35f, 0.65f, 1f);
+            float pix = worldSize / TexSize;
+            float hw = City.Road * 0.5f, cr = 9f;   // road half width, corner radius
             for (int y = 0; y < TexSize; y++)
                 for (int x = 0; x < TexSize; x++)
                 {
                     float wx = worldMin + (x + 0.5f) / TexSize * worldSize, wz = worldMin + (y + 0.5f) / TexSize * worldSize;
-                    Color32 c = bg;
-                    if (wx > -City.Road && wz > -City.Road && wx < City.Extent && wz < City.Extent)
+                    Color c = bg;
+                    // edge of the city: dark blue water with a light-blue glow line at the shore
+                    float outside = Mathf.Max(Mathf.Max(-City.Road - 6 - wx, wx - City.Extent - 6), Mathf.Max(-City.Road - 6 - wz, wz - City.Extent - 6));
+                    if (outside > 0) c = Color.Lerp(bg, glow, Mathf.Clamp01(1f - outside / 14f) * 0.55f);
+                    if (wx > -City.Road - 6 && wz > -City.Road - 6 && wx < City.Extent + 6 && wz < City.Extent + 6)
                     {
-                        float mx = Mathf.Repeat(wx + City.Road, City.Pitch) - City.Road, mz = Mathf.Repeat(wz + City.Road, City.Pitch) - City.Road;
-                        bool onX = mx < 0, onZ = mz < 0;
-                        if (onX || onZ)
+                        int kx = Mathf.RoundToInt((wx + hw) / City.Pitch), kz = Mathf.RoundToInt((wz + hw) / City.Pitch);
+                        float ax = Mathf.Abs(wx - City.RoadLine(kx)), az = Mathf.Abs(wz - City.RoadLine(kz));
+                        bool mainX = kx % 4 == 0, mainZ = kz % 4 == 0;
+                        float hx = mainX ? hw * 1.15f : hw, hz = mainZ ? hw * 1.15f : hw;
+                        // distance inside the road (positive) / inside the block (negative), with rounded block corners
+                        float dRoad = Mathf.Max(hx - ax, hz - az);
+                        if (ax > hx && az > hz && ax < hx + cr && az < hz + cr)
                         {
-                            c = road;
-                            float cx = Mathf.Abs(mx + City.Road * 0.5f), cz = Mathf.Abs(mz + City.Road * 0.5f);
-                            if ((onX && !onZ && cx < City.Median * 0.5f) || (onZ && !onX && cz < City.Median * 0.5f)) c = median;
+                            float cdx = ax - hx - cr, cdz = az - hz - cr;
+                            dRoad = Mathf.Max(dRoad, Mathf.Sqrt(cdx * cdx + cdz * cdz) - cr);
                         }
-                        else
-                        {
-                            c = block;
-                            int bi = Mathf.FloorToInt((wx + City.Road) / City.Pitch), bj = Mathf.FloorToInt((wz + City.Road) / City.Pitch);
-                            if (bi == City.GarageBlock.x && bj == City.GarageBlock.y) c = gar;
-                        }
+                        // block interior: ground with building footprints (2 x 2 lots, a walkway between)
+                        float lx = Mathf.Repeat(wx, City.Pitch), lz = Mathf.Repeat(wz, City.Pitch);
+                        float half = City.Block * 0.5f;
+                        float fx = Mathf.Abs(Mathf.Abs(lx - half) - half * 0.5f), fz = Mathf.Abs(Mathf.Abs(lz - half) - half * 0.5f);
+                        float inLot = Mathf.Min(half * 0.5f - 4f - fx, half * 0.5f - 4f - fz);
+                        c = Color.Lerp(ground, bld, Mathf.Clamp01(inLot / pix + 0.5f) * 0.9f);
+                        // faint map grid every 50 m
+                        if (Mathf.Repeat(wx, 50f) < pix || Mathf.Repeat(wz, 50f) < pix) c = Color.Lerp(c, new Color(0.2f, 0.22f, 0.26f), 0.25f);
+                        // road band with a soft darker edge
+                        Color rc = (ax < hx && mainX) || (az < hz && mainZ) ? main : road;
+                        float e = Mathf.Clamp01(dRoad / pix + 0.5f);
+                        float inner = Mathf.Clamp01((dRoad - 1.6f) / pix + 0.5f);
+                        c = Color.Lerp(c, edge, e);
+                        c = Color.Lerp(c, rc, inner);
                     }
                     px[y * TexSize + x] = c;
                 }
@@ -157,6 +193,7 @@ namespace HMD
             t.Apply(true);
             t.wrapMode = TextureWrapMode.Clamp;
             t.filterMode = FilterMode.Trilinear;
+            t.anisoLevel = 4;
             return t;
         }
 

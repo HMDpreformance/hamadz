@@ -15,6 +15,8 @@ namespace HMD
 
         IEnumerator Start()
         {
+            // -hmdwide: a 20:9 window (the shape of a 2400 x 1080 phone) to check the HUD layout
+            if (System.Environment.CommandLine.Contains("-hmdwide")) { Screen.SetResolution(1920, 864, FullScreenMode.Windowed); yield return null; yield return null; }
             dir = Path.Combine(Path.GetDirectoryName(Application.dataPath) ?? ".", "Shots");
             Directory.CreateDirectory(dir);
             var g = Game.I;
@@ -37,6 +39,17 @@ namespace HMD
             g.rig.SetFixed(car.transform.position + car.transform.forward * 11f + car.transform.right * 2.5f + Vector3.up * 1.3f, car.transform.position + car.transform.forward * 3f + Vector3.up * 0.4f, false);
             yield return new WaitForSeconds(0.5f);
             yield return Shot("02b_headlights");
+            // lamp close-ups at night on the street: the glows must sit on the real lenses
+            {
+                Vector3 cp = car.transform.position; float Lc = car.spec.length;
+                g.rig.SetFixed(cp - car.transform.forward * Lc * 1.05f + car.transform.right * Lc * 0.2f + Vector3.up * 1.0f, cp - car.transform.forward * Lc * 0.45f + Vector3.up * 0.7f, false);
+                car.brake = 1f; yield return new WaitForSeconds(0.4f);
+                yield return Shot("lamps_" + car.spec.id + "_rear");
+                car.brake = 0f;
+                g.rig.SetFixed(cp + car.transform.forward * Lc * 1.05f + car.transform.right * Lc * 0.2f + Vector3.up * 1.0f, cp + car.transform.forward * Lc * 0.45f + Vector3.up * 0.6f, false);
+                yield return new WaitForSeconds(0.4f);
+                yield return Shot("lamps_" + car.spec.id + "_front");
+            }
             // higher speed in the chase view: the needles mid-scale (about 150 km/h)
             g.rig.SnapChase();
             car.brake = 0; car.throttle = 1f;
@@ -106,6 +119,13 @@ namespace HMD
             car.throttle = 0;
             yield return new WaitForSeconds(2.5f);
             yield return Shot("07_workshop");
+            // close-up of the front left wheel from the side
+            {
+                var w = car.wheelVisuals[0];
+                g.rig.SetFixed(w.position - car.transform.right * 1.7f + car.transform.forward * 0.25f + Vector3.up * 0.15f, w.position, false);
+                yield return new WaitForSeconds(0.4f);
+                yield return Shot("wheel_" + car.spec.id);
+            }
             g.rig.SetFixed(g.shop.transform.TransformPoint(new Vector3(-10, 3.2f, 2)), g.shop.transform.TransformPoint(new Vector3(4, 1.5f, 22)), false);
             yield return new WaitForSeconds(0.5f);
             yield return Shot("08_workshop_wide");
@@ -142,6 +162,7 @@ namespace HMD
             Application.Quit();
         }
 
+        // -hmdwide: a 20:9 window (1920 x 864, the same shape as a 2400 x 1080 phone), touch controls shown
         IEnumerator Shot(string name)
         {
             yield return new WaitForEndOfFrame();

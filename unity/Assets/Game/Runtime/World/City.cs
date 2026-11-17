@@ -128,15 +128,15 @@ namespace HMD
                 var d = Res.Tex("Tower/" + tn[k]);
                 if (d == null) continue;
                 bool glassy = k == 0 || k == 2 || k == 4;
-                var m = Res.Mat(Color.white, glassy ? 0.82f : 0.45f, glassy ? 0.25f : 0f);
+                var m = Res.Mat(Color.white, glassy ? 0.6f : 0.45f, glassy ? 0.15f : 0f);   // less mirror: seen steeply from below they reflected the bright probe as a white block
                 Res.SetMainTex(m, d, Vector2.one);
                 var e = Res.Tex("Tower/" + tn[k] + "_emit");
-                Res.SetEmission(m, Color.white * 1.35f, e != null ? e : d);
+                Res.SetEmission(m, Color.white * (tn[k] == "fins" ? 0.7f : 1.05f), e != null ? e : d);   // fins skin has big white panels: dimmer
                 tl.Add(m); tt.Add(tsz[k]);
             }
             towers = tl.ToArray(); towerTile = tt.ToArray();
 
-            glassTower = Res.Mat(new Color(0.12f, 0.17f, 0.24f), 0.88f, 0.8f);   // opaque mirror glass: reflects the city via the camera probe
+            glassTower = Res.Mat(new Color(0.1f, 0.14f, 0.2f), 0.78f, 0.55f);   // less mirror: a near tower top reflected the bright probe as a white block   // opaque mirror glass: reflects the city via the camera probe
             glassTower.SetFloat("_Metallic", 0.85f);
             Res.SetEmission(glassTower, new Color(0.25f, 0.5f, 0.85f) * 0.05f);
             glassDark = Res.Mat(new Color(0.05f, 0.07f, 0.09f), 0.95f, 0.9f);

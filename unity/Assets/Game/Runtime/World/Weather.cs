@@ -3,13 +3,14 @@ using UnityEngine;
 namespace HMD
 {
     /// <summary>
-    /// Rain is rare (12% of drives, like the last Godot build); otherwise the night is dry with a
-    /// light sheen on the asphalt. When it rains the road turns glossy and reflective, puddles shine,
-    /// and rain streaks fall around the camera.
+    /// The weather changes while you drive: most of the time the night is dry with a light sheen on the
+    /// asphalt, and now and then a shower comes in, lasts a few minutes and passes. The rain fades in and
+    /// out, and the road dries slowly after it. (Hamad 2026-11-17: "not always raining, sometimes yes sometimes no".)
     /// </summary>
     public class Weather : MonoBehaviour
     {
-        public const float RainChance = 0.12f;
+        public const float RainChance = 0.25f;     // chance that a drive starts in a shower, and that the next spell is one
+        float amount, nextChange; bool forced; float wetNow;
         public static float Wetness { get; private set; }
         public static bool Raining { get; private set; }
 
@@ -19,9 +20,12 @@ namespace HMD
         public void Setup(Transform cam, bool? force = null)
         {
             follow = cam;
+            forced = force.HasValue;
             Raining = force ?? (Random.value < RainChance);
-            Wetness = Raining ? 1f : 0f;
-            if (Raining) MakeRain();
+            amount = Raining ? 1f : 0f;
+            Wetness = wetNow = Raining ? 1f : 0f;
+            nextChange = Time.time + (Raining ? Random.Range(90f, 240f) : Random.Range(150f, 420f));
+            if (!rain) MakeRain();
             ApplyRoad();
         }
 
@@ -70,10 +74,24 @@ namespace HMD
         void LateUpdate()
         {
             if (!rain || !follow) return;
+            // a new spell of weather every few minutes (not when -rain / -dry forces it for screenshots)
+            if (!forced && Time.time > nextChange)
+            {
+                Raining = !Raining && Random.value < RainChance * 1.6f;
+                nextChange = Time.time + (Raining ? Random.Range(90f, 240f) : Random.Range(150f, 420f));
+            }
+            amount = Mathf.MoveTowards(amount, Raining ? 1f : 0f, Time.deltaTime / 18f);            // fades over 18 s
+            wetNow = Mathf.MoveTowards(wetNow, Raining ? 1f : 0f, Time.deltaTime / (Raining ? 25f : 150f));   // the road dries slowly
+            Wetness = wetNow;
+            Shader.SetGlobalFloat("_HMD_Wetness", Mathf.Lerp(0.3f, 1f, wetNow));
+            Shader.SetGlobalFloat("_HMD_RainAmount", amount);
+            RenderSettings.fogDensity = Mathf.Lerp(0.0024f, 0.0042f, amount);
+            var em = rain.emission; em.rateOverTime = 1800f * amount;
             // no rain indoors: the workshop interior lives far away from the city (z = -3000)
             bool indoors = follow.position.z < -1500f;
-            if (rain.gameObject.activeSelf == indoors) rain.gameObject.SetActive(!indoors);
-            if (!indoors) rain.transform.position = follow.position + follow.forward * 8f + Vector3.up * 14f;
+            bool show = !indoors && amount > 0.01f;
+            if (rain.gameObject.activeSelf != show) rain.gameObject.SetActive(show);
+            if (show) rain.transform.position = follow.position + follow.forward * 8f + Vector3.up * 14f;
         }
     }
 }

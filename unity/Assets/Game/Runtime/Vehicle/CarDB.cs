@@ -39,6 +39,7 @@ namespace HMD
             foreach (var id in Order) yield return cars[id];
         }
 
+        public const float WorldScale = 1.12f;
         static void Add(CarSpec s) => cars[s.id] = s;
 
         static void Build()
@@ -55,6 +56,10 @@ namespace HMD
             Add(new CarSpec { id = "rotary", name = "AKAGI RZ-8", tag = "ROTARY SPORTS COUPE", price = 26000, hp = 265, torqueNm = 298, topKmh = 254, weightKg = 1240, handling = 85, drive = Drive.RWD, engine = "rotary", cyl = "1.3L TWIN-ROTOR TURBO", length = 4.3f, rpmRedline = 9000, paint = new Color(0.8f, 0.04f, 0.04f) });
             Add(new CarSpec { id = "suv", name = "TITAN LX", tag = "LUXURY SUV", price = 38000, hp = 410, torqueNm = 705, topKmh = 222, weightKg = 2480, handling = 50, drive = Drive.AWD, engine = "v8sc", cyl = "6.2L SUPERCHARGED V8", length = 5.1f, rpmRedline = 6200, wheelRadius = 0.38f, finalDrive = 3.6f, paint = new Color(0.06f, 0.06f, 0.07f) });
             Add(new CarSpec { id = "exotic", name = "ARDENTE V12", tag = "ITALIAN EXOTIC", price = 125000, hp = 580, torqueNm = 637, topKmh = 330, weightKg = 1480, handling = 92, drive = Drive.AWD, engine = "exotic", cyl = "6.0L V12", length = 4.7f, rpmRedline = 9000, gears = new[] { 3.1f, 2.2f, 1.65f, 1.3f, 1.05f, 0.87f, 0.72f }, finalDrive = 3.6f, paint = new Color(0.78f, 0.03f, 0.03f) });
+            // the roads are wide (easy to drive), so cars at their real size looked tiny next to them: every car is
+            // built 12 % bigger, and the main sports car a little more (Hamad 2026-11-17: wider and a little longer)
+            foreach (var c in cars.Values) c.length *= WorldScale;
+            cars["sport"].length *= 1.04f;
         }
     }
 

@@ -119,3 +119,10 @@ Rich map pictures (2026-11-17): `unity_assets/city/map_full.jpg` (with names) an
 Minimap (2026-11-17): Hamad said the small map looks cheap. He wants it in the same style as the dials, or with the sides removed and a see-through fade from the edge to the middle. Done in code: no frame, no chrome ring, the map is a soft disc (solid in the middle, clear at the rim).
 
 City size (2026-11-17): Hamad likes the map picture, but when driving the streets feel very small compared to the map. He wants bigger distances. Done: plan scale 0.75 -> 1.5, so the city is 4.8 km x 3.45 km (two times longer in every direction, about 141 km of road). Road widths stay the same. Ramp lengths stay the same in metres (factor K in tools/city_plan.py). He also says the roads have many problems; every road must pass a drive test and each problem is listed and fixed.
+
+Playtest 2026-11-17 (afternoon), Hamad's words in short:
+- The Corvette looks very tiny. Body should be wider and a little longer. Done in code: all cars 12 % bigger (roads are wide, so real-size cars looked small), Corvette 4 % more, chase camera a little closer.
+- Minimap is good now. Zoom it out a bit, and zoom out more when speeding, with a limit. Done in code: 640 m across when slow, up to 980 m at 220 km/h.
+- Rain must not be always on: sometimes yes, sometimes no. Rain looks cheap. Done in code: showers come and go during a drive (fade in 18 s, road dries slowly). Rain look still to improve.
+- Lighting looks cheap. To improve.
+- Buildings look cheap and do not match the map. To improve: real 3D building models per district (Marina, Downtown, villas, old Deira, warehouses), made with Higgsfield.

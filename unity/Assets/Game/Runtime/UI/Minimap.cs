@@ -19,7 +19,8 @@ namespace HMD
         GameObject big;
         Texture2D tex;
         const float Size = 300f;          // on-screen diameter
-        const float ViewMetres = 520f;    // world metres across the minimap
+        const float ViewNear = 640f, ViewFar = 980f;   // world metres across the minimap: standing still .. at 220 km/h (the limit)
+        float viewMetres = ViewNear; Vector3 lastPos; bool hasLast;
         const int TexSize = 1024;
         float worldMin, worldSize;
         float worldMinZ = float.NaN, worldSizeZ;   // set when the map is not square (new city pictures)
@@ -118,7 +119,11 @@ namespace HMD
         {
             if (player == null || (City.I == null && NewCity.I == null)) return;
             // minimap: map texture slides under the player and turns with the car (heading up)
-            float metresPerPx = ViewMetres / Size;
+            // zoom out a little with speed, smoothly, never past ViewFar
+            float kmh = hasLast && Time.deltaTime > 0 ? Vector3.Distance(player.position, lastPos) / Time.deltaTime * 3.6f : 0f;
+            lastPos = player.position; hasLast = true;
+            if (kmh < 500f) viewMetres = Mathf.Lerp(viewMetres, Mathf.Lerp(ViewNear, ViewFar, Mathf.InverseLerp(40f, 220f, kmh)), 1.5f * Time.deltaTime);
+            float metresPerPx = viewMetres / Size;
             Vector2 uv = ToUV(player.position);
             disc.Set(uv, new Vector2(metresPerPx / worldSize, metresPerPx / SizeZ), player.eulerAngles.y);
 

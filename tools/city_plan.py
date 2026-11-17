@@ -80,7 +80,7 @@ districts = [
     ("Jebel Ali", 250, 250, 170, 220, 8, 80), ("Dubai Marina", 430, 1330, 230, 135, 14, 70), ("JBR", 330, 1500, 220, 50, 14, 60),
     ("Al Quoz", 760, 640, 230, 150, 5, 100), ("Jumeirah", 1020, 1640, 420, 85, 7, 75), ("Downtown Dubai", 1625, 1562, 225, 145, 4, 66),
     ("Business Bay", 2180, 1180, 210, 130, -15, 80), ("Dubai Hills", 1500, 310, 280, 165, 0, 85), ("Deira", 2900, 1850, 190, 170, 25, 65),
-    ("Ras Al Khor", 2850, 820, 180, 160, 10, 105), ("Nad Al Sheba", 2060, 420, 220, 120, -10, 100), ("Al Wasl", 1150, 1410, 330, 70, 5, 85),
+    ("Ras Al Khor", 2120, 720, 180, 160, 10, 105), ("Nad Al Sheba", 2060, 420, 220, 120, -10, 100), ("Al Wasl", 1150, 1410, 330, 70, 5, 85),
     ("Al Barsha", 560, 950, 190, 130, 12, 85), ("DXB Airport", 2960, 1300, 110, 210, 12, 140),
 ]
 def clipped_grid(cx, cy, rx, ry, rot, pitch):
@@ -100,7 +100,7 @@ def in_marina(x, y, k=1.0):
     cx, cy, rx, ry, rot = MARINA; c, s_ = math.cos(math.radians(-rot)), math.sin(math.radians(-rot))
     u, v = (x - cx) * c - (y - cy) * s_, (x - cx) * s_ + (y - cy) * c
     return (u / (rx * k)) ** 2 + (v / (ry * k)) ** 2 < 1
-KEEPOUT = [(1690, 1610, 75), (520, 1440, 45), (560, 960, 135)]   # no streets under the landmarks: needle tower, twisted tower, ski mall (same spots as tools/build_city.py)
+KEEPOUT = [(1690, 1610, 75), (520, 1440, 45), (560, 960, 135), (2150, 815, 52)]   # no streets under the landmarks: needle tower, twisted tower, ski mall, LSX garage in Ras Al Khor (same spots as tools/build_city.py)
 def _seg_clear(a, b):
     for kx, ky, kr in KEEPOUT:
         dx, dy = b[0] - a[0], b[1] - a[1]; t = max(0.0, min(1.0, ((kx - a[0]) * dx + (ky - a[1]) * dy) / (dx * dx + dy * dy or 1e-9)))
@@ -245,10 +245,10 @@ for r in roads:
     r["deck"] = [round(e, 2) for e in extra]      # height above the ground (bridge deck) or below (underpass)
 
 SCALE = 0.75          # plan units to game metres: the game city is 2.4 km x 1.7 km (medium size)
-PHASE1_X = 1900       # built first: everything west of this line; roads are blocked there until phase 2
+PHASE1_X = 2320       # built first: everything west of this line; roads are blocked there until phase 2
 plan = {"size": [W, H], "scale": SCALE, "phase1_x": PHASE1_X, "coast": COAST, "roads": roads, "water": water, "levels": levels, "terrain": [[round(terrain(x, y), 1) for x in range(0, W + 1, 50)] for y in range(0, H + 1, 50)],
         "districts": [{"name": d[0], "x": d[1], "y": d[2]} for d in districts] + [{"name": "Palm Jumeirah", "x": PX + 530, "y": PY + 290}],
-        "garage": {"name": "LSXmotorsport", "x": 760, "y": 700}, "landmark": {"name": "Sky Tower", "x": 1700, "y": 1600}}
+        "garage": {"name": "LSXmotorsport", "x": 2150, "y": 797}, "landmark": {"name": "Sky Tower", "x": 1700, "y": 1600}}
 os.makedirs(os.path.join(ROOT, "unity_assets", "city"), exist_ok=True)
 json.dump(plan, open(os.path.join(ROOT, "unity_assets", "city", "plan.json"), "w"), separators=(",", ":"))
 

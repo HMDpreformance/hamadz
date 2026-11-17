@@ -48,6 +48,7 @@ Last update: 2026-11-17
 ## Garage
 
 - The garage is named **LSXmotorsport**.
+- 2026-11-17, Hamad: the LSX garage must be in **Ras Al Khor** (not Al Quoz). Done in the plan: garage beside the Ras Al Khor road, near the lagoon. The built part of the city now reaches east to include Ras Al Khor and Business Bay.
 - It has a dyno.
 - The garage door opens only when the car is close.
 
@@ -59,8 +60,8 @@ Last update: 2026-11-17
 - Roads rise and fall with the land: bridges, flyovers, underpass, hills. Not all on one level.
 - Medium size: not too big, not too small.
 - Build in two halves. First 50% (west side) with the other roads blocked. Then the other 50%.
-- Areas in part 1: Jebel Ali, Dubai Marina, JBR, Palm Jumeirah, Al Barsha, Al Quoz, Jumeirah, Al Wasl, Downtown Dubai, Dubai Hills.
-- Areas in part 2: Business Bay, the Creek, Deira, Ras Al Khor, Nad Al Sheba, the airport.
+- Areas in part 1: Jebel Ali, Dubai Marina, JBR, Palm Jumeirah, Al Barsha, Al Quoz, Jumeirah, Al Wasl, Downtown Dubai, Dubai Hills, and since the garage move also Ras Al Khor, Business Bay and Nad Al Sheba.
+- Areas in part 2: the Creek east side, Deira, the airport.
 
 ## Open questions for Hamad
 

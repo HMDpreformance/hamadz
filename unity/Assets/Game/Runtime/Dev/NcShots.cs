@@ -67,7 +67,7 @@ namespace HMD
                 }
             }
             g.garage.OnEnter = enter;
-            if (fpsN > 0) Debug.Log($"[HMD] nc fps while driving: avg {fpsSum / fpsN:F0}, min {fpsMin:F0} over {fpsN} frames ({(cl.Contains("-uncap") ? "uncapped" : "capped at 60")})");
+            if (fpsN > 0) Debug.Log($"[HMD] nc fps while driving: avg {fpsSum / fpsN:F0}, min {fpsMin:F0} over {fpsN} frames, {fpsSlow} frames under 50 ({(cl.Contains("-uncap") ? "uncapped" : "capped at 60")})");
             Debug.Log($"[HMD] nc drive summary: bumps={bumps} drops={drops} stops={stops} runoffs={offs}");
 
             if (cl.Contains("-ncnostills")) { Debug.Log("[HMD] nc run done (no stills)"); Application.Quit(); yield break; }
@@ -162,7 +162,7 @@ namespace HMD
             Application.Quit();
         }
 
-        float fpsSum, fpsMin = 999; int fpsN;
+        float fpsSum, fpsMin = 999; int fpsN, fpsSlow, fpsSlowLogged;
 
         /// <summary>Static road audit: along every road, raycast down at the centre and near both edges every ~5 m and
         /// report spots where the first thing hit is not asphalt (ground or a kerb poking through, a gap) or where the
@@ -253,7 +253,15 @@ namespace HMD
                 float ang = Vector3.SignedAngle(Vector3.ProjectOnPlane(car.transform.forward, Vector3.up), to, Vector3.up);
                 car.steer = Mathf.Clamp(ang / 18f, -1f, 1f);
                 float v = car.SpeedKmh;
-                { float f0 = 1f / Mathf.Max(0.0001f, Time.unscaledDeltaTime); fpsSum += f0; fpsN++; if (t > 2f) fpsMin = Mathf.Min(fpsMin, f0); }
+                {
+                    float f0 = 1f / Mathf.Max(0.0001f, Time.unscaledDeltaTime); fpsSum += f0; fpsN++;
+                    if (t > 2f)
+                    {
+                        fpsMin = Mathf.Min(fpsMin, f0);
+                        // every frame under 50 fps, with where it happened (is a dip one hitch or a place?)
+                        if (f0 < 50f) { fpsSlow++; if (fpsSlowLogged++ < 40) Debug.Log($"[HMD] nc slow frame {f0:F0} fps on {rd.name} at {V(p)} t {t:F1}"); }
+                    }
+                }
                 car.throttle = v < kmh ? 1f : 0.2f;
                 car.brake = v > kmh + 25f || Mathf.Abs(ang) > 35f && v > 90f ? 0.6f : 0f;
                 maxKmh = Mathf.Max(maxKmh, v);

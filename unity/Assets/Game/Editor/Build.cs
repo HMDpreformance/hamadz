@@ -53,6 +53,8 @@ namespace HMD.EditorTools
                 foreach (var f in Directory.GetFiles(from, pat))
                 {
                     var dst = Path.Combine(to, Path.GetFileName(f));
+                    // models: images moved out to texture files so Android can compress them (GlbTextures)
+                    if (f.EndsWith(".glb", System.StringComparison.OrdinalIgnoreCase)) { GlbTextures.CopyExternalized(f, dst); continue; }
                     if (!File.Exists(dst) || new FileInfo(dst).Length != new FileInfo(f).Length) File.Copy(f, dst, true);
                 }
         }

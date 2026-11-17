@@ -55,8 +55,8 @@ namespace HMD
             g.rig.SetFixed(b22 + new Vector3(-30, 1.7f, City.Block * 0.5f + 7), b22 + new Vector3(-8, 2.5f, City.Block * 0.5f - 3), false);
             yield return new WaitForSeconds(0.6f);
             yield return Shot("04d_bus_stop");
-            Vector3 b30 = City.BlockCenter(3, 0);   // a block with a billboard on its north side
-            g.rig.SetFixed(b30 + new Vector3(-28, 1.7f, City.Block * 0.5f + 8), b30 + new Vector3(9, 8, City.Block * 0.5f), false);
+            Vector3 b30 = City.BlockCenter(0, 0);   // block (0,0): its billboard stands on the north side
+            g.rig.SetFixed(b30 + new Vector3(-16, 1.7f, City.Block * 0.5f + 9), b30 + new Vector3(City.Block * 0.125f, 8, City.Block * 0.5f - 0.5f), false);
             yield return new WaitForSeconds(0.6f);
             yield return Shot("04e_billboard");
 

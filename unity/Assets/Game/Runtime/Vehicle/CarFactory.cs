@@ -115,9 +115,9 @@ namespace HMD
                 Object.DestroyImmediate(well.GetComponent<Collider>());
                 well.name = "Well";
                 well.transform.SetParent(holder, false);
-                well.transform.localPosition = new Vector3((left ? -1 : 1) * Mathf.Max(0.2f, x - tyreW * 0.7f), wpos.y + 0.03f, wpos.z);
+                well.transform.localPosition = new Vector3((left ? -1 : 1) * Mathf.Max(0.2f, x - tyreW * 0.55f), wpos.y + 0.06f, wpos.z);
                 well.transform.localRotation = Quaternion.Euler(0, 0, 90);
-                well.transform.localScale = new Vector3(r * 2.25f, 0.02f, r * 2.25f);
+                well.transform.localScale = new Vector3(r * 2.9f, 0.02f, r * 2.9f);   // covers the whole arch opening, so the street never shows through
                 well.GetComponent<Renderer>().sharedMaterial = wellMat;
             }
 
@@ -176,7 +176,7 @@ namespace HMD
                 Object.DestroyImmediate(q.GetComponent<Collider>());
                 q.name = "TailSprite";
                 q.transform.SetParent(lights, false);
-                q.transform.localPosition = new Vector3(s * halfW * 0.7f, h * 0.55f, -L * 0.5f - 0.02f);
+                q.transform.localPosition = new Vector3(s * halfW * 0.72f, h * 0.64f, -L * 0.5f - 0.02f);   // on the real tail lamps
                 q.transform.localScale = new Vector3(0.38f, 0.16f, 1);
                 var m = Res.Particle(new Color(1f, 0.08f, 0.05f, 0.85f) * 2.2f, Res.SoftDot);
                 var r = q.GetComponent<Renderer>();
@@ -203,7 +203,7 @@ namespace HMD
                         var nrm = FindTex(s, "normalTexture", "_BumpMap");
                         if (tex != null && cfg != null && !string.IsNullOrEmpty(cfg.key) && ColorUtility.TryParseHtmlString(cfg.key, out var key))
                             tex = Repaint.Recolor(tex, key, spec.paint);
-                        var m = Res.Mat(Color.white, 0.86f, 0.2f);
+                        var m = Res.Paint(Color.white);   // clear-coated paint, works with any model texture
                         if (tex != null) Res.SetMainTex(m, tex, Vector2.one);
                         if (nrm != null) { m.SetTexture("_BumpMap", nrm); m.SetFloat("_BumpScale", 0.3f); m.EnableKeyword("_NORMALMAP"); }   // baked normal map is noisy: keep it subtle so panels read smooth
                         // the clear coat: high smoothness, environment reflections on
@@ -270,7 +270,7 @@ namespace HMD
                 var q = GameObject.CreatePrimitive(PrimitiveType.Quad);
                 Object.DestroyImmediate(q.GetComponent<Collider>());
                 q.transform.SetParent(go.transform, false);
-                q.transform.localPosition = new Vector3(s * halfW * 0.7f, h * 0.55f, -L * 0.5f - 0.02f);
+                q.transform.localPosition = new Vector3(s * halfW * 0.72f, h * 0.64f, -L * 0.5f - 0.02f);   // on the real tail lamps
                 q.transform.localScale = new Vector3(0.34f, 0.14f, 1);
                 q.GetComponent<Renderer>().sharedMaterial = TrafficTail;
                 q.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;

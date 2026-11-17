@@ -89,4 +89,5 @@ Tool: `tools/fix_proportions.py <src> <out> <length> <width> <height> real <rear
 
 Hamad asked why the game map did not look like the Higgsfield map picture. Rule: the game map and the real city follow that picture's layout and style as closely as the real roads allow.
 - Done: streets everywhere, blue glowing sea, only highways yellow, Downtown above the E11 near the sea, bigger Palm. The game uses `unity_assets/city/map_full.jpg` and `map_base.jpg`, drawn from the same plan as the roads.
-- Still to do: round highway junctions (cloverleaf look), water inside the Marina, thicker Palm fronds, Jebel Ali port piers, a mountain area in the south.
+- 2026-11-17, Hamad: "still the map looks not perfect, try to fix it more". Done in v3: Palm with five fanned fronds each side and water between them, water basin with piers inside the Marina, sand beach line, highway slip roads drawn, slanted labels, needle tower icon, red skyline title.
+- Still to do: round highway junctions (cloverleaf look), Jebel Ali port piers, a mountain area in the south, more organic streets.

@@ -27,6 +27,9 @@ def coast_y(x): return float(np.interp(x, COAST[:, 0], COAST[:, 1]))
 def ground(X, Z):
     """Natural ground height at a game position (the plan's terrain, with the sea bed north of the coast)."""
     x, y = X / S, Z / S
+    cm, sm_ = math.cos(math.radians(-14)), math.sin(math.radians(-14))        # the Marina's water basin
+    um, vm = (x - 430) * cm - (y - 1330) * sm_, (x - 430) * sm_ + (y - 1330) * cm
+    if (um / 172) ** 2 + (vm / 74) ** 2 < 1: return -3.0
     d = coast_y(x) - y
     if d < 0: return max(-5.0, 1.5 + d * 0.09)
     h = 1.5 + 9.0 * min(1.0, d / 1500.0) ** 1.3
@@ -126,7 +129,7 @@ for hwy in [r for r in roads if r.cls == "highway"]:
             nh = np.array([-th[1], th[0]])
             for d in (-1, 1):
                 sa = sh + d * 272
-                if sa < 10 or sa > hwy.s[-1] - 10 or np.interp(sa, hwy.s, hwy.deck) > 0.3: continue
+                if sa < 90 or sa > hwy.s[-1] - 90 or np.interp(sa, hwy.s, hwy.deck) > 0.3: continue
                 A = hwy.at(sa)
                 for lat in (-1, 1):
                     cands = [so + e * 70 for e in (-1, 1) if 5 < so + e * 70 < o.s[-1] - 5]
@@ -394,7 +397,7 @@ for iz in range(nz):
             idx = np.array(idx); d = np.linalg.norm(allP[idx] - [X, Z], axis=1) - allE[idx]
             lowroad = allD[idx] < 0.5
             cap = np.where(lowroad, allH[idx] - 0.15, allH[idx] - 1.6)        # never above a road or a ramp
-            flat = 26.0 if g < 0.5 else 7.0              # in the sea the road carries a strip of land (the Palm)
+            flat = 20.0 if g < 0.5 else 7.0              # in the sea the road carries a strip of land (the Palm)
             run = 12.0 if g < 0.5 else 26.0
             near = d < flat
             if near.any(): g = min(g, cap[near].min()) if not (near & lowroad).any() else cap[near & lowroad].min()
@@ -502,7 +505,7 @@ landmarks = []
 def landmark(kind, px, py, w, d, h):
     X, Z = px * S, py * S
     landmarks.append({"kind": kind, "x": round(X, 1), "z": round(Z, 1), "y": round(max(th(X, Z), 0.0), 2), "w": w, "d": d, "h": h})
-landmark("needle_tower", 1700, 1600, 60, 60, 420)        # the tallest tower, inside the Downtown ring
+landmark("needle_tower", 1690, 1610, 60, 60, 420)        # the tallest tower, inside the Downtown ring
 landmark("sail_hotel", 1420, 1900, 60, 40, 160)           # on its own island off Jumeirah
 landmark("arch_hotel", 620, 2262, 150, 40, 95)            # at the top of the Palm crescent
 landmark("big_wheel", 250, 1720, 20, 120, 125)            # observation wheel off JBR

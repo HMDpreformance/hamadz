@@ -64,15 +64,15 @@ road("Nad Al Sheba", "main", [(1800, 640), (1900, 420), (2100, 250), (2440, 330)
 road("Ras Al Khor", "main", [(2000, 860), (2150, 760), (2400, 620)])
 # the Palm: trunk from the Beach Road out to sea, fronds, and the crescent
 PX, PY = 620, 1700
-road("Palm Trunk", "main", [(PX, PY - 60), (PX + 4, PY + 120), (PX, PY + 300), (PX, PY + 505)])
-# like the real Palm: a long trunk, 16 fronds (8 each side) that curve up like palm leaves and together fill a
-# round shape, and a crescent breakwater around them with the arch hotel at the top
-for i_ in range(8):
-    y0 = PY + 178 + 46 * i_; th_ = math.radians(-24 + i_ * 14.6)
+road("Palm Trunk", "main", [(PX, PY - 60), (PX + 4, PY + 120), (PX, PY + 300), (PX, PY + 440)])
+# the inside of the Palm follows the Higgsfield map picture: fronds fan out from the upper trunk like a palm tree,
+# the low ones droop down and out, the middle ones go straight out, the top ones sweep up. (dx, y) in picture pixels.
+_K = 0.69
+for o_, m_, t_ in (((0, 345), (-120, 385), (-195, 465)), ((0, 325), (-150, 350), (-260, 425)), ((0, 300), (-180, 305), (-310, 360)),
+                   ((0, 255), (-190, 250), (-335, 270)), ((0, 205), (-180, 180), (-305, 178)), ((0, 160), (-120, 110), (-200, 92)),
+                   ((0, 110), (-50, 75), (-82, 58))):
     for sg in (1, -1):
-        tip = (PX + sg * 232 * math.cos(th_), PY + 322 + 196 * math.sin(th_))
-        mx, my = (PX + tip[0]) / 2, (y0 + tip[1]) / 2; dx, dy = tip[0] - PX, tip[1] - y0; ln = math.hypot(dx, dy)
-        road("Frond", "street", [(PX, y0), (mx + sg * dy / ln * 0.13 * ln, my - abs(dx) / ln * 0.13 * ln), tip])   # bowed, tip swept up
+        road("Frond", "street", [(PX - sg * q[0] * _K, PY + 318 + (270 - q[1]) * _K) for q in (o_, m_, t_)])
 road("Crescent", "street", ring(PX, PY + 318, 305, 250, 0, 48, -38, 218), smooth=False)
 
 # districts: local street grids, turned and clipped to an ellipse
@@ -266,7 +266,7 @@ PALM = [r for r in roads if r["name"] in ("Palm Trunk", "Frond", "Crescent")]
 def shore(dr, col, grow):
     dr.polygon(land, fill=col)
     if grow: dr.line(land[:len(COAST)], fill=col, width=grow)
-    for r in PALM: fat(dr, r["pts"], col, (24 if r["name"] == "Frond" else 56) + grow)
+    for r in PALM: fat(dr, r["pts"], col, (27 if r["name"] == "Frond" else 56) + grow)
 glow = Image.new("RGB", im.size, SEA); shore(ImageDraw.Draw(glow), (70, 190, 255), 44)
 im = glow.filter(ImageFilter.GaussianBlur(16))          # light-blue glow along every shore
 d = ImageDraw.Draw(im)

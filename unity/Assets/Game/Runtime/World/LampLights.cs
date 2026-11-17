@@ -32,6 +32,45 @@ namespace HMD
                 l.shadows = LightShadows.None;
                 pool.Add(l);
             }
+            Halos();
+        }
+
+        /// <summary>A soft glow sprite around every lamp head (the wet air catching the light). One static particle each.</summary>
+        void Halos()
+        {
+            var heads = city.lampHeads;
+            if (heads == null || heads.Count == 0) return;
+            var go = new GameObject("LampHalos");
+            go.transform.SetParent(transform, false);
+            var ps = go.AddComponent<ParticleSystem>();
+            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            var main = ps.main;
+            main.loop = false; main.playOnAwake = false;
+            main.maxParticles = heads.Count;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.startLifetime = 1e6f;
+            main.startSpeed = 0f;
+            main.simulationSpeed = 0.0001f;   // effectively frozen, but still "playing" so bounds and culling stay valid
+            main.cullingMode = ParticleSystemCullingMode.AlwaysSimulate;
+            var em = ps.emission; em.enabled = false;
+            var shape = ps.shape; shape.enabled = false;
+            var r = go.GetComponent<ParticleSystemRenderer>();
+            r.renderMode = ParticleSystemRenderMode.Billboard;
+            r.sharedMaterial = Res.Particle(new Color(1f, 0.72f, 0.42f, 0.22f), Res.SoftDot);
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            r.maxParticleSize = 0.5f;
+            var parts = new ParticleSystem.Particle[heads.Count];
+            for (int i = 0; i < heads.Count; i++)
+            {
+                parts[i].position = heads[i] + Vector3.down * 0.15f;
+                parts[i].startSize = 3.4f;
+                parts[i].startColor = new Color(1f, 0.75f, 0.45f, 0.22f);
+                parts[i].remainingLifetime = 1e6f;
+                parts[i].startLifetime = 1e6f;
+            }
+            ps.Play();
+            ps.SetParticles(parts, parts.Length);
         }
 
         void Update()

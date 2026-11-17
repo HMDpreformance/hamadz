@@ -94,6 +94,9 @@ namespace HMD
             }
             BuildVolume();
 #endif
+            // the wet road mirror
+            if (PlanarReflection.Wanted)
+                new GameObject("PlanarReflection").AddComponent<PlanarReflection>().Setup(cam);
         }
 
         static float PickRenderScale()
@@ -112,27 +115,47 @@ namespace HMD
             vol.isGlobal = true;
             vol.priority = 1;
             var profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            // soft wide bloom: lights glow into the wet air without blowing out
             var bloom = profile.Add<Bloom>(true);
-            bloom.intensity.Override(IsMobile ? 0.9f : 1.15f);
-            bloom.threshold.Override(1.0f);
-            bloom.scatter.Override(0.72f);
+            bloom.intensity.Override(IsMobile ? 0.8f : 0.95f);
+            bloom.threshold.Override(1.1f);
+            bloom.scatter.Override(0.78f);
+            bloom.tint.Override(new Color(1f, 0.93f, 0.88f));
             bloom.highQualityFiltering.Override(!IsMobile);
             var tone = profile.Add<Tonemapping>(true);
             tone.mode.Override(TonemappingMode.ACES);
             var ca = profile.Add<ColorAdjustments>(true);
-            ca.postExposure.Override(0.75f);
-            ca.contrast.Override(14f);
-            ca.saturation.Override(8f);
+            ca.postExposure.Override(0.7f);
+            ca.contrast.Override(18f);
+            ca.saturation.Override(12f);
+            // street-racer night grade: teal shadows, warm orange highlights
+            var split = profile.Add<SplitToning>(true);
+            nightGrade = split;
+            split.shadows.Override(new Color(0.18f, 0.48f, 0.55f));
+            split.highlights.Override(new Color(0.85f, 0.55f, 0.3f));
+            split.balance.Override(-15f);
+            var smh = profile.Add<ShadowsMidtonesHighlights>(true);
+            smh.shadows.Override(new Vector4(0.92f, 1.0f, 1.08f, 0f));
+            smh.highlights.Override(new Vector4(1.06f, 1.0f, 0.94f, 0f));
             var wb = profile.Add<WhiteBalance>(true);
-            wb.temperature.Override(-8f);
-            wb.tint.Override(6f);
+            wb.temperature.Override(-4f);
+            wb.tint.Override(4f);
             var vig = profile.Add<Vignette>(true);
-            vig.intensity.Override(0.28f);
-            vig.smoothness.Override(0.45f);
+            vig.intensity.Override(0.32f);
+            vig.smoothness.Override(0.5f);
             if (!IsMobile)
             {
                 var ab = profile.Add<ChromaticAberration>(true);
-                ab.intensity.Override(0.06f);
+                ab.intensity.Override(0.05f);
+                var mb = profile.Add<MotionBlur>(true);
+                mb.mode.Override(MotionBlurMode.CameraOnly);
+                mb.quality.Override(MotionBlurQuality.Medium);
+                mb.intensity.Override(0.16f);
+                mb.clamp.Override(0.04f);
+                var grain = profile.Add<FilmGrain>(true);
+                grain.type.Override(FilmGrainLookup.Thin1);
+                grain.intensity.Override(0.12f);
+                grain.response.Override(0.85f);
             }
             vol.sharedProfile = profile;
         }
@@ -146,6 +169,16 @@ namespace HMD
             if (++probeFrame % (IsMobile ? 6 : 2) == 0) probe.RenderProbe();
         }
 
-        public void SetProbeActive(bool v) { if (probe) probe.gameObject.SetActive(v); }
+#if HMD_URP
+        SplitToning nightGrade;
+#endif
+        public void SetProbeActive(bool v)
+        {
+            if (probe) probe.gameObject.SetActive(v);
+#if HMD_URP
+            if (nightGrade != null) nightGrade.active = v;   // teal/orange street grade outside, neutral white light in the workshop
+#endif
+            if (PlanarReflection.I) PlanarReflection.I.SetActive(v);   // no road mirror needed inside the workshop
+        }
     }
 }

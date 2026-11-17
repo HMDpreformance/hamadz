@@ -72,6 +72,8 @@ namespace HMD
             medianMat = Res.TexMat("Tex/granite_tile", Vector2.one / 2f, 0.45f, 0f, new Color(0.55f, 0.52f, 0.5f));
             lineWhite = Res.Mat(new Color(0.85f, 0.85f, 0.82f), 0.55f);
             lineYellow = Res.Mat(new Color(0.9f, 0.7f, 0.1f), 0.55f);
+            // wet look: road, paint and pavement mirror the city (WetRoad shader + planar reflection)
+            Res.MakeWet(asphalt); Res.MakeWet(lineWhite); Res.MakeWet(lineYellow); Res.MakeWet(walkMat);
             var frond = Res.Tex("Gen/frond");
             palmLeaf = Res.Mat(new Color(0.55f, 0.65f, 0.4f), 0.3f);
             if (frond != null)

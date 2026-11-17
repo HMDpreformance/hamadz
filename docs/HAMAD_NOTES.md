@@ -171,3 +171,4 @@ Retest on the rebuilt city (a24f9bc), 2026-11-17 evening: underpass passes both 
 - Hamad 01:32: phone is a Galaxy S21. The game will go to iOS users later too. Do not lose the graphics. 30 to 60 FPS is fine.
 - Hamad 01:33: "if things far away why u draw it from very far" (do not draw far small things on the phone).
 - Hamad 01:34: light rain all the time, streets wet from rain and reflecting, like before.
+- Hamad 01:37: where are the old-school loading screen (like MC3/NFS), the intro and the radio music? Keep the girl voice for races/story for later.

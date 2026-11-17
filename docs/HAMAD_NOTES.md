@@ -175,3 +175,4 @@ Retest on the rebuilt city (a24f9bc), 2026-11-17 evening: underpass passes both 
 - Hamad 01:38: when you enter a different place, show its name small in the corner, then it disappears.
 - Hamad 01:40: loading screen music similar to the Midnight Club 3 loading music. 01:41: use mid-2000s old-school music for the game.
 - Hamad 01:48: did not like the loading screen music, Block Shaker, Main Theme, Night Rollin. Replaced; he picks loading music A, B or C.
+- Hamad 02:01: check that the NOS works like it is supposed to.

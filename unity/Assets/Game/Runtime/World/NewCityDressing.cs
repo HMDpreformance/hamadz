@@ -47,13 +47,16 @@ namespace HMD
             }
             // keep the LSX building (door at json.garage, building +Z of the door, 34 x 26 m) clear of lots
             Vector3 g = nc.Garage;
-            int skipped = 0;
+            int skipped = 0, onRoad = 0;
+            Physics.SyncTransforms();
             foreach (var l in lots)
             {
                 float rr = Mathf.Max(l.w, l.d) * 0.5f;
                 if (l.p.x + rr > g.x - 19f && l.p.x - rr < g.x + 19f && l.p.z + rr > g.z - 14f && l.p.z - rr < g.z + 30f) { skipped++; continue; }
+                if (OnRoad(l)) { onRoad++; continue; }
                 Building(Cell(l.p), l);
             }
+            Landmarks.Clear(); foreach (var m in marks) Landmarks.Add((m.kind, m.p, m.h));
             foreach (var m in marks) Landmark(Cell(m.p), m);
             // lamps and trees in their own meshes without colliders (thin poles must never stop the car)
             var props = new Dictionary<Vector2Int, MeshBuilder>();
@@ -72,8 +75,29 @@ namespace HMD
                 var go = MeshBuilder.Spawn("Dress_" + kv.Key.x + "_" + kv.Key.y, kv.Value.Build("dress"), mats, transform, true, true);
                 go.isStatic = true; n++;
             }
-            Debug.Log($"[HMD] newcity dressing: {lots.Count - skipped} buildings ({skipped} cleared for LSX), {marks.Count} landmarks, {lamps.Count} lamps, {trees.Count} trees, {n} cells");
+            Debug.Log($"[HMD] newcity dressing: {lots.Count - skipped - onRoad} buildings ({skipped} cleared for LSX, {onRoad} skipped: footprint on a road or pavement), {marks.Count} landmarks, {lamps.Count} lamps, {trees.Count} trees, {n} cells");
         }
+
+        /// <summary>True when the footprint (corners, edge middles and centre, 1 m in) lies over asphalt or pavement.</summary>
+        static bool OnRoad(Lot l)
+        {
+            var q = Quaternion.Euler(0, l.yaw, 0);
+            float hx = Mathf.Max(0.5f, l.w * 0.5f - 1f), hz = Mathf.Max(0.5f, l.d * 0.5f - 1f);
+            if (l.style == "villa") { hx = l.w * 0.3f; hz = l.d * 0.28f; }   // villas use the middle of the lot
+            for (int ix = -1; ix <= 1; ix++)
+                for (int iz = -1; iz <= 1; iz++)
+                {
+                    Vector3 p = l.p + q * new Vector3(ix * hx, 0, iz * hz);
+                    if (Physics.Raycast(p + Vector3.up * 30f, Vector3.down, out var hit, 60f))
+                    {
+                        string n = hit.collider.name.ToLowerInvariant();
+                        if (n.Contains("asphalt") || n.Contains("sidewalk")) return true;
+                    }
+                }
+            return false;
+        }
+
+        public static readonly List<(string kind, Vector3 p, float h)> Landmarks = new List<(string, Vector3, float)>();
 
         // ---------------------------------------------------------------- parsing
         static float F(string s) => float.Parse(s, CultureInfo.InvariantCulture);

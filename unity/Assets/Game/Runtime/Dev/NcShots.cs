@@ -95,7 +95,15 @@ namespace HMD
                 Vector3 wheel = new Vector3(187.5f, 0f, 1290f);
                 Cam(S(wheel.x + 90, wheel.z - 120) + Vector3.up * 6f, wheel + Vector3.up * 50f); yield return Shot("nc_13_jbr_beach");
                 Vector3 arch = new Vector3(465f, 1.35f, 1696.5f);
-                Cam(arch + new Vector3(-60, 90, -260), arch + Vector3.up * 30f); yield return Shot("nc_14_palm");
+                foreach (var lm in NewCityDressing.Landmarks) if (lm.kind == "arch_hotel") arch = lm.p;
+                Vector3 palmC = arch + new Vector3(0, -arch.y, -280f);   // fronds centre: south of the arch hotel on the crescent
+                Vector3 mid = (palmC + arch) * 0.5f; mid.y = 0;
+                // from above the trunk, looking along the fronds to the arch hotel on the crescent
+                Vector3 toArch = arch - palmC; toArch.y = 0; toArch = toArch.sqrMagnitude > 1 ? toArch.normalized : Vector3.forward;
+                Cam(palmC - toArch * 260f + Vector3.up * 210f, mid + Vector3.up * 10f); yield return Shot("nc_14_palm");
+                Cam(palmC + new Vector3(0, 620f, -240f), palmC + Vector3.forward * 40f); yield return Shot("nc_14b_palm_top");
+                Cam(NewCity.Surface(mid) + Vector3.up * 1.8f - toArch * 20f, arch + Vector3.up * 40f); yield return Shot("nc_14c_palm_road");
+                Debug.Log($"[HMD] palm: centre {palmC} arch {arch}");
                 Cam(S(gar.x - 60, gar.z - 40) + Vector3.up * 2f, gar + new Vector3(60, 5, 30)); yield return Shot("nc_15_al_quoz");
                 Vector3 hl = new Vector3(1125f, 0, 232.5f);
                 Cam(S(hl.x - 70, hl.z - 70) + Vector3.up * 18f, S(hl.x, hl.z)); yield return Shot("nc_16_hills_villas");

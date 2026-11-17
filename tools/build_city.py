@@ -462,6 +462,7 @@ for R in roads:
 # terrain: the ground is shaped to the roads (just under them, so no step shows beside the road), natural beyond, sea bed in the north
 allP = np.concatenate([r.P for r in roads]); allH = np.concatenate([r.h for r in roads]); allD = np.concatenate([r.deck for r in roads])
 allE = np.concatenate([np.full(len(r.P), r.w / 2 + (WALK if r.cls in ("main", "street") else 0)) for r in roads])
+allM = np.concatenate([np.full(len(r.P), 12.0 if r.cls == "highway" else 5.0 if r.cls == "ramp" else 1.5) for r in roads])
 tree = cKDTree(allP)
 G = 8.0
 x0, x1, z0, z1 = -80.0, PX * S + 60.0, -80.0, plan["size"][1] * S + 80.0
@@ -551,7 +552,7 @@ def free(cx, cz, w, d, t, n, own):
             idx = tree.query_ball_point(p, 26.0)
             if idx:
                 idx = np.array(idx)
-                if (np.linalg.norm(allP[idx] - p, axis=1) < allE[idx] + 1.5).any(): return False
+                if (np.linalg.norm(allP[idx] - p, axis=1) < allE[idx] + allM[idx]).any(): return False   # 12 m clear of a highway edge, 5 m of a ramp
     rad = (min(w, d) * 0.55 + max(w, d) * 0.5) / 2 * 1.05
     gx, gz = int(cx // 40), int(cz // 40)
     for i in range(gx - 2, gx + 3):

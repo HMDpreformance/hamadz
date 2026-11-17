@@ -94,7 +94,17 @@ namespace HMD.EditorTools
                 }
                 if ((path.Contains("/Art/") || name == "frond" || name.StartsWith("lsx")) && !ti.alphaIsTransparency) { ti.alphaIsTransparency = true; changed = true; }
                 if (ti.maxTextureSize != 2048) { ti.maxTextureSize = 2048; changed = true; }
-                if (ti.mipmapEnabled == false && !path.Contains("/Art/")) { ti.mipmapEnabled = true; changed = true; }
+                bool gauge = name.StartsWith("gauge_");
+                if (gauge)
+                {
+                    // HUD dials: full quality, no mips, clean alpha edges
+                    if (ti.mipmapEnabled) { ti.mipmapEnabled = false; changed = true; }
+                    if (ti.textureCompression != TextureImporterCompression.Uncompressed) { ti.textureCompression = TextureImporterCompression.Uncompressed; changed = true; }
+                    if (!ti.alphaIsTransparency) { ti.alphaIsTransparency = true; changed = true; }
+                    if (!ti.sRGBTexture) { ti.sRGBTexture = true; changed = true; }
+                    if (ti.filterMode != FilterMode.Bilinear) { ti.filterMode = FilterMode.Bilinear; changed = true; }
+                }
+                else if (ti.mipmapEnabled == false && !path.Contains("/Art/")) { ti.mipmapEnabled = true; changed = true; }
                 if (ti.anisoLevel < 4) { ti.anisoLevel = 8; changed = true; }
                 if (changed) ti.SaveAndReimport();
             }

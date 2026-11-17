@@ -40,9 +40,12 @@ namespace HMD
             ri.raycastTarget = false;
             mapImg = ri;
             garageIcon = UIKit.Img("Garage", rotor, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(46, 46), Color.white, WrenchSprite).rectTransform;
-            var ring = UIKit.Img("Ring", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(Size + 14, Size + 14), new Color(1f, 0.82f, 0.1f, 0.9f), UIKit.RingSprite);
+            // chrome outer ring + flame-blue inner ring, matching the blue flame dials
+            var chrome = UIKit.Img("Chrome", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(Size + 20, Size + 20), new Color(0.82f, 0.86f, 0.92f, 0.95f), UIKit.RingSprite);
+            chrome.raycastTarget = false;
+            var ring = UIKit.Img("Ring", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(Size + 14, Size + 14), new Color(0.15f, 0.55f, 1f, 0.95f), UIKit.RingSprite);
             ring.raycastTarget = false;
-            var me = UIKit.Img("Player", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(30, 34), new Color(1f, 0.85f, 0.1f), UIKit.ArrowSprite);
+            var me = UIKit.Img("Player", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(30, 34), new Color(0.55f, 0.85f, 1f), UIKit.ArrowSprite);
             me.raycastTarget = false;
             edgeArrow = UIKit.Img("GarageArrow", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(34, 34), new Color(1f, 0.15f, 0.12f), UIKit.ArrowSprite).rectTransform;
             edgeArrow.GetComponent<Image>().raycastTarget = false;

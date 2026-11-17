@@ -157,11 +157,7 @@ namespace HMD
             {
                 var ab = profile.Add<ChromaticAberration>(true);
                 ab.intensity.Override(0.05f);
-                var mb = profile.Add<MotionBlur>(true);
-                mb.mode.Override(MotionBlurMode.CameraOnly);
-                mb.quality.Override(MotionBlurQuality.Medium);
-                mb.intensity.Override(0.16f);
-                mb.clamp.Override(0.04f);
+                // no motion blur: URP only has camera-only blur, which smears the player car (it moves with the camera)
                 var grain = profile.Add<FilmGrain>(true);
                 grain.type.Override(FilmGrainLookup.Thin1);
                 grain.intensity.Override(0.12f);

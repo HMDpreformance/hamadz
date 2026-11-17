@@ -117,7 +117,7 @@ namespace HMD
                 state = State.Drive;
                 car.inputLocked = false;
                 hud.SetVisible(true);
-                hud.SetTouchVisible(Application.isMobilePlatform || Input.touchSupported);
+                hud.SetTouchVisible(Application.isMobilePlatform || Input.touchSupported || System.Environment.CommandLine.Contains("-touchui"));
             };
             rig.StartIntro();
             yield return Fade(1, 0, 1.2f);

@@ -79,6 +79,7 @@ namespace HMD
                 fwd = Vector3.Slerp(fwd, v.normalized, 0.35f).normalized;
             }
             float dist = Mathf.Lerp(6.2f, 7.4f, speed / 220f);
+            dist *= Mathf.Max(1f, CarLen() / 4.4f);
             float height = Mathf.Lerp(2.0f, 1.75f, speed / 220f);
             Vector3 want = target.position - fwd * dist + Vector3.up * height;
             transform.position = snap ? want : Vector3.SmoothDamp(transform.position, want, ref vel, 0.09f);
@@ -89,6 +90,8 @@ namespace HMD
         }
 
         /// <summary>Starts low behind the car at the rear quarter (tail lights, exhaust), circles slowly, then settles behind it.</summary>
+        float CarLen() { var c = target ? target.GetComponent<CarController>() : null; return c != null && c.spec != null ? c.spec.length : 4.4f; }
+
         void Intro(float dt)
         {
             introT += dt;
@@ -97,8 +100,10 @@ namespace HMD
             float e = Mathf.SmoothStep(0, 1, t);
             // angle measured from straight behind the car: start at 35 deg off the rear, end at 0
             float ang = Mathf.Lerp(38f, 0f, e);
-            float dist = Mathf.Lerp(4.2f, 6.4f, e);
-            float h = Mathf.Lerp(0.55f, 2.0f, e);
+            // scaled to the car: a long, tall pickup needs the camera further back than a coupe
+            float size = Mathf.Max(1f, CarLen() / 4.4f);
+            float dist = Mathf.Lerp(4.2f, 6.4f, e) * size;
+            float h = Mathf.Lerp(0.55f, 2.0f, e) * Mathf.Lerp(1f, size, 0.7f);
             Vector3 back = -target.forward;
             Vector3 dir = Quaternion.Euler(0, ang, 0) * back;
             transform.position = target.position + dir * dist + Vector3.up * h;

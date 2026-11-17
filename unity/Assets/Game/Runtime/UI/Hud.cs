@@ -40,10 +40,10 @@ namespace HMD
             var root = canvas.transform;
 
             // FPS: top middle
-            fps = UIKit.Label("FPS", root, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -14), new Vector2(240, 44), "FPS --", 34, new Color(0.6f, 1f, 0.6f));
+            fps = UIKit.Label("FPS", root, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -14), new Vector2(240, 44), "FPS --", 30, new Color(0.78f, 0.93f, 1f), TextAnchor.MiddleCenter, Res.TitleFont);
 
             // GARAGE button top-right
-            UIKit.Btn("GarageBtn", root, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-28, -24), new Vector2(250, 86), "GARAGE", () => OnGarage?.Invoke(), new Color(0.95f, 0.1f, 0.1f), 40);
+            UIKit.Btn("GarageBtn", root, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-28, -24), new Vector2(250, 86), "GARAGE", () => OnGarage?.Invoke(), new Color(0.24f, 0.63f, 1f), 40);
 
             // minimap
             map = gameObject.AddComponent<Minimap>();
@@ -75,11 +75,14 @@ namespace HMD
             gear = UIKit.Label("Gear", gb.transform, mid, mid, Vector2.zero, new Vector2(72, 72), "1", 46, ice, TextAnchor.MiddleCenter, Res.TitleFont);
             gear.GetComponent<Shadow>().enabled = false;
             // nitro bar under the speedo
-            var nb = UIKit.Img("NitroBg", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-60, 330), new Vector2(290, 16), new Color(0, 0, 0, 0.5f), UIKit.RoundedSprite);
+            // thin chrome frame around a night-blue track, flame-blue fill (same set as the dials)
+            var nframe = UIKit.Img("NitroFrame", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-56, 324), new Vector2(298, 24), new Color(0.82f, 0.86f, 0.92f, 0.95f), UIKit.RoundedSprite);
+            nframe.type = Image.Type.Sliced;
+            var nb = UIKit.Img("NitroBg", nframe.transform, mid, mid, Vector2.zero, new Vector2(292, 18), new Color(0.01f, 0.03f, 0.09f, 0.95f), UIKit.RoundedSprite);
             nb.type = Image.Type.Sliced;
-            nitroFill = UIKit.Img("Nitro", nb.transform, new Vector2(0, 0.5f), new Vector2(0, 0.5f), Vector2.zero, new Vector2(290, 16), new Color(0.1f, 0.75f, 1f), Res.White);
+            nitroFill = UIKit.Img("Nitro", nb.transform, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(2, 0), new Vector2(288, 12), flameBlue, Res.White);
             nitroFill.type = Image.Type.Filled; nitroFill.fillMethod = Image.FillMethod.Horizontal;
-            UIKit.Label("NitroLbl", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-360, 322), new Vector2(120, 30), "NOS", 26, new Color(0.4f, 0.85f, 1f));
+            UIKit.Label("NitroLbl", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-362, 320), new Vector2(110, 32), "NOS", 28, ice, TextAnchor.MiddleRight, Res.TitleFont);
 
             BuildTouch(root);
         }
@@ -94,8 +97,8 @@ namespace HMD
             UIKit.Hold("Right", t, Vector2.zero, Vector2.zero, new Vector2(270, 36), new Vector2(200, 200), "▶", v => PlayerInput.TouchRight = v, white);
             UIKit.Hold("Gas", t, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-40, 36), new Vector2(230, 230), "GAS", v => PlayerInput.TouchGas = v, new Color(0.2f, 1f, 0.35f));
             UIKit.Hold("Brake", t, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-300, 36), new Vector2(190, 190), "BRAKE", v => PlayerInput.TouchBrake = v, new Color(1f, 0.25f, 0.2f));
-            UIKit.Hold("Nitro", t, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-420, 250), new Vector2(150, 150), "NOS", v => PlayerInput.TouchNitro = v, new Color(0.2f, 0.7f, 1f));
-            UIKit.Hold("Handbrake", t, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-520, 60), new Vector2(150, 150), "E-BRAKE", v => PlayerInput.TouchHandbrake = v, new Color(1f, 0.7f, 0.1f));
+            UIKit.Hold("Nitro", t, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-600, 250), new Vector2(150, 150), "NOS", v => PlayerInput.TouchNitro = v, new Color(0.2f, 0.7f, 1f));
+            UIKit.Hold("Handbrake", t, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-540, 50), new Vector2(150, 150), "E-BRK", v => PlayerInput.TouchHandbrake = v, new Color(1f, 0.7f, 0.1f));
         }
 
         public void SetVisible(bool v) { if (canvas) canvas.gameObject.SetActive(v); }
@@ -109,7 +112,7 @@ namespace HMD
             {
                 float f = fpsFrames / Mathf.Max(0.001f, fpsAccum);
                 fps.text = "FPS " + Mathf.RoundToInt(f);
-                fps.color = f >= 50 ? new Color(0.6f, 1f, 0.6f) : f >= 30 ? new Color(1f, 0.9f, 0.4f) : new Color(1f, 0.4f, 0.35f);
+                fps.color = f >= 50 ? new Color(0.78f, 0.93f, 1f) : f >= 30 ? new Color(1f, 0.9f, 0.4f) : new Color(1f, 0.4f, 0.35f);
                 fpsTimer = 0; fpsFrames = 0; fpsAccum = 0;
             }
             if (car == null) return;

@@ -117,6 +117,7 @@ namespace HMD
                 Res.Glow(new Color(1f, 0.1f, 0.55f), 5f), Res.Glow(new Color(0.1f, 0.85f, 1f), 5f),
                 Res.Glow(new Color(1f, 0.55f, 0.05f), 5f), Res.Glow(new Color(0.55f, 0.2f, 1f), 5f),
                 Res.Glow(new Color(0.2f, 1f, 0.45f), 4f), Res.Glow(new Color(1f, 0.95f, 0.85f), 4f),
+                Res.Glow(new Color(1f, 0.03f, 0.02f), 7f),   // last: red aircraft warning lights
             };
             // tower skins: photo facades with lit windows (generated for the game), one repeat = ~10 floors
             var tn = new[] { "office", "resi", "black", "hotel", "fins", "stone" };
@@ -135,9 +136,9 @@ namespace HMD
             }
             towers = tl.ToArray(); towerTile = tt.ToArray();
 
-            glassTower = Res.Glass(new Color(0.12f, 0.2f, 0.3f, 1f), 0.96f);
+            glassTower = Res.Mat(new Color(0.12f, 0.17f, 0.24f), 0.88f, 0.8f);   // opaque mirror glass: reflects the city via the camera probe
             glassTower.SetFloat("_Metallic", 0.85f);
-            Res.SetEmission(glassTower, new Color(0.25f, 0.5f, 0.85f) * 0.15f);
+            Res.SetEmission(glassTower, new Color(0.25f, 0.5f, 0.85f) * 0.05f);
             glassDark = Res.Mat(new Color(0.05f, 0.07f, 0.09f), 0.95f, 0.9f);
             roofMat = Res.TexMat("Tex/concrete_panels", Vector2.one / 4f, 0.3f, 0f, new Color(0.5f, 0.5f, 0.5f));
             podiumMat = Res.TexMat("Tex/exterior_wall_cladding", Vector2.one / 3f, 0.5f, 0f, new Color(0.85f, 0.82f, 0.78f));
@@ -286,12 +287,36 @@ namespace HMD
                 float tiers = 1 + Ri(3);
                 float th = rest / tiers;
                 Vector3 s = upper;
-                int skin = towers.Length > 0 ? Ri(towers.Length) : -1;
+                // about a third are mirror-glass towers (they reflect the city through the camera probe), the rest photo skins
+                int skin = towers.Length > 0 && R() > 0.32f ? Ri(towers.Length) : -1;
+                bool fins = skin >= 0 && R() < 0.45f;
+                Vector3 topS = upper;
                 for (int k = 0; k < tiers; k++)
                 {
                     Vector3 tc = ctr + Vector3.up * (podiumH + th * k + th * 0.5f);
                     if (skin >= 0) b.Sub(TowerSlot(skin)).Box(tc, new Vector3(s.x, th, s.z), towerTile[skin], true, true);
-                    else b.Sub(R() < 0.8f ? S_GLASS : S_GLASSDARK).Box(tc, new Vector3(s.x, th, s.z), 4f, true, false);
+                    else
+                    {
+                        b.Sub(S_GLASS).Box(tc, new Vector3(s.x, th, s.z), 4f, true, false);
+                        // dark mullions every 1.5 m and a thin lit edge every floor, so the mirror reads as a facade
+                        var edge = NeonSlot(5);
+                        for (float y = 3.5f; y < th - 0.5f; y += 3.5f)
+                            b.Sub(S_GLASSDARK).Box(tc + Vector3.up * (y - th * 0.5f), new Vector3(s.x + 0.12f, 0.18f, s.z + 0.12f), 1f, true, true);
+                        if (R() < 0.6f)
+                            for (float y = 7f; y < th - 0.5f; y += 7f)
+                                b.Sub(edge).Box(tc + Vector3.up * (y - th * 0.5f + 0.12f), new Vector3(s.x + 0.16f, 0.05f, s.z + 0.16f), 1f, true, true);
+                    }
+                    // vertical fins on the lower tier of some towers: deep shadow lines that break the flat box
+                    if (fins && k == 0)
+                    {
+                        for (float fx = -s.x * 0.5f + 1.5f; fx < s.x * 0.5f - 1f; fx += 2.4f)
+                            for (int sz = -1; sz <= 1; sz += 2)
+                                b.Sub(S_GLASSDARK).Box(tc + new Vector3(fx, 0, sz * (s.z * 0.5f + 0.3f)), new Vector3(0.28f, th, 0.6f), 4f, true, true);
+                        for (float fz = -s.z * 0.5f + 1.5f; fz < s.z * 0.5f - 1f; fz += 2.4f)
+                            for (int sx = -1; sx <= 1; sx += 2)
+                                b.Sub(S_GLASSDARK).Box(tc + new Vector3(sx * (s.x * 0.5f + 0.3f), 0, fz), new Vector3(0.6f, th, 0.28f), 4f, true, true);
+                    }
+                    topS = s;
                     // roof slab + parapet on every setback, so the steps read as real terraces
                     b.Sub(S_ROOF).Box(tc + Vector3.up * (th * 0.5f + 0.25f), new Vector3(s.x + 0.6f, 0.5f, s.z + 0.6f), 4f, true, false);
                     // corner piers give the tower some depth
@@ -310,10 +335,29 @@ namespace HMD
                 Vector3 last = s / (0.72f + 0.075f);
                 b.Sub(S_ROOF).Box(top + Vector3.up * 1.6f, new Vector3(last.x * 0.45f, 3.2f, last.z * 0.45f), 4f, true, false);
                 b.Sub(NeonSlot(Ri(neon.Length))).Box(top + Vector3.up * 3.4f, new Vector3(last.x * 0.47f, 0.35f, last.z * 0.47f), 1f, true, false);
+                int red = NeonSlot(neon.Length - 1);
                 if (height > 80f)
                 {
                     b.Sub(S_POLE).Box(top + Vector3.up * 9f, new Vector3(0.35f, 12f, 0.35f), 1f, true, false);
-                    b.Sub(NeonSlot(0)).Box(top + Vector3.up * 15.2f, new Vector3(0.7f, 0.7f, 0.7f), 1f, false, false);
+                    b.Sub(red).Box(top + Vector3.up * 15.2f, new Vector3(0.7f, 0.7f, 0.7f), 1f, false, false);
+                }
+                // red aircraft warning lights on the roof corners of tall towers
+                if (height > 55f)
+                    for (int cx = -1; cx <= 1; cx += 2)
+                        for (int cz = -1; cz <= 1; cz += 2)
+                            b.Sub(red).Box(top + new Vector3(cx * (topS.x * 0.5f - 0.3f), 0.85f, cz * (topS.z * 0.5f - 0.3f)), Vector3.one * 0.5f, 1f, false, false);
+                // a lit brand sign on one face of the top tier, high up (seen from far down the street)
+                if (R() < 0.55f && topS.x > 10f)
+                {
+                    int signMat = NeonSlot(Ri(neon.Length - 1));
+                    float sy = height - Mathf.Min(th * 0.5f, 9f);
+                    int face = Ri(4);
+                    Vector3 fdir = face == 0 ? Vector3.forward : face == 1 ? Vector3.back : face == 2 ? Vector3.right : Vector3.left;
+                    float half = (face < 2 ? topS.z : topS.x) * 0.5f + 0.35f;
+                    Vector3 signC = ctr + Vector3.up * sy + fdir * half;
+                    Vector3 sz3 = face < 2 ? new Vector3(topS.x * 0.55f, 3.2f, 0.25f) : new Vector3(0.25f, 3.2f, topS.z * 0.55f);
+                    b.Sub(S_GLASSDARK).Box(signC - fdir * 0.05f, sz3 + Vector3.up * 0.8f + (face < 2 ? Vector3.right : Vector3.forward) * 0.8f, 1f, true, false);
+                    b.Sub(signMat).Box(signC + fdir * 0.12f, new Vector3(sz3.x * (face < 2 ? 0.92f : 1f), 2.4f, sz3.z * (face < 2 ? 1f : 0.92f)), 1f, true, false);
                 }
             }
             else

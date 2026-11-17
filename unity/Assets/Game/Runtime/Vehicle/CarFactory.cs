@@ -117,9 +117,9 @@ namespace HMD
                 well.name = "ArchLiner";
                 well.transform.SetParent(holder, false);
                 float linerW = tyreW * 1.7f;
-                well.transform.localPosition = new Vector3((left ? -1 : 1) * Mathf.Max(0.2f, x - tyreW * 0.3f), wpos.y + 0.04f, wpos.z);
+                well.transform.localPosition = new Vector3((left ? -1 : 1) * Mathf.Max(0.2f, x - tyreW * 0.55f), wpos.y + 0.03f, wpos.z);
                 well.transform.localRotation = Quaternion.Euler(0, 0, 90);
-                well.transform.localScale = new Vector3(r * 2.75f, linerW * 0.5f, r * 2.75f);   // cylinder: y scale is half its length
+                well.transform.localScale = new Vector3(r * 2.35f, linerW * 0.5f, r * 2.35f);   // a little bigger than the tyre, stays inside the body   // cylinder: y scale is half its length
                 var wr = well.GetComponent<Renderer>();
                 wr.sharedMaterial = LinerMat;
                 wr.shadowCastingMode = ShadowCastingMode.Off;
@@ -131,6 +131,17 @@ namespace HMD
             // --- lights
             AddLights(root.transform, spec, L, halfW, height, player, Mathf.Min(yF - rF, yR - rR) + 0.05f);
 
+            if (player)
+            {
+                // soft key light over the player car (racing-game trick): the paint reads at night without lighting the street
+                var key = new GameObject("CarKeyLight").AddComponent<Light>();
+                key.transform.SetParent(root.transform, false);
+                key.transform.localPosition = new Vector3(0, height + 1.6f, -L * 0.15f);
+                key.type = LightType.Point; key.range = Mathf.Max(5f, L * 1.1f); key.intensity = 2.2f;
+                key.color = new Color(0.82f, 0.9f, 1f); key.shadows = LightShadows.None;
+                key.renderMode = LightRenderMode.ForcePixel;
+                key.cullingMask = 1 << 0;
+            }
             if (player)
             {
                 var au = root.AddComponent<CarAudio>();
@@ -161,7 +172,7 @@ namespace HMD
                     li.shadows = LightShadows.None;
                     cl.heads.Add(li);
                     // small lens glow on the lamp
-                    Sprite(lights, "HeadGlow", new Vector3(s * halfW * 0.64f, h * 0.5f, L * 0.455f), true, new Vector2(0.3f, 0.13f), HeadGlowMat);   // on the real lamps (they sit back on top of the bumper)
+                    cl.headGlows.Add(Sprite(lights, "HeadGlow", new Vector3(s * halfW * 0.64f, h * 0.5f, L * 0.455f), true, new Vector2(0.3f, 0.13f), HeadGlowMat));   // on the real lamps (they sit back on top of the bumper)
                 }
                 // two long soft light pools on the road ahead (the beams), they shine on the wet asphalt
                 for (int s = -1; s <= 1; s += 2)
@@ -173,24 +184,29 @@ namespace HMD
             }
             // tail glow: red light thrown back onto the road behind (a downward spot behind the car, so it does
             // not paint the bumper or plate)
-            var tail = new GameObject("TailGlow");
-            tail.transform.SetParent(lights, false);
-            tail.transform.localPosition = new Vector3(0, h * 0.5f, -L * 0.5f - 0.35f);
-            tail.transform.localRotation = Quaternion.Euler(55, 180, 0);
-            var tl = tail.AddComponent<Light>();
-            tl.type = LightType.Spot;
-            tl.spotAngle = 110; tl.innerSpotAngle = 40;
-            tl.range = player ? 8f : 5f;
-            tl.intensity = 1.6f;
-            tl.color = new Color(1f, 0.05f, 0.03f);
-            tl.shadows = LightShadows.None;
-            tl.renderMode = player ? LightRenderMode.ForcePixel : LightRenderMode.Auto;
-            cl.tail = tl;
+            // (no red tail light any more: the URP spot made a hard red dot on the road at the bottom of the chase
+            // view; the lamp glows and their reflection in the wet road give the red behind the car)
             // the lamp glows: a wide soft bar on each lamp, dim when cruising, bright when braking
-            for (int s = -1; s <= 1; s += 2)
+            // per car: where the lamps are and their shape (x as a fraction of half width, y of height, size in metres)
+            var tailMat = Res.Particle(new Color(1f, 0.08f, 0.05f, 0.85f), Res.SoftBox);
+            var roundMat = Res.Particle(new Color(1f, 0.08f, 0.05f, 0.85f), Res.SoftDot);
+            foreach (var lamp in TailLamps(spec.id))
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    var r = Sprite(lights, "TailLamp", new Vector3(s * halfW * lamp.x, h * lamp.y, -L * 0.5f + lamp.z), false, new Vector2(lamp.w, lamp.hgt), lamp.round ? roundMat : tailMat);
+                    cl.tailSprites.Add(r);
+                }
+        }
+
+        struct Lamp { public float x, y, z, w, hgt; public bool round; public Lamp(float x, float y, float z, float w, float h, bool r) { this.x = x; this.y = y; this.z = z; this.w = w; hgt = h; round = r; } }
+
+        static Lamp[] TailLamps(string id)
+        {
+            switch (id)
             {
-                var r = Sprite(lights, "TailBar", new Vector3(s * halfW * 0.72f, h * 0.66f, -L * 0.5f - 0.03f), false, new Vector2(0.44f, 0.1f), Res.Particle(new Color(1f, 0.08f, 0.05f, 0.85f), Res.SoftBox));
-                cl.tailSprites.Add(r);
+                case "sport": return new[] { new Lamp(0.48f, 0.67f, 0.05f, 0.24f, 0.24f, true), new Lamp(0.76f, 0.67f, 0.11f, 0.24f, 0.24f, true) };   // four round lamps
+                case "pickup": return new[] { new Lamp(0.93f, 0.66f, 0.02f, 0.14f, 0.42f, false) };   // tall vertical lamps on the bed corners
+                default: return new[] { new Lamp(0.72f, 0.66f, -0.03f, 0.44f, 0.1f, false) };
             }
         }
 
@@ -281,10 +297,12 @@ namespace HMD
                 {
                     var src = r.sharedMaterial;
                     var tex = FindTex(src, "baseColorTexture", "_BaseMap", "_MainTex");
-                    string k = "lod_" + id;
+                    string k = "lod_" + id + "_" + ColorUtility.ToHtmlStringRGB(paint);
                     if (!bodyMats.TryGetValue(k, out var mats))
                     {
                         var mat = Res.Mat(Color.white, 0.8f, 0.3f);
+                        // repaint the body colour (found automatically in the texture) to this car's paint
+                        if (tex && paint != Color.gray) tex = Repaint.RecolorAuto(tex, id, paint, 512) ?? tex;
                         if (tex) Res.SetMainTex(mat, tex, Vector2.one);
                         mats = new[] { mat };
                         bodyMats[k] = mats;
@@ -347,6 +365,8 @@ namespace HMD
         public Light tail;
         public readonly List<Renderer> tailSprites = new List<Renderer>();
         public readonly List<Transform> pools = new List<Transform>();
+        public readonly List<Renderer> headGlows = new List<Renderer>();
+        bool lastInside;
         CarController car;
         MaterialPropertyBlock mpb;
 
@@ -355,8 +375,17 @@ namespace HMD
         void Update()
         {
             if (car == null) return;
+            // headlights off inside the workshop (it lives far away, at z = -3000)
+            bool inside = transform.position.z < -1500f;
+            if (inside != lastInside)
+            {
+                lastInside = inside;
+                foreach (var h in heads) if (h) h.enabled = !inside;
+                foreach (var p in pools) if (p) p.gameObject.SetActive(!inside);
+                foreach (var g in headGlows) if (g) g.enabled = !inside;
+            }
             bool braking = car.brake > 0.1f || car.handbrake;
-            if (tail) tail.intensity = braking ? 3.5f : 1.0f;
+            if (tail) tail.intensity = System.Environment.CommandLine.Contains("-notail") ? 0f : (braking ? 2.4f : 0.5f);
             float k = braking ? 3.6f : 1.1f;   // dim lamp bar when cruising, bright when braking
             foreach (var r in tailSprites)
             {
@@ -370,9 +399,50 @@ namespace HMD
     /// <summary>Recolours a body texture: pixels close to the key hue take the new paint, keeping their shading.</summary>
     public static class Repaint
     {
-        public static Texture2D Recolor(Texture src, Color key, Color paint)
+        static readonly Dictionary<string, Color?> autoKeys = new Dictionary<string, Color?>();
+
+        /// <summary>Repaints a body texture whose paint colour is not known: the most common saturated hue in the
+        /// texture is taken as the paint (cars are mostly body). Returns null when the texture has no clear paint colour.</summary>
+        public static Texture2D RecolorAuto(Texture src, string id, Color paint, int maxSize)
         {
-            int w = Mathf.Min(src.width, 2048), h = Mathf.Min(src.height, 2048);
+            var cfg = CarModelCfg.Load(id);
+            if (cfg != null && !string.IsNullOrEmpty(cfg.key) && ColorUtility.TryParseHtmlString(cfg.key, out var ck)) return Recolor(src, ck, paint, maxSize);
+            if (!autoKeys.TryGetValue(id, out var key))
+            {
+                key = FindPaint(src);
+                autoKeys[id] = key;
+            }
+            return key.HasValue ? Recolor(src, key.Value, paint, maxSize) : null;
+        }
+
+        static Color? FindPaint(Texture src)
+        {
+            int w = Mathf.Min(src.width, 256), h = Mathf.Min(src.height, 256);
+            var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            Graphics.Blit(src, rt);
+            var prev = RenderTexture.active; RenderTexture.active = rt;
+            var t = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            t.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+            RenderTexture.active = prev; RenderTexture.ReleaseTemporary(rt);
+            var px = t.GetPixels32();
+            Object.Destroy(t);
+            int[] bins = new int[36]; float[] sv = new float[36]; float[] vv = new float[36];
+            foreach (Color c in px)
+            {
+                Color.RGBToHSV(c, out float hh, out float ss, out float v);
+                if (ss < 0.35f || v < 0.2f) continue;
+                int b = Mathf.Min(35, (int)(hh * 36));
+                bins[b]++; sv[b] += ss; vv[b] += v;
+            }
+            int best = 0;
+            for (int i = 1; i < 36; i++) if (bins[i] > bins[best]) best = i;
+            if (bins[best] < px.Length * 0.05f) return null;
+            return Color.HSVToRGB((best + 0.5f) / 36f, sv[best] / bins[best], vv[best] / bins[best]);
+        }
+
+        public static Texture2D Recolor(Texture src, Color key, Color paint, int maxSize = 2048)
+        {
+            int w = Mathf.Min(src.width, maxSize), h = Mathf.Min(src.height, maxSize);
             var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             Graphics.Blit(src, rt);
             var prev = RenderTexture.active;

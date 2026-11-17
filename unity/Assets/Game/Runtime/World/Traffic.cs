@@ -28,6 +28,13 @@ namespace HMD
         readonly List<TCar> cars = new List<TCar>();
         Transform player;
         System.Random rng = new System.Random(3);
+        // the most common real car colours: white, silver, black, grey, red, blue, plus a dark green and a beige
+        static readonly Color[] Paints =
+        {
+            new Color(0.9f, 0.9f, 0.9f), new Color(0.62f, 0.64f, 0.67f), new Color(0.04f, 0.04f, 0.045f), new Color(0.3f, 0.31f, 0.33f),
+            new Color(0.62f, 0.05f, 0.04f), new Color(0.07f, 0.17f, 0.5f), new Color(0.06f, 0.22f, 0.14f), new Color(0.72f, 0.66f, 0.55f),
+            new Color(0.9f, 0.9f, 0.9f), new Color(0.04f, 0.04f, 0.045f),
+        };
         static readonly string[] Models = { "sedan", "suv", "euro", "tuner", "muscle", "classic", "rotary", "pickup", "sport" };
 
         public void Setup(Transform playerT)
@@ -37,7 +44,7 @@ namespace HMD
             for (int i = 0; i < count; i++)
             {
                 var id = Models[i % Models.Length];
-                var go = CarFactory.BuildTraffic(id, transform, Color.gray);
+                var go = CarFactory.BuildTraffic(id, transform, Paints[(i * 3 + i / Models.Length) % Paints.Length]);
                 var t = new TCar { go = go };
                 Respawn(t, true);
                 cars.Add(t);
@@ -73,7 +80,7 @@ namespace HMD
                                 if ((p - door).sqrMagnitude < 20f * 20f) continue;
                                 // facing the way that side's traffic drives (right-hand traffic)
                                 Vector3 fwd = axis == 0 ? new Vector3(0, 0, side) : new Vector3(-side, 0, 0);
-                                var go = CarFactory.BuildTraffic(Models[prng.Next(Models.Length)], root, Color.gray, false);
+                                var go = CarFactory.BuildTraffic(Models[prng.Next(Models.Length)], root, Paints[prng.Next(Paints.Length)], false);
                                 go.transform.SetPositionAndRotation(p, Quaternion.LookRotation(fwd));
                                 go.isStatic = true;
                                 var lg = go.AddComponent<LODGroup>();

@@ -8,8 +8,8 @@ Shader "HMD/NightSky"
         _Zenith ("Zenith", Color) = (0.008, 0.012, 0.045, 1)
         _Horizon ("Horizon", Color) = (0.07, 0.055, 0.12, 1)
         _Glow ("City glow", Color) = (0.42, 0.2, 0.16, 1)
-        _CloudDark ("Cloud dark", Color) = (0.05, 0.05, 0.085, 1)
-        _CloudLit ("Cloud lit from below", Color) = (0.36, 0.19, 0.19, 1)
+        _CloudDark ("Cloud dark", Color) = (0.07, 0.07, 0.11, 1)
+        _CloudLit ("Cloud lit from below", Color) = (0.42, 0.24, 0.24, 1)
         _Cover ("Cloud cover", Range(0, 1)) = 0.52
         _Stars ("Stars", Range(0, 3)) = 1.2
         _Exposure ("Exposure", Range(0, 4)) = 1
@@ -82,8 +82,8 @@ Shader "HMD/NightSky"
                 float t = _Time.y;
                 float c1 = fbm(uv * 0.55 + float2(t * 0.006, t * 0.002));
                 float c2 = fbm(uv * 1.4 - float2(t * 0.004, -t * 0.003) + 31.7);
-                float dens = saturate((c1 * 0.7 + c2 * 0.45) - (1.05 - _Cover));
-                dens = smoothstep(0.0, 0.25, dens) * smoothstep(0.0, 0.12, h);
+                float cm = c1 * 0.72 + c2 * 0.38;                          // about 0.15 .. 0.95, mean ~0.53
+                float dens = smoothstep(0.62 - _Cover * 0.3, 0.8 - _Cover * 0.3, cm) * smoothstep(0.0, 0.1, h);
                 // lit from below by the city: brighter and warmer towards the horizon, thin edges glow more
                 float lit = exp(-up * 2.2) * 0.8 + 0.25;
                 float3 cloud = lerp(_CloudDark.rgb, _CloudLit.rgb, lit) * (0.75 + 0.5 * (1 - dens));

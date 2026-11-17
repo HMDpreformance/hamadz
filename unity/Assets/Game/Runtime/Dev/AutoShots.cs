@@ -37,6 +37,17 @@ namespace HMD
             g.rig.SetFixed(car.transform.position + car.transform.forward * 11f + car.transform.right * 2.5f + Vector3.up * 1.3f, car.transform.position + car.transform.forward * 3f + Vector3.up * 0.4f, false);
             yield return new WaitForSeconds(0.5f);
             yield return Shot("02b_headlights");
+            // higher speed in the chase view: the needles mid-scale (about 150 km/h)
+            g.rig.SnapChase();
+            car.brake = 0; car.throttle = 1f;
+            car.Body.linearVelocity = car.transform.forward * 41.7f;
+            t = 0;
+            while (t < 0.9f) { t += Time.deltaTime; car.throttle = 1f; car.steer = 0; yield return null; }
+            Debug.Log($"[HMD] 02c speed={car.SpeedKmh:F0} rpm={car.Rpm:F0} gear={car.Gear}");
+            yield return Shot("02c_speed_dials");
+            car.throttle = 0; car.brake = 1;
+            yield return new WaitForSeconds(2.5f);
+            car.brake = 0;
 
             // street level city look
             g.rig.SetFixed(car.transform.position + new Vector3(-8, 1.6f, -12), car.transform.position + new Vector3(10, 4, 30), false);

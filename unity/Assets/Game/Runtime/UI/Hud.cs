@@ -6,16 +6,28 @@ namespace HMD
     /// <summary>
     /// Driving HUD (layout from the MC3 reference shots, kept from the Godot game): FPS counter in the
     /// top middle, GARAGE button, round minimap with the LSX wrench marker (and an arrow on the rim when
-    /// the garage is off the map; tap it for the full-screen city map), big yellow speedo with a rev
-    /// ring and gear badge, nitro bar, and touch pedals and steering.
+    /// the garage is off the map; tap it for the full-screen city map), old-school analog speedometer and rev counter
+    /// with needles, a round gear badge, nitro bar, and touch pedals and steering.
     /// </summary>
     public class Hud : MonoBehaviour
     {
         public System.Action OnGarage;
         public CarController car;
         Canvas canvas;
-        Text fps, speed, gear, unit;
-        Image rev, nitroFill;
+        Text fps, speed, gear;
+        Image nitroFill;
+        RectTransform speedNeedle, revNeedle;
+        float speedShown, revShown;
+        const float SpeedMax = 280f, TachMax = 9000f;   // the scales printed on the dial faces (tools/make_gauges.py)
+
+        /// <summary>A dial picture from Resources/Imported/Gen as a UI sprite.</summary>
+        static Sprite GaugeSprite(string name)
+        {
+            var t = Res.Tex("Gen/" + name);
+            if (t == null) return null;
+            t.wrapMode = TextureWrapMode.Clamp;
+            return Sprite.Create(t, new Rect(0, 0, t.width, t.height), new Vector2(0.5f, 0.5f));
+        }
         Minimap map;
         float fpsTimer, fpsAccum; int fpsFrames;
         GameObject touchRoot;
@@ -37,20 +49,30 @@ namespace HMD
             map = gameObject.AddComponent<Minimap>();
             map.Build(root, player);
 
-            // speedo bottom-right (above the pedals)
-            var sp = UIKit.Rect("Speedo", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-40, 360), new Vector2(330, 330));
-            var bgRing = UIKit.Img("RingBg", sp, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(320, 320), new Color(0, 0, 0, 0.45f), UIKit.CircleSprite);
-            rev = UIKit.Img("Rev", sp, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(320, 320), new Color(1f, 0.82f, 0.1f), UIKit.RingSprite);
-            rev.type = Image.Type.Filled;
-            rev.fillMethod = Image.FillMethod.Radial360;
-            rev.fillOrigin = (int)Image.Origin360.Bottom;
-            rev.fillClockwise = true;
-            speed = UIKit.Label("Speed", sp, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 18), new Vector2(300, 130), "0", 118, new Color(1f, 0.85f, 0.15f), TextAnchor.MiddleCenter, Res.TitleFont);
-            unit = UIKit.Label("Unit", sp, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, -52), new Vector2(200, 40), "KM/H", 30, Color.white);
-            var gb = UIKit.Img("GearBadge", sp, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, -106), new Vector2(76, 62), new Color(1f, 0.82f, 0.1f), UIKit.RoundedSprite);
-            gb.type = Image.Type.Sliced;
-            gear = UIKit.Label("Gear", gb.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(76, 62), "1", 48, Color.black, TextAnchor.MiddleCenter, Res.TitleFont);
-            gear.GetComponent<Shadow>().enabled = false;
+            // old-school analog dials bottom-right (above the pedals): amber speedometer with a needle,
+            // a smaller rev counter up-left of it, the gear in a round badge and a small digital speed
+            var sp = UIKit.Rect("Speedo", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-30, 345), new Vector2(380, 380));
+            var mid = new Vector2(0.5f, 0.5f);
+            UIKit.Img("SpeedFace", sp, mid, mid, Vector2.zero, new Vector2(380, 380), Color.white, GaugeSprite("gauge_speed"));
+            var tach = UIKit.Rect("Tach", sp, mid, mid, new Vector2(-238, 125), new Vector2(236, 236));
+            UIKit.Img("TachFace", tach, mid, mid, Vector2.zero, new Vector2(236, 236), Color.white, GaugeSprite("gauge_tach"));
+            // red zone: the part of the ring past this car's redline (scale 0..9000 rpm over 270 degrees)
+            float redAngle = 225f - 270f * Mathf.Clamp01(c.spec.rpmRedline / TachMax);
+            var red = UIKit.Img("RedZone", tach, mid, mid, Vector2.zero, new Vector2(236, 236), Color.white, GaugeSprite("gauge_redarc"));
+            red.type = Image.Type.Filled; red.fillMethod = Image.FillMethod.Radial360;
+            red.fillOrigin = (int)Image.Origin360.Top; red.fillClockwise = true;
+            red.fillAmount = (redAngle + 45f) / 360f;
+            red.rectTransform.localEulerAngles = new Vector3(0, 0, redAngle - 90f);
+            var needleSprite = GaugeSprite("gauge_needle");
+            revNeedle = UIKit.Img("RevNeedle", tach, mid, mid, Vector2.zero, new Vector2(24, 189), Color.white, needleSprite).rectTransform;
+            speedNeedle = UIKit.Img("SpeedNeedle", sp, mid, mid, Vector2.zero, new Vector2(38, 304), Color.white, needleSprite).rectTransform;
+            var amber = new Color(1f, 0.69f, 0.13f);
+            var box = UIKit.Img("SpeedBox", sp, mid, mid, new Vector2(0, -110), new Vector2(128, 52), new Color(0, 0, 0, 0.86f), UIKit.RoundedSprite);
+            box.type = Image.Type.Sliced;
+            speed = UIKit.Label("Speed", box.transform, mid, mid, Vector2.zero, new Vector2(128, 52), "0", 44, new Color(1f, 0.78f, 0.24f), TextAnchor.MiddleCenter, Res.TitleFont);
+            var gb = UIKit.Img("GearBadge", sp, mid, mid, new Vector2(-168, -67), new Vector2(88, 88), amber, UIKit.CircleSprite);
+            UIKit.Img("GearInner", gb.transform, mid, mid, Vector2.zero, new Vector2(78, 78), new Color(0.04f, 0.04f, 0.05f), UIKit.CircleSprite);
+            gear = UIKit.Label("Gear", gb.transform, mid, mid, Vector2.zero, new Vector2(88, 88), "1", 54, new Color(1f, 0.78f, 0.24f), TextAnchor.MiddleCenter, Res.TitleFont);
             // nitro bar under the speedo
             var nb = UIKit.Img("NitroBg", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-60, 330), new Vector2(290, 16), new Color(0, 0, 0, 0.5f), UIKit.RoundedSprite);
             nb.type = Image.Type.Sliced;
@@ -92,9 +114,12 @@ namespace HMD
             if (car == null) return;
             speed.text = Mathf.RoundToInt(car.SpeedKmh).ToString();
             gear.text = car.Gear < 0 ? "R" : car.Gear == 0 ? "N" : car.Gear.ToString();
-            float r = Mathf.InverseLerp(car.spec.rpmIdle, car.spec.rpmRedline, car.Rpm);
-            rev.fillAmount = r * 0.75f;
-            rev.color = r > 0.9f ? new Color(1f, 0.2f, 0.15f) : new Color(1f, 0.82f, 0.1f);
+            // needles: value 0 points to the lower left (135 degrees), full scale to the lower right, with a little damping
+            float k = 1f - Mathf.Exp(-14f * Time.deltaTime);
+            speedShown = Mathf.Lerp(speedShown, Mathf.Clamp01(Mathf.Abs(car.SpeedKmh) / SpeedMax), k);
+            revShown = Mathf.Lerp(revShown, Mathf.Clamp01(car.Rpm / TachMax), k);
+            speedNeedle.localEulerAngles = new Vector3(0, 0, 135f - 270f * speedShown);
+            revNeedle.localEulerAngles = new Vector3(0, 0, 135f - 270f * revShown);
             nitroFill.fillAmount = car.NitroAmount;
         }
     }

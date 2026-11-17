@@ -95,3 +95,21 @@ Hamad asked why the game map did not look like the Higgsfield map picture. Rule:
 - 2026-11-17, Hamad: the inside of the Palm was still not the same design. Redrawn from the Higgsfield picture: fronds fan out from the upper trunk like a palm tree (low ones droop, top ones sweep up), 7 each side.
 - Wheel sizes checked against the real cars: sports car front tyre made smaller (0.65 m), pickup rear tyre same size as the front.
 - Still to do: round highway junctions (cloverleaf look), Jebel Ali port piers, a mountain area in the south, more organic streets.
+
+## Follow every detail of the generated map (2026-11-17)
+
+Hamad: "focus on the generated map details, I feel you missed a lot of things, one example is the Palm" and "the map in the game looks very cheap". Rule: the city plan is traced from the Higgsfield map picture, and the map picture shown in the game must have that rich look, not a plain drawing.
+
+Differences found and their state:
+1. Marina is a round harbour on the coast with piers. Done in plan v4.
+2. JBR between the Marina and the Palm road. Done.
+3. Road from the Palm trunk inland. Done as a main road (it ends in Al Wasl, not on the E11 yet).
+4. Downtown is a big double ring with the tower and the Business Bay canal inside. Done.
+5. Creek from the sea east of Downtown down to the lagoon, Deira beside it. Done.
+6. Ras Al Khor south of the E11 with the lagoon. Done (lagoon is a plain oval, the picture has a C shape). LSX garage is here.
+7. Jebel Ali port with piers on the west. Done.
+8. Round cloverleaf junctions. Not done (slip roads only).
+9. Mountains in the south and east, Dubai Hills oval with hills. Drawn faintly, hills in the terrain.
+10. Airport runways, much denser streets. Runways drawn; streets denser but still less than the picture.
+11. The extra north-south highway (Hills Link) is removed.
+Next: rich map picture made with Higgsfield from the plan render; cloverleafs; more small streets.

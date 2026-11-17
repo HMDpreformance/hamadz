@@ -182,3 +182,9 @@ Retest on the rebuilt city (a24f9bc), 2026-11-17 evening: underpass passes both 
 - The car shows more than 4 wheels while driving: fix it.
 - Some trees stand under/in the street: remove them, they are not correct.
   Done in tools/build_city.py: palm rows used the wrong side direction on bends, and no tree may stand on, under or beside a bridge, ramp, underpass or junction (86 of 1380 removed).
+
+## 2026-11-18 02:45 Dubai: new main car bodies
+- Hamad: the game cars must look like the design pictures (unity_assets/car_designs/designs_red_black.jpg), same details, no logos.
+- New unity_cars/sport.glb and pickup.glb come from those designs (4 views each, matte key green #a9cf61 so the game repaints them), set to the real car numbers above.
+- The traffic LOD bodies (sport_lod, pickup_lod) are still the old shapes.
+- Not in the overnight APK. To be checked in the game and shown to Hamad first.

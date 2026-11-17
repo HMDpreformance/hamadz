@@ -30,7 +30,7 @@ def ground(X, Z):
     d = coast_y(x) - y
     if d < 0: return max(-5.0, 1.5 + d * 0.09)
     h = 1.5 + 9.0 * min(1.0, d / 1500.0) ** 1.3
-    for cx, cy, r, amp in ((1500, 310, 450, 10), (1250, 120, 360, 7), (2060, 420, 330, 6), (1620, 1130, 300, 3), (300, 250, 300, 4)):
+    for cx, cy, r, amp in ((1500, 310, 450, 8), (1250, 120, 360, 4), (2060, 420, 330, 6), (1620, 1130, 300, 3), (300, 250, 300, 4)):
         h += amp * math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * (r * 0.55) ** 2))
     return h
 
@@ -201,17 +201,33 @@ for a, A in enumerate(roads):
 for J in junctions: J["r"] = float(max(roads[k].w for k, s in J["members"]) / 2 + 4)
 masks = []
 for J in junctions: masks.append([(k, np.abs(roads[k].s - sj) < J["r"]) for k, sj in J["members"]])
+# junctions that sit close together on one road share one height (no short steep piece between them)
+grp = list(range(len(junctions)))
+def find(i):
+    while grp[i] != i: grp[i] = grp[grp[i]]; i = grp[i]
+    return i
+on_road = {}
+for ji, J in enumerate(junctions):
+    for k, sj in J["members"]: on_road.setdefault(k, []).append((sj, ji))
+for k, lst in on_road.items():
+    lst.sort()
+    for (s1, j1), (s2, j2) in zip(lst, lst[1:]):
+        if s2 - s1 < junctions[j1]["r"] + junctions[j2]["r"] + 10: grp[find(j1)] = find(j2)
+groups = {}
+for ji in range(len(junctions)): groups.setdefault(find(ji), []).append(ji)
 for R in roads: R.target = R.h.copy()
-for it in range(140):
+for it in range(320):
     for R in roads:
         h = R.h; sm = h.copy()
         sm[1:-1] = 0.25 * h[:-2] + 0.5 * h[1:-1] + 0.25 * h[2:]
-        R.h = sm + 0.02 * (R.target - sm)              # a weak pull back to the ground line and the bridge height
-    for J, mk in zip(junctions, masks):
-        vals = np.concatenate([roads[k].h[m] for k, m in mk if m.any()])
-        if len(vals) == 0: continue
-        J["h"] = float(vals.mean())
-        for k, m in mk: roads[k].h[m] = J["h"]
+        R.h = sm + 0.012 * (R.target - sm)              # a weak pull back to the ground line and the bridge height
+    for members in groups.values():
+        parts = [roads[k].h[m] for ji in members for k, m in masks[ji] if m.any()]
+        if not parts: continue
+        hv = float(np.concatenate(parts).mean())
+        for ji in members:
+            junctions[ji]["h"] = hv
+            for k, m in masks[ji]: roads[k].h[m] = hv
 for J in junctions:
     J.setdefault("h", float(np.interp(J["members"][0][1], roads[J["members"][0][0]].s, roads[J["members"][0][0]].h)))
     for k, sj in J["members"]: roads[k].junc.append((sj, J["r"]))

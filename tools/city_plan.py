@@ -91,7 +91,9 @@ def clipped_grid(cx, cy, rx, ry, rot, pitch):
         if abs(u) < ry * 0.97:
             hw = rx * math.sqrt(1 - (u / ry) ** 2)
             if hw > pitch * 0.6: yield [w(-hw, u), w(hw, u)]
+RINGED = {"Dubai Marina": (430, 1330, 250, 150, 14), "Downtown Dubai": (1620, 1130, 250, 190, 0), "Dubai Hills": (1500, 310, 300, 180, 0)}
 for name, cx, cy, rx, ry, rot, pitch in districts:
+    if name not in RINGED: continue                 # the other areas are covered by the city-wide street net below
     for seg in clipped_grid(cx, cy, rx, ry, rot, pitch):
         if all(p[1] < coast_y(p[0]) - 25 and 0 <= p[0] <= W and 0 <= p[1] <= H for p in seg):
             roads.append({"name": name, "cls": "street", "width": 13, "pts": seg})
@@ -100,13 +102,67 @@ water = {
     "creek": spline([(2380, 2010), (2330, 1800), (2380, 1600), (2330, 1420), (2180, 1330), (2020, 1250), (1930, 1130)], 20),
     "lake": ring(2240, 870, 110, 60, 10, 32),
 }
+# ---- the city-wide street net: streets everywhere on land, like a real city map. Long streets run with the
+# coast and the highways, cross streets run inland. They stop at highways (cross those on the main roads),
+# keep out of the ringed districts (those have their own streets) and out of the water.
+def _poly_dist(P, q):
+    """Distance from point q to polyline P (n x 2 array), and the direction of the nearest segment."""
+    a, b = P[:-1], P[1:]; ab = b - a
+    t = np.clip(((q - a) * ab).sum(1) / np.maximum((ab * ab).sum(1), 1e-9), 0, 1)
+    d = np.linalg.norm(a + ab * t[:, None] - q, axis=1); k = int(d.argmin())
+    return float(d[k]), ab[k] / max(np.linalg.norm(ab[k]), 1e-9)
+_hw = [np.array(r["pts"], float) for r in roads if r["cls"] == "highway"]
+_mn = [np.array(r["pts"], float) for r in roads if r["cls"] == "main"]
+_creek = np.array(water["creek"], float); _lake = np.array(water["lake"], float)
+def _f_in(x): return 430 + 0.03 * x                      # the inland base line (about the E44)
+def _street_ok(q, dirn):
+    x, y = q
+    if not (8 <= x <= W - 8 and 8 <= y <= H - 8) or y > coast_y(x) - 45: return False
+    for cx, cy, rx, ry, rot in RINGED.values():
+        c, s_ = math.cos(math.radians(-rot)), math.sin(math.radians(-rot))
+        u, v = (x - cx) * c - (y - cy) * s_, (x - cx) * s_ + (y - cy) * c
+        if (u / rx) ** 2 + (v / ry) ** 2 < 1.0: return False
+    if any(_poly_dist(Pm, np.array(q))[0] < 52 for Pm in _hw): return False
+    if _poly_dist(_creek, np.array(q))[0] < 62: return False
+    if math.hypot((x - 2240) / 150, (y - 870) / 95) < 1: return False
+    for Pm in _mn:                                         # no street right beside a main road going the same way
+        dd, tdir = _poly_dist(Pm, np.array(q))
+        if dd < 62 and abs(float(np.dot(tdir, dirn))) > 0.8: return False
+    return True
+def _add_street_line(pts):
+    P_ = np.array(pts, float); run = []
+    for i in range(len(P_)):
+        dirn = P_[min(i + 1, len(P_) - 1)] - P_[max(i - 1, 0)]; dirn = dirn / max(np.linalg.norm(dirn), 1e-9)
+        if _street_ok(P_[i], dirn): run.append([round(float(P_[i][0]), 1), round(float(P_[i][1]), 1)])
+        else:
+            if len(run) >= 7: roads.append({"name": "Street", "cls": "street", "width": 13, "pts": run})
+            run = []
+    if len(run) >= 7: roads.append({"name": "Street", "cls": "street", "width": 13, "pts": run})
+PITCH = 96.0
+xs = np.arange(0, W + 1, 16.0)
+N_U = 15
+for k in range(1, N_U):                                    # long streets between the E44 line and the coast
+    if random.random() < 0.08: continue
+    u = k / N_U
+    _add_street_line([(x, _f_in(x) + u * (coast_y(x) - 50 - _f_in(x))) for x in xs])
+for k in range(1, 5):                                      # and south of the E44
+    _add_street_line([(x, _f_in(x) - k * PITCH) for x in xs])
+ys = np.arange(0, H + 1, 16.0)
+for k in range(1, int(W / PITCH)):                         # cross streets, leaning a little, broken in places
+    x0_ = k * PITCH + random.uniform(-12, 12); lean = random.uniform(-0.05, 0.05)
+    line = [(x0_ + lean * (y - 1000), y) for y in ys]
+    cut = random.random()
+    if cut < 0.3:                                          # some cross streets do not run the whole way
+        a_ = random.randint(10, len(line) - 40); line = line[:a_] if random.random() < 0.5 else line[a_:]
+    _add_street_line(line)
+
 # ---- heights: the city is not flat
 def terrain(x, y):
     """Ground height in metres: sea level at the coast, rising gently inland, real hills in Dubai Hills
     and Nad Al Sheba, a low rise under Downtown."""
     inland = max(0.0, coast_y(x) - y)
     h = 1.5 + 9.0 * min(1.0, inland / 1500.0) ** 1.3
-    for cx, cy, r, amp in ((1500, 310, 450, 10), (1250, 120, 360, 7), (2060, 420, 330, 6), (1620, 1130, 300, 3), (300, 250, 300, 4)):
+    for cx, cy, r, amp in ((1500, 310, 450, 8), (1250, 120, 360, 4), (2060, 420, 330, 6), (1620, 1130, 300, 3), (300, 250, 300, 4)):
         h += amp * math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * (r * 0.55) ** 2))
     return h
 
@@ -169,7 +225,8 @@ json.dump(plan, open(os.path.join(ROOT, "unity_assets", "city", "plan.json"), "w
 # ---- preview in the dark game-map style
 S = 1.0                                             # pixels per metre (then halved)
 def P(p): return (p[0] * S, (H - p[1]) * S)
-im = Image.new("RGB", (int(W * S), int(H * S)), (9, 12, 18))
+SEA = (7, 22, 44)
+im = Image.new("RGB", (int(W * S), int(H * S)), SEA)
 land = [P(p) for p in COAST] + [(W * S, H * S), (0, H * S)]
 def fat(dr, pts, col, wd):
     q = [P(p) for p in pts]; dr.line(q, fill=col, width=wd, joint="curve")
@@ -180,15 +237,15 @@ def shore(dr, col, grow):
     dr.polygon(land, fill=col)
     if grow: dr.line(land[:len(COAST)], fill=col, width=grow)
     for r in PALM: fat(dr, r["pts"], col, (30 if r["name"] == "Frond" else 46) + grow)
-glow = Image.new("RGB", im.size, (9, 12, 18)); shore(ImageDraw.Draw(glow), (60, 150, 230), 26)
-im = glow.filter(ImageFilter.GaussianBlur(12))          # light-blue glow along every shore
+glow = Image.new("RGB", im.size, SEA); shore(ImageDraw.Draw(glow), (70, 190, 255), 44)
+im = glow.filter(ImageFilter.GaussianBlur(16))          # light-blue glow along every shore
 d = ImageDraw.Draw(im)
 shore(d, (36, 37, 41), 0)
 for gx in range(0, W, 100): d.line([(gx, 0), (gx, H)], fill=(40, 41, 45), width=1)
 for gy in range(0, H, 100): d.line([(0, gy), (W, gy)], fill=(40, 41, 45), width=1)
 sea = Image.new("L", im.size, 0); shore(ImageDraw.Draw(sea), 255, 0)
-im = Image.composite(im, glow.filter(ImageFilter.GaussianBlur(12)), sea); d = ImageDraw.Draw(im)
-fat(d, water["creek"], (14, 30, 52), 60); d.polygon([P(p) for p in water["lake"]], fill=(14, 30, 52))
+im = Image.composite(im, glow.filter(ImageFilter.GaussianBlur(16)), sea); d = ImageDraw.Draw(im)
+fat(d, water["creek"], (60, 150, 210), 72); fat(d, water["creek"], (10, 40, 78), 60); d.polygon([P(p) for p in water["lake"]], fill=(10, 40, 78), outline=(60, 150, 210), width=6)
 for cls, edge, col, wd in (("street", (20, 20, 22), (120, 122, 126), 9), ("main", (16, 16, 18), (190, 192, 196), 17), ("highway", (16, 14, 8), (240, 180, 40), 22)):
     for r in roads:
         if r["cls"] == cls: fat(d, r["pts"], edge, wd + 8)
@@ -206,7 +263,11 @@ for r in roads:        # bridges and flyovers: white side rails; underpasses: da
                 fat(d, [q[0] for q in run], ((255, 200, 70) if r["cls"] == "highway" else (215, 217, 220)) if up else (90, 92, 96), wd)
             run = []
 im = im.resize((im.width // 2, im.height // 2), Image.LANCZOS); d = ImageDraw.Draw(im)
-if not os.environ.get("PLAIN"):      # phase 2 (east): dimmed, with road blocks on the line
+MODE = os.environ.get("MAP", "")      # "" = plan preview; "full" = the game's map screen; "base" = the minimap (no text)
+if MODE:                             # in the game: part 2 is only dimmed (not open yet)
+    ov = Image.new("RGBA", im.size, (0, 0, 0, 0)); ImageDraw.Draw(ov).rectangle([PHASE1_X * S / 2, 0, im.width, im.height], fill=(0, 0, 0, 110))
+    im = Image.alpha_composite(im.convert("RGBA"), ov).convert("RGB"); d = ImageDraw.Draw(im)
+elif not os.environ.get("PLAIN"):      # phase 2 (east): dimmed, with road blocks on the line
     ov = Image.new("RGBA", im.size, (0, 0, 0, 0)); od = ImageDraw.Draw(ov)
     px = PHASE1_X * S / 2
     od.rectangle([px, 0, im.width, im.height], fill=(0, 0, 0, 120))
@@ -218,17 +279,19 @@ if not os.environ.get("PLAIN"):      # phase 2 (east): dimmed, with road blocks 
                 yy = (H - (y1 + (y2 - y1) * (PHASE1_X - x1) / (x2 - x1))) * S / 2
                 od.rectangle([px - 7, yy - 16, px + 7, yy + 16], fill=(255, 70, 50, 255), outline=(255, 255, 255, 255), width=2)
     im = Image.alpha_composite(im.convert("RGBA"), ov).convert("RGB"); d = ImageDraw.Draw(im)
-F = ImageFont.truetype(os.path.join(ROOT, "fonts", "rajdhani_Rajdhani-Bold.ttf"), 30)
+F = ImageFont.truetype(os.path.join(ROOT, "fonts", "russoone_RussoOne-Regular.ttf" if os.environ.get("MAP") else "rajdhani_Rajdhani-Bold.ttf"), 34 if os.environ.get("MAP") else 30)
 def label(x, y, t, font=F, fill=(255, 255, 255)):
     d.text((x * S / 2, (H - y) * S / 2), t, font=font, fill=fill, anchor="mm", stroke_width=4, stroke_fill=(0, 0, 0))
-for dd in plan["districts"]: label(dd["x"], dd["y"], dd["name"])
+if MODE == "base":
+    im.save(sys.argv[1], quality=92); sys.exit(0)
+for dd in plan["districts"]: label(dd["x"], dd["y"], dd["name"].upper() if MODE else dd["name"])
 FS = ImageFont.truetype(os.path.join(ROOT, "fonts", "rajdhani_Rajdhani-Bold.ttf"), 22)
 for t, x, y in (("E11", 300, 1040), ("E44", 1350, 580), ("E311", 2475, 680)):
     cx, cy = x / 2, (H - y) / 2
     d.rounded_rectangle([cx - 30, cy - 15, cx + 30, cy + 15], 5, fill=(24, 70, 170), outline=(255, 255, 255), width=2)
     d.text((cx, cy), t, font=FS, fill=(255, 255, 255), anchor="mm")
 g = plan["garage"]; cx, cy = g["x"] / 2, (H - g["y"]) / 2
-if not os.environ.get("PLAIN"):
+if not os.environ.get("PLAIN") and not MODE:
     d.ellipse([cx - 16, cy - 16, cx + 16, cy + 16], fill=(215, 30, 30), outline=(255, 255, 255), width=3)
     label(g["x"], g["y"] - 60, "LSX GARAGE", FS, (255, 120, 110))
 cx, cy = 1620 / 2, (H - 1150) / 2
@@ -236,7 +299,8 @@ d.polygon([(cx, cy - 46), (cx + 7, cy), (cx - 7, cy)], fill=(255, 255, 255), out
 T = ImageFont.truetype(os.path.join(ROOT, "fonts", "russoone_RussoOne-Regular.ttf"), 54)
 d.text((im.width - 40, 36), "DUBAI", font=T, fill=(230, 232, 236), anchor="ra", stroke_width=3, stroke_fill=(0, 0, 0))
 d.polygon([(50, 30), (66, 74), (50, 64), (34, 74)], fill=(240, 240, 240)); d.text((50, 96), "N", font=FS, fill=(240, 240, 240), anchor="mm")
-if not os.environ.get("PLAIN"):
+if MODE: label((PHASE1_X + W) / 2, 120, "COMING SOON", FS, (255, 150, 130))
+if not os.environ.get("PLAIN") and not MODE:
     d.text((PHASE1_X * S / 2 - 16, im.height - 30), "PART 1: BUILT FIRST", font=FS, fill=(120, 255, 140), anchor="rm", stroke_width=3, stroke_fill=(0, 0, 0))
     d.text((PHASE1_X * S / 2 + 16, im.height - 30), "PART 2: LATER (ROADS BLOCKED)", font=FS, fill=(255, 120, 100), anchor="lm", stroke_width=3, stroke_fill=(0, 0, 0))
     d.text((40, im.height - 30), "%.1f km x %.1f km" % (W * SCALE / 1000, H * SCALE / 1000), font=FS, fill=(230, 230, 230), anchor="lm", stroke_width=3, stroke_fill=(0, 0, 0))

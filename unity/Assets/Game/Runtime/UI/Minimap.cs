@@ -13,8 +13,9 @@ namespace HMD
     {
         public System.Action OnGoGarage;
         Transform player;
-        RawImage mapImg, bigImg;
-        RectTransform rotor, garageIcon, edgeArrow, bigPlayer, bigGarage;
+        RawImage bigImg;
+        MinimapDisc disc;
+        RectTransform garageIcon, edgeArrow, bigPlayer, bigGarage;
         GameObject big;
         Texture2D tex;
         const float Size = 300f;          // on-screen diameter
@@ -45,31 +46,22 @@ namespace HMD
             }
             else tex = DrawMap();
 
-            var frame = UIKit.Img("Minimap", root, Vector2.zero, Vector2.zero, new Vector2(48, 268), new Vector2(Size + 14, Size + 14), new Color(0, 0, 0, 0.6f), UIKit.CircleSprite);
-            var maskImg = UIKit.Img("Mask", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(Size, Size), Color.white, UIKit.CircleSprite);
-            maskImg.gameObject.AddComponent<Mask>().showMaskGraphic = false;
-            rotor = UIKit.Rect("Rotor", maskImg.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(Size, Size) * 1.5f);
-            var ri = new GameObject("Map", typeof(RectTransform)).AddComponent<RawImage>();
-            ri.transform.SetParent(rotor, false);
-            UIKit.Stretch(ri.rectTransform);
-            ri.texture = tex;
-            ri.raycastTarget = false;
-            mapImg = ri;
-            garageIcon = UIKit.Img("Garage", rotor, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(46, 46), Color.white, WrenchSprite).rectTransform;
-            // chrome outer ring + flame-blue inner ring, matching the blue flame dials
-            // bezel like the dials: bright chrome outer band, dark gap, flame-blue inner ring
-            var c0 = new Vector2(0.5f, 0.5f);
-            int bzi = 0;
-            foreach (var (sz, col) in new[] { (Size + 34f, new Color(0.55f, 0.58f, 0.64f, 1f)), (Size + 30f, new Color(0.97f, 0.98f, 1f, 1f)), (Size + 24f, new Color(0.7f, 0.74f, 0.8f, 1f)), (Size + 19f, new Color(0.02f, 0.04f, 0.1f, 1f)) })
-                { var bz = UIKit.Img("Bezel", frame.transform, c0, c0, Vector2.zero, new Vector2(sz, sz), col, UIKit.CircleSprite); bz.raycastTarget = false; bz.transform.SetSiblingIndex(bzi++); }   // behind the map
-            var ring = UIKit.Img("Ring", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(Size + 14, Size + 14), new Color(0.15f, 0.55f, 1f, 0.95f), UIKit.RingSprite);
-            ring.raycastTarget = false;
+            // no frame, no bezel: the map is a soft disc that is solid in the middle and fades to nothing at the
+            // edge (Hamad 2026-11-17: "remove the sides, use transparency from the edge to the middle")
+            var frame = UIKit.Img("Minimap", root, Vector2.zero, Vector2.zero, new Vector2(48, 268), new Vector2(Size + 14, Size + 14), new Color(0, 0, 0, 0f), UIKit.CircleSprite);
+            var dgo = new GameObject("Disc", typeof(RectTransform));
+            dgo.transform.SetParent(frame.transform, false);
+            disc = dgo.AddComponent<MinimapDisc>();
+            disc.rectTransform.anchorMin = disc.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            disc.rectTransform.sizeDelta = new Vector2(Size, Size);
+            disc.tex = tex; disc.radius = Size * 0.5f; disc.raycastTarget = false;
+            garageIcon = UIKit.Img("Garage", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(46, 46), Color.white, WrenchSprite).rectTransform;
+            garageIcon.GetComponent<Image>().raycastTarget = false;
             var me = UIKit.Img("Player", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(30, 34), new Color(0.55f, 0.85f, 1f), UIKit.ArrowSprite);
             me.raycastTarget = false;
             edgeArrow = UIKit.Img("GarageArrow", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(34, 34), new Color(1f, 0.15f, 0.12f), UIKit.ArrowSprite).rectTransform;
             edgeArrow.GetComponent<Image>().raycastTarget = false;
             frame.gameObject.AddComponent<MinimapTap>().map = this;
-            UIKit.Label("N", frame.transform, new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -4), new Vector2(40, 30), "", 22, Color.white);
 
             // full-screen map
             var bigRt = UIKit.Rect("BigMap", root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
@@ -126,31 +118,23 @@ namespace HMD
         {
             if (player == null || (City.I == null && NewCity.I == null)) return;
             // minimap: map texture slides under the player and turns with the car (heading up)
-            float px = Size * 1.5f;   // rotor size in pixels
             float metresPerPx = ViewMetres / Size;
-            float worldPx = worldSize / metresPerPx;   // full map in minimap pixels
             Vector2 uv = ToUV(player.position);
-            mapImg.rectTransform.anchorMin = mapImg.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-            float worldPxZ = SizeZ / metresPerPx;
-            mapImg.rectTransform.sizeDelta = new Vector2(worldPx, worldPxZ);
-            mapImg.rectTransform.anchoredPosition = new Vector2((0.5f - uv.x) * worldPx, (0.5f - uv.y) * worldPxZ);
-            rotor.localRotation = Quaternion.Euler(0, 0, player.eulerAngles.y);
+            disc.Set(uv, new Vector2(metresPerPx / worldSize, metresPerPx / SizeZ), player.eulerAngles.y);
 
             Vector3 g = City.I != null ? City.I.GarageDoor : NewCity.I.Garage;   // new city: the LSX spot from the json
             Vector3 d = g - player.position;
             Vector2 local = new Vector2(d.x, d.z) / metresPerPx;
-            garageIcon.anchoredPosition = local;
-            garageIcon.localRotation = Quaternion.Euler(0, 0, -player.eulerAngles.y);
-            float r = Size * 0.5f - 20f;
-            // rotate into screen space to check if it's inside the circle
+            float r = Size * 0.5f - 34f;   // inside the solid part of the disc
             Vector2 screen = Rotate(local, player.eulerAngles.y);
+            garageIcon.anchoredPosition = screen;
             bool inside = screen.magnitude < r;
             garageIcon.gameObject.SetActive(inside);
             edgeArrow.gameObject.SetActive(!inside);
             if (!inside)
             {
                 Vector2 dir = screen.normalized;
-                edgeArrow.anchoredPosition = dir * (Size * 0.5f + 4f);
+                edgeArrow.anchoredPosition = dir * (Size * 0.5f - 22f);
                 edgeArrow.localRotation = Quaternion.Euler(0, 0, Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg - 90f);
             }
 
@@ -325,6 +309,53 @@ namespace HMD
                 wrench = Sprite.Create(t, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f));
                 return wrench;
             }
+        }
+    }
+
+    /// <summary>The minimap picture as a round fan mesh. Its texture coordinates follow the car (heading up) and its
+    /// vertex alpha goes from solid in the middle to clear at the rim, so the map has no hard border.</summary>
+    public class MinimapDisc : MaskableGraphic
+    {
+        public Texture tex;
+        public float radius = 150f;
+        Vector2 uvCentre, uvPerPx; float yaw;
+        public override Texture mainTexture => tex != null ? tex : s_WhiteTexture;
+        // ring radius (0..1) and alpha: solid to 55 %, then a smooth fall to zero
+        static readonly float[] RingR = { 0.30f, 0.55f, 0.68f, 0.80f, 0.90f, 1.00f };
+        static readonly float[] RingA = { 1.00f, 1.00f, 0.86f, 0.55f, 0.22f, 0.00f };
+        const int Seg = 48;
+
+        public void Set(Vector2 centreUv, Vector2 perPx, float yawDeg)
+        {
+            uvCentre = centreUv; uvPerPx = perPx; yaw = yawDeg;
+            SetVerticesDirty();
+        }
+
+        protected override void OnPopulateMesh(VertexHelper vh)
+        {
+            vh.Clear();
+            float a = -yaw * Mathf.Deg2Rad, ca = Mathf.Cos(a), sa = Mathf.Sin(a);
+            void Add(Vector2 p, float alpha)
+            {
+                // screen offset -> world offset (turn back by the heading) -> map uv
+                Vector2 w = new Vector2(p.x * ca - p.y * sa, p.x * sa + p.y * ca);
+                Color32 c = new Color(color.r, color.g, color.b, color.a * alpha);
+                vh.AddVert(new Vector3(p.x, p.y, 0), c, new Vector2(uvCentre.x + w.x * uvPerPx.x, uvCentre.y + w.y * uvPerPx.y));
+            }
+            Add(Vector2.zero, 1f);
+            for (int r = 0; r < RingR.Length; r++)
+                for (int i = 0; i < Seg; i++)
+                {
+                    float t = i * Mathf.PI * 2f / Seg;
+                    Add(new Vector2(Mathf.Cos(t), Mathf.Sin(t)) * (radius * RingR[r]), RingA[r]);
+                }
+            for (int i = 0; i < Seg; i++) vh.AddTriangle(0, 1 + i, 1 + (i + 1) % Seg);
+            for (int r = 0; r + 1 < RingR.Length; r++)
+                for (int i = 0; i < Seg; i++)
+                {
+                    int i0 = 1 + r * Seg + i, i1 = 1 + r * Seg + (i + 1) % Seg, o0 = i0 + Seg, o1 = i1 + Seg;
+                    vh.AddTriangle(i0, o0, o1); vh.AddTriangle(i0, o1, i1);
+                }
         }
     }
 

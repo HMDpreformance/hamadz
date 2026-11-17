@@ -38,7 +38,7 @@ namespace HMD
                 model.transform.localRotation = Quaternion.identity;
                 model.transform.localScale = Vector3.one * L;
                 ApplyPaint(model, id, cfg, spec);
-                foreach (var c in model.GetComponentsInChildren<Collider>()) Object.Destroy(c);
+                foreach (var c in model.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(c);
             }
             else
             {
@@ -112,7 +112,7 @@ namespace HMD
 
                 // dark wheel well behind the cut-out, so the arches are not see-through
                 var well = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                Object.Destroy(well.GetComponent<Collider>());
+                Object.DestroyImmediate(well.GetComponent<Collider>());
                 well.name = "Well";
                 well.transform.SetParent(holder, false);
                 well.transform.localPosition = new Vector3((left ? -1 : 1) * Mathf.Max(0.2f, x - tyreW * 0.7f), wpos.y + 0.03f, wpos.z);
@@ -172,7 +172,7 @@ namespace HMD
             for (int s = -1; s <= 1; s += 2)
             {
                 var q = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                Object.Destroy(q.GetComponent<Collider>());
+                Object.DestroyImmediate(q.GetComponent<Collider>());
                 q.name = "TailSprite";
                 q.transform.SetParent(lights, false);
                 q.transform.localPosition = new Vector3(s * halfW * 0.7f, h * 0.55f, -L * 0.5f - 0.02f);
@@ -202,9 +202,9 @@ namespace HMD
                         var nrm = FindTex(s, "normalTexture", "_BumpMap");
                         if (tex != null && cfg != null && !string.IsNullOrEmpty(cfg.key) && ColorUtility.TryParseHtmlString(cfg.key, out var key))
                             tex = Repaint.Recolor(tex, key, spec.paint);
-                        var m = Res.Mat(Color.white, 0.82f, 0.35f);
+                        var m = Res.Mat(Color.white, 0.86f, 0.2f);
                         if (tex != null) Res.SetMainTex(m, tex, Vector2.one);
-                        if (nrm != null) { m.SetTexture("_BumpMap", nrm); m.EnableKeyword("_NORMALMAP"); }
+                        if (nrm != null) { m.SetTexture("_BumpMap", nrm); m.SetFloat("_BumpScale", 0.3f); m.EnableKeyword("_NORMALMAP"); }   // baked normal map is noisy: keep it subtle so panels read smooth
                         // the clear coat: high smoothness, environment reflections on
                         m.SetFloat("_EnvironmentReflections", 1f);
                         m.SetFloat("_SpecularHighlights", 1f);
@@ -236,7 +236,7 @@ namespace HMD
             {
                 var m = Object.Instantiate(prefab, go.transform);
                 m.transform.localScale = Vector3.one * L;
-                foreach (var c in m.GetComponentsInChildren<Collider>()) Object.Destroy(c);
+                foreach (var c in m.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(c);
                 foreach (var r in m.GetComponentsInChildren<Renderer>())
                 {
                     var src = r.sharedMaterial;
@@ -266,14 +266,14 @@ namespace HMD
             for (int s = -1; s <= 1; s += 2)
             {
                 var q = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                Object.Destroy(q.GetComponent<Collider>());
+                Object.DestroyImmediate(q.GetComponent<Collider>());
                 q.transform.SetParent(go.transform, false);
                 q.transform.localPosition = new Vector3(s * halfW * 0.7f, h * 0.55f, -L * 0.5f - 0.02f);
                 q.transform.localScale = new Vector3(0.34f, 0.14f, 1);
                 q.GetComponent<Renderer>().sharedMaterial = TrafficTail;
                 q.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
                 var hq = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                Object.Destroy(hq.GetComponent<Collider>());
+                Object.DestroyImmediate(hq.GetComponent<Collider>());
                 hq.transform.SetParent(go.transform, false);
                 hq.transform.localPosition = new Vector3(s * halfW * 0.65f, h * 0.45f, L * 0.5f + 0.02f);
                 hq.transform.localRotation = Quaternion.Euler(0, 180, 0);

@@ -25,9 +25,9 @@ namespace HMD
                 l.transform.SetParent(transform, false);
                 l.type = LightType.Spot;
                 l.transform.rotation = Quaternion.Euler(90, 0, 0);
-                l.spotAngle = 120; l.innerSpotAngle = 60;
-                l.range = 22f;
-                l.intensity = 14f;
+                l.spotAngle = 130; l.innerSpotAngle = 70;
+                l.range = 30f;
+                l.intensity = 26f;
                 l.color = new Color(1f, 0.8f, 0.55f);
                 l.shadows = LightShadows.None;
                 pool.Add(l);

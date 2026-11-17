@@ -61,7 +61,7 @@ namespace HMD
             float smooth = Raining ? 0.9f : 0.42f;  // dry road keeps a light sheen
             m.SetFloat("_Smoothness", smooth);
             m.SetFloat("_GlossMapScale", smooth);
-            Res.SetColor(m, Raining ? new Color(0.28f, 0.28f, 0.3f) : new Color(0.55f, 0.55f, 0.58f));
+            Res.SetColor(m, Raining ? new Color(0.36f, 0.36f, 0.39f) : new Color(0.55f, 0.55f, 0.58f));
         }
 
         void LateUpdate()

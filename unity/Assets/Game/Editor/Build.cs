@@ -101,9 +101,13 @@ namespace HMD.EditorTools
                 if (!(AssetImporter.GetAtPath(path) is AudioImporter ai)) continue;
                 var s = ai.defaultSampleSettings;
                 bool music = path.Contains("/music/");
-                s.loadType = music ? AudioClipLoadType.Streaming : AudioClipLoadType.DecompressOnLoad;
+                var load = music ? AudioClipLoadType.Streaming : AudioClipLoadType.DecompressOnLoad;
+                float q = music ? 0.6f : 0.85f;
+                // only reimport when something changed (re-encoding every clip made each build slow)
+                if (s.loadType == load && s.compressionFormat == AudioCompressionFormat.Vorbis && Mathf.Abs(s.quality - q) < 0.001f) continue;
+                s.loadType = load;
                 s.compressionFormat = AudioCompressionFormat.Vorbis;
-                s.quality = music ? 0.6f : 0.85f;
+                s.quality = q;
                 ai.defaultSampleSettings = s;
                 ai.SaveAndReimport();
             }

@@ -38,7 +38,7 @@ namespace HMD
             g.rig.SetFixed(car.transform.position + new Vector3(-8, 1.6f, -12), car.transform.position + new Vector3(10, 4, 30), false);
             yield return new WaitForSeconds(0.6f);
             yield return Shot("03_city_street");
-            g.rig.SetFixed(City.BlockCenter(3, 3) + new Vector3(-50, 30, -60), City.BlockCenter(4, 4) + Vector3.up * 30, false);
+            g.rig.SetFixed(City.BlockCenter(1, 1) + new Vector3(-60, 170, -60), City.BlockCenter(4, 4) + Vector3.up * 10, false);   // aerial, above the towers
             yield return new WaitForSeconds(0.6f);
             yield return Shot("04_city_high");
 
@@ -47,7 +47,7 @@ namespace HMD
             yield return new WaitForSeconds(1.2f);
             g.rig.mode = CameraRig.Mode.Fixed;
             Vector3 door = g.garage.DoorPos;
-            g.rig.SetFixed(door + new Vector3(-12, 4.5f, -22), door + new Vector3(0, 4, 0), false);
+            g.rig.SetFixed(door + new Vector3(14, 3.4f, -19), door + new Vector3(-2, 3.6f, 0), false);
             yield return new WaitForSeconds(0.8f);
             yield return Shot("05_garage_outside_closed");
             // drive close: the door opens only now
@@ -57,7 +57,18 @@ namespace HMD
             // drive in
             t = 0;
             car.inputLocked = false; car.brake = 0;
-            while (t < 10f && g.state == Game.State.Drive) { t += Time.deltaTime; car.throttle = 0.6f; car.steer = 0; yield return null; }
+            float logT = 0;
+            while (t < 10f && g.state == Game.State.Drive)
+            {
+                t += Time.deltaTime; car.throttle = 0.6f; car.brake = 0; car.steer = 0;
+                if ((logT -= Time.deltaTime) <= 0)
+                {
+                    logT = 0.5f;
+                    Vector3 rel = car.transform.position - door;
+                    Debug.Log($"[HMD] drive-in t={t:F1} rel=({rel.x:F2},{rel.y:F2},{rel.z:F2}) kmh={car.SpeedKmh:F1} gear={car.Gear} rpm={car.Rpm:F0} locked={car.inputLocked} fwd={car.transform.forward}");
+                }
+                yield return null;
+            }
             if (g.state == Game.State.Drive) { Debug.LogWarning("[HMD] shots: car did not reach the door, entering directly"); g.StartCoroutine("EnterGarage"); }
             car.throttle = 0;
             yield return new WaitForSeconds(2.5f);

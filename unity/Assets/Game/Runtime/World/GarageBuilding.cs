@@ -30,7 +30,7 @@ namespace HMD
             doorPos = doorCenter;
             transform.position = doorCenter;
             // building occupies +Z from the door
-            var corr = Res.TexMat("Tex/corrugated_iron", new Vector2(1f / 2.5f, 1f / 2.5f), 0.55f, 0.6f, new Color(0.92f, 0.9f, 0.82f));
+            var corr = Res.TexMat("Tex/corrugated_iron", new Vector2(1f / 2.5f, 1f / 2.5f), 0.5f, 0.15f, new Color(0.92f, 0.9f, 0.82f), 1f, false);   // painted cladding
             var band = Res.Mat(new Color(0.03f, 0.03f, 0.035f), 0.4f, 0.2f);
             var roof = Res.TexMat("Tex/concrete_panels", Vector2.one / 4f, 0.25f, 0f, new Color(0.4f, 0.4f, 0.42f));
             var apron = Res.TexMat("Tex/concrete_pavement", Vector2.one / 4f, 0.45f, 0f, new Color(0.62f, 0.62f, 0.62f));
@@ -81,7 +81,7 @@ namespace HMD
             warm.type = LightType.Point; warm.range = 9; warm.intensity = 2.5f; warm.color = new Color(1f, 0.92f, 0.8f);
 
             // roller door: ribbed panel that slides up into the roller box
-            var dm = Res.TexMat("Tex/corrugated_iron", new Vector2(1f / 1.2f, 1f / 3f), 0.6f, 0.8f, new Color(0.7f, 0.72f, 0.75f));
+            var dm = Res.TexMat("Tex/corrugated_iron", new Vector2(1f / 1.2f, 1f / 3f), 0.55f, 0.35f, new Color(0.7f, 0.72f, 0.75f), 1f, false);
             door = MeshBuilder.Cube("RollerDoor", transform, new Vector3(0, DoorH * 0.5f, 0.45f), new Vector3(DoorW + 0.3f, DoorH, 0.12f), dm, true).transform;
             doorCol = door.GetComponent<BoxCollider>();
 

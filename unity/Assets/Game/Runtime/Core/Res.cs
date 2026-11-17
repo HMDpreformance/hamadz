@@ -59,9 +59,9 @@ namespace HMD
         }
 
         /// <summary>A textured PBR material from a texture set name like "Tex/asphalt_04" (expects _diff, _nor, optional _ms).</summary>
-        public static Material TexMat(string set, Vector2 tiling, float smooth = 0.5f, float metal = 0f, Color? tint = null, float normalScale = 1f)
+        public static Material TexMat(string set, Vector2 tiling, float smooth = 0.5f, float metal = 0f, Color? tint = null, float normalScale = 1f, bool metalMap = true)
         {
-            string key = set + tiling + smooth + metal + tint + normalScale;
+            string key = set + tiling + smooth + metal + tint + normalScale + metalMap;
             if (matCache.TryGetValue(key, out var cached)) return cached;
             var m = Mat(tint ?? Color.white, smooth, metal);
             var d = Tex(set + "_diff");
@@ -74,7 +74,7 @@ namespace HMD
                 m.SetFloat("_BumpScale", normalScale);
                 m.EnableKeyword("_NORMALMAP");
             }
-            var ms = Tex(set + "_ms");
+            var ms = metalMap ? Tex(set + "_ms") : null;   // painted metal (walls) skips the bare-metal map, or it mirrors the dark room
             if (ms != null)
             {
                 m.SetTexture("_MetallicGlossMap", ms);

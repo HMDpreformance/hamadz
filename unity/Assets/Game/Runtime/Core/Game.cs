@@ -64,6 +64,7 @@ namespace HMD
             car = CarFactory.Build(carId, city.PlayerStart, city.PlayerStartRot, true);
             car.gameObject.AddComponent<PlayerInput>();
             car.Body.isKinematic = false;
+            car.Body.ResetInertiaTensor();   // recompute now that only the body box and wheels are left
             car.inputLocked = true;
 
             garage = new GameObject("LSX_Garage").AddComponent<GarageBuilding>();
@@ -166,7 +167,7 @@ namespace HMD
         {
             car.Body.isKinematic = true;
             car.dynoMode = false;
-            car.transform.SetPositionAndRotation(shop.DisplaySpot + Vector3.up * 0.02f, shop.DisplayRot);
+            car.Place(shop.DisplaySpot + Vector3.up * (car.RestHeight + 0.005f), shop.DisplayRot);   // tyres on the floor
             rig.target = car.transform;
             rig.mode = CameraRig.Mode.Orbit;
             rig.orbitDistance = car.spec.length * 1.35f;
@@ -214,6 +215,7 @@ namespace HMD
             yield return Fade(0, 1, 0.5f);
             car.dynoMode = false;
             car.Body.isKinematic = false;
+            car.Body.ResetInertiaTensor();   // recompute now that only the body box and wheels are left
             // out on the forecourt, facing away from the door towards the road
             car.Teleport(garage.DoorPos + new Vector3(0, 0.5f, -7f), Quaternion.Euler(0, 180, 0));
             garage.ForceClosed();

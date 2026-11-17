@@ -31,7 +31,7 @@ namespace HMD
         public void Build()
         {
             transform.position = Origin;
-            corr = Res.TexMat("Tex/corrugated_iron", new Vector2(1f / 2f, 1f / 2f), 0.45f, 0.4f, new Color(0.93f, 0.9f, 0.8f));
+            corr = Res.TexMat("Tex/corrugated_iron", new Vector2(1f / 2f, 1f / 2f), 0.4f, 0.1f, new Color(0.93f, 0.9f, 0.8f), 1f, false);   // cream painted metal
             band = Res.Mat(new Color(0.03f, 0.03f, 0.03f), 0.5f, 0.1f);
             ceil = Res.Mat(new Color(0.9f, 0.9f, 0.88f), 0.2f);
             led = Res.Glow(new Color(1f, 0.98f, 0.94f), 3.2f);
@@ -93,7 +93,7 @@ namespace HMD
             w.Wall(inset(b), inset(a), bandH, uv); w.Wall(inset(c), inset(b), bandH, uv); w.Wall(inset(d), inset(c), bandH, uv); w.Wall(inset(a), inset(d), bandH, uv);
             var wg = MeshBuilder.Spawn("Walls", w.Build("walls"), new[] { corr, band }, transform, true, false);
             // the shutter (closed roller door) in the south wall
-            Box("Shutter", new Vector3(-4f, 2.2f, 0.05f), new Vector3(5.6f, 4.4f, 0.1f), Res.TexMat("Tex/corrugated_iron", new Vector2(1f / 1.2f, 1f / 3f), 0.6f, 0.8f, new Color(0.65f, 0.67f, 0.7f)));
+            Box("Shutter", new Vector3(-4f, 2.2f, 0.05f), new Vector3(5.6f, 4.4f, 0.1f), Res.TexMat("Tex/corrugated_iron", new Vector2(1f / 1.2f, 1f / 3f), 0.5f, 0.3f, new Color(0.65f, 0.67f, 0.7f), 1f, false));
             Box("ShutterFrame", new Vector3(-4f, 4.55f, 0.15f), new Vector3(6f, 0.3f, 0.3f), black);
         }
 
@@ -107,7 +107,7 @@ namespace HMD
                 {
                     bool dyno = x > 2f && z > 19f;
                     int ix = Mathf.RoundToInt((x + W / 2) / tile), iz = Mathf.RoundToInt(z / tile);
-                    bool panel = !dyno && ix % 3 == 1 && iz % 3 == 1;
+                    bool panel = dyno ? (ix % 4 == 1 && iz % 3 == 1) : (ix % 3 == 1 && iz % 3 == 1);
                     Vector3 p0 = new Vector3(x + 0.02f, H, z + 0.02f), p1 = new Vector3(x + tile - 0.02f, H, z + tile - 0.02f);
                     // facing down
                     b.Sub(panel ? 1 : dyno ? 2 : 0).QuadUV(new Vector3(p0.x, H, p0.z), new Vector3(p0.x, H, p1.z), new Vector3(p1.x, H, p1.z), new Vector3(p1.x, H, p0.z), Vector3.down,
@@ -230,6 +230,7 @@ namespace HMD
             root.localPosition = new Vector3(7.5f, 0, 25f);
             // pit with two rollers under the rear axle area (the car is placed so its driven axle sits on them)
             MeshBuilder.Cube("Plate", root, new Vector3(0, 0.005f, 0), new Vector3(3.2f, 0.01f, 2.2f), Res.TexMat("Tex/garage_floor", Vector2.one, 0.8f, 0.8f, new Color(0.35f, 0.36f, 0.38f)));
+            MeshBuilder.Cube("Slot", root, new Vector3(0, 0.0105f, 0), new Vector3(2.9f, 0.001f, 1.15f), Res.Mat(new Color(0.01f, 0.01f, 0.012f), 0.1f));   // dark pit the rollers turn in
             Rollers = new Transform[2];
             for (int k = 0; k < 2; k++)
             {
@@ -237,7 +238,7 @@ namespace HMD
                 Object.Destroy(r.GetComponent<Collider>());
                 r.name = "Roller" + k;
                 r.transform.SetParent(root, false);
-                r.transform.localPosition = new Vector3(0, 0.03f, (k - 0.5f) * 0.6f);
+                r.transform.localPosition = new Vector3(0, -0.14f, (k - 0.5f) * 0.6f);   // set into the floor: only the tops show through the slot
                 r.transform.localRotation = Quaternion.Euler(0, 0, 90);
                 r.transform.localScale = new Vector3(0.38f, 1.45f, 0.38f);
                 r.GetComponent<Renderer>().sharedMaterial = steel;
@@ -284,21 +285,32 @@ namespace HMD
         {
             // a few real lights for shading + the LED panels glow; dyno bay is darker
             int i = 0;
+            // bright, even workshop light like the photo: a 3 x 3 grid under the LED panels
             for (float x = -9; x <= 9; x += 9)
-                for (float z = 6; z <= 18; z += 12)
+                for (float z = 5; z <= 19; z += 7)
                 {
                     var l = new GameObject("Light" + i++).AddComponent<Light>();
                     l.transform.SetParent(transform, false);
                     l.transform.localPosition = new Vector3(x, H - 0.4f, z);
-                    l.type = LightType.Point; l.range = 14; l.intensity = 2.2f; l.color = new Color(1f, 0.98f, 0.95f);
-                    l.shadows = i == 1 ? LightShadows.Soft : LightShadows.None;
+                    l.type = LightType.Point; l.range = 16; l.intensity = 5.5f; l.color = new Color(1f, 0.98f, 0.95f);
+                    l.shadows = i == 5 ? LightShadows.Soft : LightShadows.None;
                 }
+            // dyno bay: a strong spot on the car plus fill over the bay, the TV wall and the back wall
             var dl = new GameObject("DynoSpot").AddComponent<Light>();
             dl.transform.SetParent(transform, false);
             dl.transform.localPosition = new Vector3(7.5f, H - 0.3f, 24f);
             dl.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            dl.type = LightType.Spot; dl.spotAngle = 75; dl.range = 10; dl.intensity = 5f; dl.color = new Color(1f, 0.95f, 0.9f);
+            dl.type = LightType.Spot; dl.spotAngle = 95; dl.range = 12; dl.intensity = 14f; dl.color = new Color(1f, 0.95f, 0.9f);
             dl.shadows = LightShadows.Soft;
+            Vector3[] fill = { new Vector3(2f, H - 0.5f, 25f), new Vector3(10f, H - 0.5f, 30f), new Vector3(-7f, H - 0.5f, 28f), new Vector3(6f, H - 0.5f, 18.5f) };
+            foreach (var p in fill)
+            {
+                var l = new GameObject("DynoFill").AddComponent<Light>();
+                l.transform.SetParent(transform, false);
+                l.transform.localPosition = p;
+                l.type = LightType.Point; l.range = 14; l.intensity = 4.5f; l.color = new Color(0.95f, 0.97f, 1f);
+                l.shadows = LightShadows.None;
+            }
         }
 
         void Banners()

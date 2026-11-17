@@ -257,9 +257,13 @@ namespace HMD
         {
             rb.isKinematic = true;
             float ratio = Ratio(Mathf.Max(1, Gear));
-            float rollerInertia = spec.weightKg * spec.wheelRadius * spec.wheelRadius * 0.9f;
+            // roller inertia chosen so a full pull from idle to redline takes about 6.5 s (like a real 4th-gear run)
+            float wRed = spec.rpmRedline / Mathf.Max(0.5f, ratio) * 2 * Mathf.PI / 60f;
+            float rollerInertia = Mathf.Max(2f, peakTorque * 0.8f * ratio * 0.88f * 6.5f / Mathf.Max(1f, wRed));
             float wheelT = (Rpm >= spec.rpmRedline ? 0 : TorqueAt(Rpm) * thr) * ratio * 0.88f;
-            float loss = 18f * wheelRpm * 0.02f + 30f;
+            // roller + tyre losses grow with speed but stay well under engine torque, so every car reaches redline
+            float wheelRpmRed = spec.rpmRedline / Mathf.Max(0.5f, ratio);
+            float loss = peakTorque * ratio * 0.88f * 0.14f * Mathf.Clamp01(wheelRpm / wheelRpmRed) + 10f;
             float accel = (wheelT - loss) / rollerInertia;                 // rad/s^2
             float w = wheelRpm * 2 * Mathf.PI / 60f + accel * dt;
             if (thr < 0.05f) w *= 1 - dt * 0.6f;
@@ -271,8 +275,9 @@ namespace HMD
 
         public void ResetDyno()
         {
-            wheelRpm = 0; Rpm = spec.rpmIdle; dynoWheelAngle = 0;
             Gear = Mathf.Min(4, spec.gears.Length);  // dyno pulls run in a 1:1-ish gear like real dyno runs
+            Rpm = spec.rpmIdle; dynoWheelAngle = 0;
+            wheelRpm = spec.rpmIdle / Mathf.Max(0.5f, Ratio(Gear));   // rollers already turning at idle: the pull starts at once
         }
 
         void Update()
@@ -282,10 +287,33 @@ namespace HMD
             {
                 if (wheels[i] == null || wheelVisuals[i] == null) continue;
                 wheels[i].GetWorldPose(out var p, out var q);
+                // parked (kinematic) the colliders do not simulate and report a hanging wheel: show the wheels
+                // where the model has them instead, so a parked car sits on its tyres
+                if (rb.isKinematic) p = wheels[i].transform.position;
                 if (dynoMode)
                     q = transform.rotation * Quaternion.Euler(IsDriven(i) ? dynoWheelAngle : 0, 0, 0);
                 wheelVisuals[i].SetPositionAndRotation(p, q);
             }
+        }
+
+        /// <summary>Height of the car origin above the ground when parked with the wheels where the model has them.</summary>
+        public float RestHeight
+        {
+            get
+            {
+                float m = float.MaxValue;
+                for (int i = 0; i < 4; i++)
+                    if (wheels[i] != null) m = Mathf.Min(m, transform.InverseTransformPoint(wheels[i].transform.position).y - wheels[i].radius);
+                return m == float.MaxValue ? 0f : -m;
+            }
+        }
+
+        /// <summary>Moves a parked (kinematic) car: transform and body together, so interpolation cannot pull it back.</summary>
+        public void Place(Vector3 pos, Quaternion rot)
+        {
+            transform.SetPositionAndRotation(pos, rot);
+            rb.position = pos; rb.rotation = rot;
+            Physics.SyncTransforms();
         }
 
         /// <summary>Puts the car back on its wheels at a spot (used after a crash or a teleport).</summary>
@@ -293,6 +321,8 @@ namespace HMD
         {
             rb.isKinematic = true;
             transform.SetPositionAndRotation(pos, rot);
+            rb.position = pos; rb.rotation = rot;   // move the body too, or interpolation snaps the car straight back
+            Physics.SyncTransforms();
             rb.isKinematic = false;
             rb.SetVel(Vector3.zero);
             rb.angularVelocity = Vector3.zero;

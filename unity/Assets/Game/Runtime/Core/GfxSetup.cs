@@ -30,8 +30,8 @@ namespace HMD
             if (skyMat != null)
             {
                 var sky = new Material(skyMat);
-                sky.SetFloat("_Exposure", 0.55f);
-                sky.SetColor("_Tint", new Color(0.55f, 0.55f, 0.7f));
+                sky.SetFloat("_Exposure", 0.62f);
+                sky.SetColor("_Tint", new Color(0.5f, 0.52f, 0.75f));
                 RenderSettings.skybox = sky;
                 cam.clearFlags = CameraClearFlags.Skybox;
             }
@@ -41,12 +41,12 @@ namespace HMD
                 cam.backgroundColor = new Color(0.03f, 0.035f, 0.07f);
             }
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.16f, 0.17f, 0.26f);
-            RenderSettings.ambientEquatorColor = new Color(0.14f, 0.11f, 0.13f);
-            RenderSettings.ambientGroundColor = new Color(0.05f, 0.045f, 0.05f);
+            RenderSettings.ambientSkyColor = new Color(0.36f, 0.39f, 0.56f);
+            RenderSettings.ambientEquatorColor = new Color(0.32f, 0.26f, 0.32f);
+            RenderSettings.ambientGroundColor = new Color(0.15f, 0.13f, 0.15f);
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.ExponentialSquared;
-            RenderSettings.fogColor = new Color(0.1f, 0.085f, 0.14f);
+            RenderSettings.fogColor = new Color(0.17f, 0.15f, 0.24f);
             RenderSettings.fogDensity = Weather.Raining ? 0.0042f : 0.0024f;
             RenderSettings.defaultReflectionMode = DefaultReflectionMode.Custom;
 
@@ -56,7 +56,7 @@ namespace HMD
             moon.type = LightType.Directional;
             moon.transform.rotation = Quaternion.Euler(52, -35, 0);
             moon.color = new Color(0.55f, 0.62f, 0.85f);
-            moon.intensity = 0.35f;
+            moon.intensity = 0.9f;
             moon.shadows = LightShadows.Soft;
             moon.shadowStrength = 0.75f;
             RenderSettings.sun = moon;
@@ -120,7 +120,7 @@ namespace HMD
             var tone = profile.Add<Tonemapping>(true);
             tone.mode.Override(TonemappingMode.ACES);
             var ca = profile.Add<ColorAdjustments>(true);
-            ca.postExposure.Override(0.35f);
+            ca.postExposure.Override(0.75f);
             ca.contrast.Override(14f);
             ca.saturation.Override(8f);
             var wb = profile.Add<WhiteBalance>(true);

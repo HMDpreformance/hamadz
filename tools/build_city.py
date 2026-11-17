@@ -359,7 +359,7 @@ class Mesh:
                                                  material=trimesh.visual.material.PBRMaterial(baseColorFactor=color, roughnessFactor=0.9, metallicFactor=0.0))
         return m
 
-M = {k: Mesh() for k in ("asphalt", "sidewalk", "marking_white", "marking_yellow", "concrete", "terrain", "water", "barrier_red", "barrier_white")}
+M = {k: Mesh() for k in ("asphalt", "sidewalk", "marking_white", "marking_yellow", "concrete", "terrain", "water", "barrier_red", "barrier_white", "grass")}
 def V(p, y): return [float(p[0]), float(y), float(p[1])]
 
 def in_junction(R, s, pad=0.0):
@@ -535,8 +535,23 @@ for iz in range(nz - 1):
 M["water"].quad([x0 - 400, 0, z0], [x0 - 400, 0, z1 + 500], [x1 + 400, 0, z1 + 500], [x1 + 400, 0, z0])
 
 COL = {"asphalt": [38, 40, 44, 255], "sidewalk": [150, 148, 142, 255], "marking_white": [235, 235, 230, 255], "marking_yellow": [240, 185, 40, 255],
-       "concrete": [120, 122, 126, 255], "terrain": [176, 152, 112, 255], "water": [20, 60, 95, 255], "barrier_red": [215, 40, 30, 255], "barrier_white": [240, 240, 240, 255]}
+       "concrete": [120, 122, 126, 255], "terrain": [176, 152, 112, 255], "water": [20, 60, 95, 255], "barrier_red": [215, 40, 30, 255], "barrier_white": [240, 240, 240, 255], "grass": [70, 130, 50, 255]}
 scene = trimesh.Scene()
+# irrigated grass verges behind the sidewalk of the boulevards in the green districts (a Dubai look: lawn and palms
+# beside the main roads); own mesh "grass", sloping from the sidewalk down to the ground
+GRASSY = ("Downtown Dubai", "Business Bay", "Al Barsha", "Dubai Marina", "JBR", "Jumeirah", "Al Wasl", "Palm Jumeirah", "Dubai Hills")
+grass_m = 0.0
+_DG = [(d_["name"], d_["x"] * S, d_["y"] * S) for d_ in plan["districts"]]
+def _dist_name(X, Z): return min(_DG, key=lambda q: (X - q[1]) ** 2 + (Z - q[2]) ** 2)[0]
+for R in roads:
+    if R.cls != "main": continue
+    e0 = R.w / 2 + WALK
+    green = np.array([_dist_name(p_[0], p_[1]) in GRASSY for p_ in R.P])
+    skipg = lambda i, R=R, green=green: (not green[i]) or (not green[i + 1]) or R.deck[i] > 0.5 or R.deck[i + 1] > 0.5 or R.deck[i] < -0.5 or in_junction(R, R.s[i], 6.0) or in_junction(R, R.s[i + 1], 6.0)
+    strip(M["grass"], R, e0 + 2.6, e0, -0.12, KERB + 0.01, skipg)
+    strip(M["grass"], R, -e0, -e0 - 2.6, KERB + 0.01, -0.12, skipg)
+    grass_m += sum(0 if skipg(i) else STEP for i in range(len(R.P) - 1)) * 2
+print("grass verge %.0f m" % grass_m)
 for k, m in M.items():
     if m.v: scene.add_geometry(m.mesh(COL[k]), geom_name=k, node_name=k)
 out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(CITY, "city_part1.glb")

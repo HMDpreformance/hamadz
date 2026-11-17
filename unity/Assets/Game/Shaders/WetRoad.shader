@@ -94,6 +94,7 @@ Shader "HMD/WetRoad"
             float _HMD_PlanarOn;      // 1 when the mirror texture is valid this frame
             float _HMD_Wetness;       // 0 dry .. 1 soaked
             float _HMD_RainAmount;    // ripple strength
+            float4 _HMD_Grid;         // road pitch, road centre offset, road half width, unused
 
             float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
             float vnoise(float2 p)
@@ -112,8 +113,16 @@ Shader "HMD/WetRoad"
 
                 // puddles: large soft patches, more of them the wetter it is
                 float2 wp = input.positionWS.xz;
-                float n = vnoise(wp * 0.11) * 0.65 + vnoise(wp * 0.37) * 0.35;
-                float puddle = smoothstep(0.56 - _HMD_Wetness * 0.2, 0.76 - _HMD_Wetness * 0.2, n) * _HMD_Wetness;
+                // small varied puddles; big mirror pools only in the gutters along the kerb and on crossings
+                float n = vnoise(wp * 0.33) * 0.55 + vnoise(wp * 1.05) * 0.3 + vnoise(wp * 0.09) * 0.15;
+                float pitch = max(_HMD_Grid.x, 1.0), half_ = _HMD_Grid.z;
+                float2 m = wp + _HMD_Grid.y;
+                m = abs(m - pitch * round(m / pitch));               // distance to the nearest road centre line, per axis
+                float2 inRoad = step(m, half_);
+                float2 gutter = smoothstep(3.2, 0.4, half_ - m) * inRoad;
+                float spot = max(max(gutter.x, gutter.y), inRoad.x * inRoad.y * 0.75);
+                float thr = lerp(0.74, 0.5, spot);
+                float puddle = smoothstep(thr - 0.04, thr + 0.07, n) * _HMD_Wetness;
                 float wet = saturate(_HMD_Wetness);
 
                 // wet asphalt: darker, smoother; puddles flat and glassy

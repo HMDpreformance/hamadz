@@ -303,6 +303,8 @@ namespace HMD.EditorTools
             }
 
             var skyTex = AssetDatabase.LoadAssetAtPath<Cubemap>(Imp + "/Sky/night_sky_2k.hdr");
+            var night = Shader.Find("HMD/NightSky");
+            if (night != null) Save(new Material(night), dir + "/NightSky.mat");
             var skyShader = Shader.Find("Skybox/Cubemap");
             if (skyShader != null)
             {

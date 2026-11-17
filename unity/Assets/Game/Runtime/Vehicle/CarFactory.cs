@@ -110,22 +110,26 @@ namespace HMD
                 mr.sharedMaterials = wheelMats;
                 car.wheelVisuals[i] = vis.transform;
 
-                // dark wheel well behind the cut-out, so the arches are not see-through
+                // dark matte arch liner: a cylinder around the wheel drawn from the inside only (front faces culled),
+                // so only its far inner wall and inner end show behind the tyre. It never catches light (unlit black).
                 var well = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 Object.DestroyImmediate(well.GetComponent<Collider>());
-                well.name = "Well";
+                well.name = "ArchLiner";
                 well.transform.SetParent(holder, false);
-                well.transform.localPosition = new Vector3((left ? -1 : 1) * Mathf.Max(0.2f, x - tyreW * 0.55f), wpos.y + 0.06f, wpos.z);
+                float linerW = tyreW * 1.7f;
+                well.transform.localPosition = new Vector3((left ? -1 : 1) * Mathf.Max(0.2f, x - tyreW * 0.3f), wpos.y + 0.04f, wpos.z);
                 well.transform.localRotation = Quaternion.Euler(0, 0, 90);
-                well.transform.localScale = new Vector3(r * 2.9f, 0.02f, r * 2.9f);   // covers the whole arch opening, so the street never shows through
-                well.GetComponent<Renderer>().sharedMaterial = wellMat;
+                well.transform.localScale = new Vector3(r * 2.75f, linerW * 0.5f, r * 2.75f);   // cylinder: y scale is half its length
+                var wr = well.GetComponent<Renderer>();
+                wr.sharedMaterial = LinerMat;
+                wr.shadowCastingMode = ShadowCastingMode.Off;
             }
 
             car.Setup(spec);
             car.shadow = Res.ContactShadow(root.transform, halfW * 2f * 1.6f, L * 1.3f, Mathf.Min(yF - rF, yR - rR) + 0.03f).transform;
 
             // --- lights
-            AddLights(root.transform, spec, L, halfW, height, player);
+            AddLights(root.transform, spec, L, halfW, height, player, Mathf.Min(yF - rF, yR - rR) + 0.05f);
 
             if (player)
             {
@@ -136,7 +140,7 @@ namespace HMD
             return car;
         }
 
-        static void AddLights(Transform root, CarSpec spec, float L, float halfW, float h, bool player)
+        static void AddLights(Transform root, CarSpec spec, float L, float halfW, float h, bool player, float groundY)
         {
             var lights = new GameObject("Lights").transform;
             lights.SetParent(root, false);
@@ -156,35 +160,70 @@ namespace HMD
                     li.color = new Color(1f, 0.95f, 0.86f);
                     li.shadows = LightShadows.None;
                     cl.heads.Add(li);
+                    // small lens glow on the lamp
+                    Sprite(lights, "HeadGlow", new Vector3(s * halfW * 0.64f, h * 0.5f, L * 0.455f), true, new Vector2(0.3f, 0.13f), HeadGlowMat);   // on the real lamps (they sit back on top of the bumper)
+                }
+                // two long soft light pools on the road ahead (the beams), they shine on the wet asphalt
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    var pool = Sprite(lights, "BeamPool", new Vector3(s * halfW * 0.45f, groundY, L * 0.5f + 8.5f), false, new Vector2(3.4f, 15f), BeamMat);
+                    pool.transform.localRotation = Quaternion.Euler(90, s * 3f, 0);
+                    cl.pools.Add(pool.transform);
                 }
             }
-            // tail glow: soft red light on the road behind (looks great on wet asphalt) and two glow sprites
+            // tail glow: red light thrown back onto the road behind (a downward spot behind the car, so it does
+            // not paint the bumper or plate)
             var tail = new GameObject("TailGlow");
             tail.transform.SetParent(lights, false);
-            tail.transform.localPosition = new Vector3(0, h * 0.45f, -L * 0.5f - 0.3f);
+            tail.transform.localPosition = new Vector3(0, h * 0.5f, -L * 0.5f - 0.35f);
+            tail.transform.localRotation = Quaternion.Euler(55, 180, 0);
             var tl = tail.AddComponent<Light>();
-            tl.type = LightType.Point;
-            tl.range = player ? 7f : 4f;
-            tl.intensity = 1.2f;
+            tl.type = LightType.Spot;
+            tl.spotAngle = 110; tl.innerSpotAngle = 40;
+            tl.range = player ? 8f : 5f;
+            tl.intensity = 1.6f;
             tl.color = new Color(1f, 0.05f, 0.03f);
             tl.shadows = LightShadows.None;
             tl.renderMode = player ? LightRenderMode.ForcePixel : LightRenderMode.Auto;
             cl.tail = tl;
+            // the lamp glows: a wide soft bar on each lamp, dim when cruising, bright when braking
             for (int s = -1; s <= 1; s += 2)
             {
-                var q = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                Object.DestroyImmediate(q.GetComponent<Collider>());
-                q.name = "TailSprite";
-                q.transform.SetParent(lights, false);
-                q.transform.localPosition = new Vector3(s * halfW * 0.72f, h * 0.64f, -L * 0.5f - 0.02f);   // on the real tail lamps
-                q.transform.localScale = new Vector3(0.38f, 0.16f, 1);
-                var m = Res.Particle(new Color(1f, 0.08f, 0.05f, 0.85f) * 2.2f, Res.SoftDot);
-                var r = q.GetComponent<Renderer>();
-                r.sharedMaterial = m;
-                r.shadowCastingMode = ShadowCastingMode.Off;
+                var r = Sprite(lights, "TailBar", new Vector3(s * halfW * 0.72f, h * 0.66f, -L * 0.5f - 0.03f), false, new Vector2(0.44f, 0.1f), Res.Particle(new Color(1f, 0.08f, 0.05f, 0.85f), Res.SoftBox));
                 cl.tailSprites.Add(r);
             }
         }
+
+        /// <summary>A flat glow quad. faceForward: shows its picture to the front (+Z); otherwise to the back (-Z).</summary>
+        static Renderer Sprite(Transform parent, string name, Vector3 pos, bool faceForward, Vector2 size, Material m)
+        {
+            var q = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            Object.DestroyImmediate(q.GetComponent<Collider>());
+            q.name = name;
+            q.transform.SetParent(parent, false);
+            q.transform.localPosition = pos;
+            if (faceForward) q.transform.localRotation = Quaternion.Euler(0, 180, 0);
+            q.transform.localScale = new Vector3(size.x, size.y, 1);
+            var r = q.GetComponent<Renderer>();
+            r.sharedMaterial = m;
+            r.shadowCastingMode = ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            return r;
+        }
+
+        static Material linerMat, headGlowMat, beamMat;
+        static Material LinerMat
+        {
+            get
+            {
+                if (linerMat != null) return linerMat;
+                linerMat = Res.UnlitMat(new Color(0.006f, 0.006f, 0.008f));
+                linerMat.SetFloat("_Cull", 1f);   // front faces off: only the inside of the cylinder shows
+                return linerMat;
+            }
+        }
+        static Material HeadGlowMat => headGlowMat ? headGlowMat : (headGlowMat = Res.Particle(new Color(1f, 0.95f, 0.85f, 0.9f) * 1.6f, Res.SoftDot));
+        static Material BeamMat => beamMat ? beamMat : (beamMat = Res.Particle(new Color(1f, 0.92f, 0.78f, 0.16f), Res.SoftDot));
 
         /// <summary>Glossy clear-coated paint from the model's own texture. Cars with a key colour get repainted.</summary>
         static void ApplyPaint(GameObject model, string id, CarModelCfg cfg, CarSpec spec)
@@ -225,7 +264,7 @@ namespace HMD
         }
 
         /// <summary>A lighter traffic car: the 6,000-triangle model on a kinematic body.</summary>
-        public static GameObject BuildTraffic(string id, Transform parent, Color paint)
+        public static GameObject BuildTraffic(string id, Transform parent, Color paint, bool lights = true)
         {
             var spec = CarDB.Get(id);
             float L = spec.length;
@@ -264,6 +303,7 @@ namespace HMD
             var rb = go.AddComponent<Rigidbody>();
             rb.isKinematic = true;
             rb.mass = spec.weightKg;
+            if (!lights) return go;   // parked: no glows
             // tail lights so traffic reads at night
             for (int s = -1; s <= 1; s += 2)
             {
@@ -271,7 +311,7 @@ namespace HMD
                 Object.DestroyImmediate(q.GetComponent<Collider>());
                 q.transform.SetParent(go.transform, false);
                 q.transform.localPosition = new Vector3(s * halfW * 0.72f, h * 0.64f, -L * 0.5f - 0.02f);   // on the real tail lamps
-                q.transform.localScale = new Vector3(0.34f, 0.14f, 1);
+                q.transform.localScale = new Vector3(0.4f, 0.09f, 1);
                 q.GetComponent<Renderer>().sharedMaterial = TrafficTail;
                 q.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
                 var hq = GameObject.CreatePrimitive(PrimitiveType.Quad);
@@ -283,11 +323,20 @@ namespace HMD
                 hq.GetComponent<Renderer>().sharedMaterial = TrafficHead;
                 hq.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
             }
+            // a soft headlight pool on the road ahead (reflects in the wet street)
+            var pool = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            Object.DestroyImmediate(pool.GetComponent<Collider>());
+            pool.transform.SetParent(go.transform, false);
+            pool.transform.localPosition = new Vector3(0, 0.05f, L * 0.5f + 6f);
+            pool.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            pool.transform.localScale = new Vector3(3.6f, 10f, 1);
+            pool.GetComponent<Renderer>().sharedMaterial = BeamMat;
+            pool.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
             return go;
         }
 
         static Material trafficTail, trafficHead;
-        static Material TrafficTail => trafficTail ? trafficTail : (trafficTail = Res.Particle(new Color(1f, 0.06f, 0.04f, 0.9f) * 2f, Res.SoftDot));
+        static Material TrafficTail => trafficTail ? trafficTail : (trafficTail = Res.Particle(new Color(1f, 0.06f, 0.04f, 0.9f) * 1.6f, Res.SoftBox));
         static Material TrafficHead => trafficHead ? trafficHead : (trafficHead = Res.Particle(new Color(1f, 0.96f, 0.85f, 0.95f) * 2.5f, Res.SoftDot));
     }
 
@@ -297,6 +346,7 @@ namespace HMD
         public readonly List<Light> heads = new List<Light>();
         public Light tail;
         public readonly List<Renderer> tailSprites = new List<Renderer>();
+        public readonly List<Transform> pools = new List<Transform>();
         CarController car;
         MaterialPropertyBlock mpb;
 
@@ -307,7 +357,7 @@ namespace HMD
             if (car == null) return;
             bool braking = car.brake > 0.1f || car.handbrake;
             if (tail) tail.intensity = braking ? 3.5f : 1.0f;
-            float k = braking ? 4.5f : 1.8f;
+            float k = braking ? 3.6f : 1.1f;   // dim lamp bar when cruising, bright when braking
             foreach (var r in tailSprites)
             {
                 r.GetPropertyBlock(mpb);

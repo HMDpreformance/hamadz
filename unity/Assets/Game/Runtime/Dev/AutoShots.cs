@@ -33,6 +33,10 @@ namespace HMD
             car.throttle = 0; car.brake = 1;
             yield return new WaitForSeconds(2f);
             car.brake = 0;
+            // the car from the front: headlight glows and the beam pools on the wet road
+            g.rig.SetFixed(car.transform.position + car.transform.forward * 11f + car.transform.right * 2.5f + Vector3.up * 1.3f, car.transform.position + car.transform.forward * 3f + Vector3.up * 0.4f, false);
+            yield return new WaitForSeconds(0.5f);
+            yield return Shot("02b_headlights");
 
             // street level city look
             g.rig.SetFixed(car.transform.position + new Vector3(-8, 1.6f, -12), car.transform.position + new Vector3(10, 4, 30), false);

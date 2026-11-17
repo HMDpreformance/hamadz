@@ -26,8 +26,18 @@ namespace HMD
             Screen.sleepTimeout = SleepTimeout.NeverSleep;
 
             // sky + ambient
+            var nightSky = Res.Load<Material>("Mats/NightSky");
             var skyMat = Res.Load<Material>("Mats/Sky");
-            if (skyMat != null)
+            if (nightSky != null && nightSky.shader.isSupported)
+            {
+                // procedural night: clouds lit by the city glow, stars, warm horizon
+                var ns = new Material(nightSky);
+                ns.SetFloat("_Exposure", 2.6f);
+                ns.SetFloat("_Cover", 0.6f);
+                RenderSettings.skybox = ns;
+                cam.clearFlags = CameraClearFlags.Skybox;
+            }
+            else if (skyMat != null)
             {
                 var sky = new Material(skyMat);
                 sky.SetFloat("_Exposure", 0.26f);   // deep night, not dusk

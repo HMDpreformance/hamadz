@@ -442,17 +442,32 @@ namespace HMD
                 b.Sub(1).Box(p, new Vector3(w, h / 3f + 0.05f, w), 1f, true, true);
             }
             Vector3 top = basePos + Vector3.up * h + lean;
-            // fronds: drooping crossed cards
-            int n = 9;
+            // fronds: 3-segment arching leaves, folded into a V along the spine so they keep a full silhouette
+            // seen from street level (flat cards turned edge-on and vanished). A few young fronds point up.
+            int n = 13;
+            Vector3[] sp = new Vector3[4];
+            float[] wid = { 0.12f, 0.7f, 0.55f, 0.1f };
             for (int f = 0; f < n; f++)
             {
-                float a = f * Mathf.PI * 2 / n + R() * 0.3f;
+                float a = f * Mathf.PI * 2 / n + R() * 0.35f;
                 Vector3 dir = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
-                Vector3 side = Vector3.Cross(Vector3.up, dir) * 0.9f;
-                Vector3 tip = top + dir * 3.6f + Vector3.down * 1.6f;
-                Vector3 midp = top + dir * 1.8f + Vector3.up * 0.25f;
-                b.Sub(2).QuadUV(top - side * 0.3f, top + side * 0.3f, midp + side, midp - side, Vector3.up, new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 0.5f), new Vector2(0, 0.5f));
-                b.Sub(2).QuadUV(midp - side, midp + side, tip + side * 0.2f, tip - side * 0.2f, Vector3.up, new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 1), new Vector2(0, 1));
+                Vector3 side = Vector3.Cross(Vector3.up, dir).normalized;
+                bool young = f % 5 == 0;
+                float len = young ? 2.6f : 3.6f + R() * 0.8f;
+                float droop = young ? -0.6f : 0.9f + R() * 0.9f;   // how far the tip falls
+                sp[0] = top;
+                sp[1] = top + dir * len * 0.36f + Vector3.up * (young ? 0.9f : 0.5f);
+                sp[2] = top + dir * len * 0.7f + Vector3.up * (young ? 1.3f : 0.25f - droop * 0.35f);
+                sp[3] = top + dir * len + Vector3.down * droop + Vector3.up * (young ? 1.2f : 0f);
+                for (int k = 0; k < 3; k++)
+                {
+                    float v0 = k / 3f, v1 = (k + 1) / 3f;
+                    Vector3 fold0 = Vector3.down * wid[k] * 0.4f, fold1 = Vector3.down * wid[k + 1] * 0.4f;
+                    Vector3 l0 = sp[k] - side * wid[k] + fold0, l1 = sp[k + 1] - side * wid[k + 1] + fold1;
+                    Vector3 r0 = sp[k] + side * wid[k] + fold0, r1 = sp[k + 1] + side * wid[k + 1] + fold1;
+                    b.Sub(2).QuadUV(l0, sp[k], sp[k + 1], l1, Vector3.up, new Vector2(0, v0), new Vector2(0.5f, v0), new Vector2(0.5f, v1), new Vector2(0, v1));
+                    b.Sub(2).QuadUV(sp[k], r0, r1, sp[k + 1], Vector3.up, new Vector2(0.5f, v0), new Vector2(1, v0), new Vector2(1, v1), new Vector2(0.5f, v1));
+                }
             }
         }
 

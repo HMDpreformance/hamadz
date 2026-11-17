@@ -33,6 +33,7 @@ namespace HMD
         public void Setup(Transform playerT)
         {
             player = playerT;
+            count = GfxSetup.IsMobile ? 18 : 32;   // busier streets
             for (int i = 0; i < count; i++)
             {
                 var id = Models[i % Models.Length];
@@ -41,6 +42,46 @@ namespace HMD
                 Respawn(t, true);
                 cars.Add(t);
             }
+            Parked();
+        }
+
+        /// <summary>
+        /// Cars parked along the kerb in the strip outside the outer lane (lanes end 9.6 m from the road
+        /// centre, the kerb is at 12 m), away from crossings and the LSX forecourt. Lights off, culled when far.
+        /// </summary>
+        void Parked()
+        {
+            var root = new GameObject("Parked").transform;
+            root.SetParent(transform, false);
+            var prng = new System.Random(11);
+            float off = City.Road * 0.5f - 1.25f;
+            Vector3 door = City.I != null ? City.I.GarageDoor : new Vector3(1e6f, 0, 1e6f);
+            int n = 0, max = GfxSetup.IsMobile ? 60 : 140;
+            for (int k = 0; k <= City.N && n < max; k++)
+                for (int seg = 0; seg < City.N && n < max; seg++)
+                    for (int axis = 0; axis < 2; axis++)
+                        for (int side = -1; side <= 1; side += 2)
+                        {
+                            if (prng.NextDouble() > 0.42) continue;
+                            float line = City.RoadLine(k) + side * off;
+                            float s0 = seg * City.Pitch + 14f, s1 = seg * City.Pitch + City.Block - 14f;
+                            int cnt = 1 + prng.Next(2);
+                            float along = s0 + (float)prng.NextDouble() * (s1 - s0 - 8f);
+                            for (int c = 0; c < cnt && along < s1; c++, along += 6.5f + (float)prng.NextDouble() * 6f)
+                            {
+                                Vector3 p = axis == 0 ? new Vector3(line, 0, along) : new Vector3(along, 0, line);
+                                if ((p - door).sqrMagnitude < 20f * 20f) continue;
+                                // facing the way that side's traffic drives (right-hand traffic)
+                                Vector3 fwd = axis == 0 ? new Vector3(0, 0, side) : new Vector3(-side, 0, 0);
+                                var go = CarFactory.BuildTraffic(Models[prng.Next(Models.Length)], root, Color.gray, false);
+                                go.transform.SetPositionAndRotation(p, Quaternion.LookRotation(fwd));
+                                go.isStatic = true;
+                                var lg = go.AddComponent<LODGroup>();
+                                lg.SetLODs(new[] { new LOD(0.025f, go.GetComponentsInChildren<Renderer>()) });
+                                lg.RecalculateBounds();
+                                n++;
+                            }
+                        }
         }
 
         public void SetPlayer(Transform t) => player = t;

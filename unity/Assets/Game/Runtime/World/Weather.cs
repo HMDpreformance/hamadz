@@ -55,6 +55,7 @@ namespace HMD
             // the WetRoad shader does the wet look (darker, glossy, puddles, mirror); dry roads keep a soft sheen
             Shader.SetGlobalFloat("_HMD_Wetness", Raining ? 1f : 0.3f);
             Shader.SetGlobalFloat("_HMD_RainAmount", Raining ? 1f : 0f);
+            Shader.SetGlobalVector("_HMD_Grid", new Vector4(City.Pitch, City.Road * 0.5f, City.Road * 0.5f, 0));
             var city = City.I;
             if (city == null) return;
             var asphalt = city.transform.Find("Asphalt");

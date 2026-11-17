@@ -70,7 +70,6 @@ namespace HMD
             m.SetFloat("_ClearCoat", 1f);
             m.SetFloat("_ClearCoatMask", 1f);
             m.SetFloat("_ClearCoatSmoothness", 0.96f);   // the lacquer: mirror sharp
-            m.SetFloat("_Cull", 0f);   // two-sided: the inside of wheel arches and sills renders instead of showing the street through the shell
             m.SetFloat("_EnvironmentReflections", 1f);
             m.SetFloat("_SpecularHighlights", 1f);
             return m;

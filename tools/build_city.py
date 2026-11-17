@@ -71,7 +71,8 @@ for r in plan["roads"]:
         j = i
         while j + 1 < len(Pf) and inside[j + 1]: j += 1
         if j - i >= 3:
-            roads.append(Road(r["name"], r["cls"], Pf[i:j + 1] * S, df[i:j + 1], (i > 0, j < len(Pf) - 1)))
+            edge = lambda p: p[0] < 3 or p[1] < 3 or p[1] > plan["size"][1] - 3      # the road leaves the map here
+            roads.append(Road(r["name"], r["cls"], Pf[i:j + 1] * S, df[i:j + 1], (i > 0 or edge(Pf[i]), j < len(Pf) - 1 or edge(Pf[j]))))
         i = j + 1
 
 def seg_hits(A, B):
@@ -211,6 +212,8 @@ worst = {}
 for R in roads:
     ds = np.maximum(np.diff(R.s), 1e-6); gr = np.abs(np.diff(R.h)) / ds * 100
     worst[R.cls] = max(worst.get(R.cls, 0), float(gr.max()))
+    if gr.max() > 6.5:
+        k = int(gr.argmax()); print("  steep %.1f%% on %s (%s) at x %.0f z %.0f, deck %.1f" % (gr.max(), R.name, R.cls, R.P[k][0], R.P[k][1], R.deck[k]))
 print("steepest slope per class (%):", {k: round(v, 1) for k, v in worst.items()})
 
 # ---- 5. meshes
@@ -350,7 +353,7 @@ for R in roads:
             M["barrier_red" if q % 2 == 0 else "barrier_white"].box([c[0], R.h[k], c[1]], 1.9, 1.1, 0.6, yaw)
         blocks.append({"x": round(float(p[0]), 1), "z": round(float(p[1]), 1), "y": round(float(R.h[k]), 2), "yaw": round(math.degrees(yaw), 1), "width": R.w, "road": R.name})
 
-# terrain: the ground is shaped to the roads (0.5 m under them), natural beyond, sea bed in the north
+# terrain: the ground is shaped to the roads (just under them, so no step shows beside the road), natural beyond, sea bed in the north
 allP = np.concatenate([r.P for r in roads]); allH = np.concatenate([r.h for r in roads]); allD = np.concatenate([r.deck for r in roads])
 allE = np.concatenate([np.full(len(r.P), r.w / 2 + (WALK if r.cls in ("main", "street") else 0)) for r in roads])
 tree = cKDTree(allP)
@@ -366,7 +369,7 @@ for iz in range(nz):
         if idx:
             idx = np.array(idx); d = np.linalg.norm(allP[idx] - [X, Z], axis=1) - allE[idx]
             lowroad = allD[idx] < 0.5
-            cap = np.where(lowroad, allH[idx] - 0.5, allH[idx] - 1.6)        # never above a road or a ramp
+            cap = np.where(lowroad, allH[idx] - 0.15, allH[idx] - 1.6)        # never above a road or a ramp
             near = d < 7.0
             if near.any(): g = min(g, cap[near].min()) if not (near & lowroad).any() else cap[near & lowroad].min()
             else:

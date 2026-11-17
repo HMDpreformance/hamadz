@@ -20,6 +20,13 @@ namespace HMD
         float lastThrottle;
         int lastGear;
         public float master = 1f;
+        // new effects (ElevenLabs / Higgsfield, unity_assets/sfx -> Resources/Imported/AudioHD)
+        AudioSource brakeSq, wind, road, city, spool;
+        AudioClip crash, nitroHit, bov;
+        bool lastNitro; float lastCrash;
+
+        /// <summary>An HD effect from AudioHD when there is one, else the old clip.</summary>
+        static AudioClip Hd(string name, string fallback = null) => Res.Load<AudioClip>("AudioHD/" + name) ?? (fallback != null ? Res.Load<AudioClip>(fallback) : null);
 
         public void Setup(CarController c, bool player)
         {
@@ -41,13 +48,40 @@ namespace HMD
                 var l = new Layer { rpm = kv.Key, on = Src(kv.Value[0], player), off = Src(kv.Value[1] ?? kv.Value[0], player) };
                 layers.Add(l);
             }
-            squeal = Src(Res.Load<AudioClip>("Audio/car/brake_squeal"), player);
+            // tyre squeal on slip (a real squeal loop now; the old clip was a brake squeal used for both)
+            squeal = Src(Hd("tire_squeal", "Audio/car/brake_squeal"), player);
+            brakeSq = Src(Hd("brake_squeal", "Audio/car/brake_squeal"), player);
+            wind = Src(Hd("wind"), player);
+            road = Src(Hd("road"), player);
+            spool = Src(Hd("turbo_spool"), player); if (spool) spool.loop = false;
+            if (player) { city = Src(Hd("amb_city", "Audio/amb_city"), true); city.spatialBlend = 0f; }
             sfx = Src(null, player);
             sfx.loop = false;
             var p = new List<AudioClip>();
             for (int i = 1; i <= 5; i++) { var a = Res.Load<AudioClip>("Audio/car/pop_" + i); if (a) p.Add(a); }
+            var bf = Hd("backfire"); if (bf) { p.Add(bf); p.Add(bf); }   // the big crack comes up often
             pops = p.ToArray();
             flutter = Res.Load<AudioClip>("Audio/car/flutter_1");
+            crash = Hd("crash", "Audio/crash");
+            nitroHit = Hd("nitro", "Audio/nitro_start");
+            bov = Hd("bov", "Audio/car/bov_big");
+            if (player)
+            {
+                var hd = new List<string>();
+                foreach (var n in new[] { "tire_squeal", "brake_squeal", "wind", "road", "amb_city", "turbo_spool", "bov", "crash", "nitro", "backfire" })
+                    if (Res.Load<AudioClip>("AudioHD/" + n) != null) hd.Add(n);
+                Debug.Log($"[HMD] car audio: engine {eng} with {layers.Count} rpm layers; HD effects loaded: {(hd.Count > 0 ? string.Join(", ", hd) : "none")}");
+            }
+        }
+
+        /// <summary>Hits: a crash sound scaled by the impact (walls, barriers, buildings).</summary>
+        void OnCollisionEnter(Collision c)
+        {
+            if (crash == null || sfx == null || Time.time - lastCrash < 0.4f) return;
+            float imp = c.relativeVelocity.magnitude;
+            if (imp < 4f) return;
+            lastCrash = Time.time;
+            sfx.PlayOneShot(crash, Mathf.Clamp01((imp - 4f) / 18f) * 0.9f * master);
         }
 
         AudioSource Src(AudioClip clip, bool player)
@@ -86,11 +120,30 @@ namespace HMD
             }
             if (squeal && squeal.clip)
                 squeal.volume = Mathf.Clamp01((car.RearSlip - 0.35f) * 1.5f) * (car.SpeedKmh > 8 ? 0.7f : 0) * master;
+            float v = car.SpeedKmh;
+            // brakes: squeal when braking hard at speed
+            if (brakeSq && brakeSq.clip) brakeSq.volume = (car.brake > 0.7f && v > 40f && car.ForwardSpeed > 0f ? Mathf.Clamp01((v - 40f) / 80f) * 0.45f : 0f) * master;
+            // wind and road rise with speed (the old game had neither in Unity)
+            if (wind && wind.clip) { wind.volume = Mathf.Clamp01(v / 260f) * Mathf.Clamp01(v / 260f) * 0.55f * master; wind.pitch = Mathf.Lerp(0.85f, 1.15f, v / 260f); }
+            if (road && road.clip) { road.volume = Mathf.Clamp01(v / 120f) * 0.35f * master; road.pitch = Mathf.Lerp(0.7f, 1.3f, Mathf.Clamp01(v / 220f)); }
+            if (city && city.clip) city.volume = 0.22f * master;
+            // nitro: the hit when the boost fires
+            if (car.nitro && !lastNitro && car.NitroAmount > 0.05f && nitroHit) sfx.PlayOneShot(nitroHit, 0.8f * master);
+            lastNitro = car.nitro;
+            // turbo whistle while pulling hard high in the rev range (turbo engines)
+            bool turbo = car.spec.engine.Contains("tt") || car.spec.engine == "i4" || car.spec.engine == "i6" || car.spec.engine == "v6";
+            if (turbo && spool && spool.clip)
+            {
+                bool pull = load > 0.8f && rpm > car.spec.rpmRedline * 0.45f;
+                if (pull && !spool.isPlaying) spool.Play();
+                spool.volume = (pull ? 0.35f : 0f) * master;
+            }
 
             // lift-off flutter / pops, and a pop on upshift
             if (lastThrottle > 0.7f && car.EngineLoad < 0.2f && rpm > car.spec.rpmRedline * 0.55f)
             {
-                if (car.spec.engine == "i4" || car.spec.engine == "rotary") { if (flutter) sfx.PlayOneShot(flutter, 0.6f * master); }
+                if (turbo && bov) sfx.PlayOneShot(bov, 0.55f * master);   // blow-off valve
+                else if (car.spec.engine == "i4" || car.spec.engine == "rotary") { if (flutter) sfx.PlayOneShot(flutter, 0.6f * master); }
                 else if (pops.Length > 0) sfx.PlayOneShot(pops[Random.Range(0, pops.Length)], 0.5f * master);
             }
             if (car.Gear > lastGear && lastGear > 0 && pops.Length > 0) sfx.PlayOneShot(pops[Random.Range(0, pops.Length)], 0.35f * master);

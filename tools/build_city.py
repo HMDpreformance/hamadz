@@ -30,7 +30,7 @@ def ground(X, Z):
     d = coast_y(x) - y
     if d < 0: return max(-5.0, 1.5 + d * 0.09)
     h = 1.5 + 9.0 * min(1.0, d / 1500.0) ** 1.3
-    for cx, cy, r, amp in ((1500, 310, 330, 16), (1250, 120, 260, 11), (2060, 420, 260, 9), (1620, 1130, 300, 3), (300, 250, 300, 6)):
+    for cx, cy, r, amp in ((1500, 310, 330, 11), (1250, 120, 260, 8), (2060, 420, 260, 6), (1620, 1130, 300, 3), (300, 250, 300, 4)):
         h += amp * math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * (r * 0.55) ** 2))
     return h
 
@@ -91,17 +91,40 @@ def seg_hits(A, B):
         for j in np.where((t >= 0) & (t < 1) & (u >= 0) & (u < 1))[0]: out.append((i, float(t[j]), int(j), float(u[j])))
     return out
 
+# a street or main road that meets a highway ramp (highway 1 to 4.5 m up: a solid wall) is cut there
+def cut_at_ramps(roads):
+    out = []
+    for R in roads:
+        cuts = []
+        for H in roads:
+            if H is R or H.cls != "highway" or R.cls == "highway": continue
+            for i, t, j, u in seg_hits(R.P, H.P):
+                dk = np.interp(H.s[j] + u * STEP, H.s, H.deck)
+                if 0.8 < dk < 5.2: cuts.append(R.s[i] + t * STEP)
+        if not cuts: out.append(R); continue
+        keep = np.ones(len(R.P), bool)
+        for c in cuts: keep &= np.abs(R.s - c) > 26
+        i = 0
+        while i < len(keep):
+            if not keep[i]: i += 1; continue
+            j = i
+            while j + 1 < len(keep) and keep[j + 1]: j += 1
+            if j - i >= 4: out.append(Road(R.name, R.cls, R.P[i:j + 1], R.deck[i:j + 1], (R.blocked[0] and i == 0, R.blocked[1] and j == len(keep) - 1)))
+            i = j + 1
+    return out
+roads = cut_at_ramps(roads)
+
 # ---- 2. interchanges: where a highway flies over a main road, four ramps join the two
 ramps = []
 for hwy in [r for r in roads if r.cls == "highway"]:
     for o in [r for r in roads if r.cls == "main"]:
         for i, t, j, u in seg_hits(hwy.P, o.P):
             sh = hwy.s[i] + t * STEP; so = o.s[j] + u * STEP
-            if np.interp(sh, hwy.s, hwy.deck) < 4: continue
+            if np.interp(sh, hwy.s, hwy.deck) < 3.5: continue
             C = hwy.at(sh); th = hwy.at(min(sh + 5, hwy.s[-1])) - hwy.at(max(sh - 5, 0)); th /= np.linalg.norm(th)
             nh = np.array([-th[1], th[0]])
             for d in (-1, 1):
-                sa = sh + d * 165
+                sa = sh + d * 212
                 if sa < 10 or sa > hwy.s[-1] - 10 or np.interp(sa, hwy.s, hwy.deck) > 0.3: continue
                 A = hwy.at(sa)
                 for lat in (-1, 1):
@@ -164,18 +187,31 @@ for a, A in enumerate(roads):
                 add_junction(allP[q], [(a, A.s[0] if end == 0 else A.s[-1]), (b, B.s[sidx[q]])])
                 break
 
-# junction heights: every road is level inside the junction zone and eases back to its own line
-for it in range(3):
-    for J in junctions:
-        J["h"] = float(np.mean([np.interp(s, roads[k].s, roads[k].h) for k, s in J["members"]]))
-        J["r"] = max(roads[k].w for k, s in J["members"]) / 2 + 4
-    for J in junctions:
-        for k, sj in J["members"]:
-            R = roads[k]; d = np.abs(R.s - sj)
-            wgt = np.clip(1 - (d - J["r"]) / 34.0, 0, 1); wgt = wgt * wgt * (3 - 2 * wgt)
-            R.h = R.h * (1 - wgt) + J["h"] * wgt
+# junction heights by relaxation: each road's height line is smoothed (no bumps, gentle slopes) while
+# every junction zone is held level at one height shared by all its roads
+for J in junctions: J["r"] = float(max(roads[k].w for k, s in J["members"]) / 2 + 4)
+masks = []
+for J in junctions: masks.append([(k, np.abs(roads[k].s - sj) < J["r"]) for k, sj in J["members"]])
+for R in roads: R.target = R.h.copy()
+for it in range(140):
+    for R in roads:
+        h = R.h; sm = h.copy()
+        sm[1:-1] = 0.25 * h[:-2] + 0.5 * h[1:-1] + 0.25 * h[2:]
+        R.h = sm + 0.02 * (R.target - sm)              # a weak pull back to the ground line and the bridge height
+    for J, mk in zip(junctions, masks):
+        vals = np.concatenate([roads[k].h[m] for k, m in mk if m.any()])
+        if len(vals) == 0: continue
+        J["h"] = float(vals.mean())
+        for k, m in mk: roads[k].h[m] = J["h"]
 for J in junctions:
+    J.setdefault("h", float(np.interp(J["members"][0][1], roads[J["members"][0][0]].s, roads[J["members"][0][0]].h)))
     for k, sj in J["members"]: roads[k].junc.append((sj, J["r"]))
+for R in roads: R.deck = np.maximum(R.h - R.base, 0.0) * (R.deck > 0.05)   # the real height above the ground after smoothing
+worst = {}
+for R in roads:
+    ds = np.maximum(np.diff(R.s), 1e-6); gr = np.abs(np.diff(R.h)) / ds * 100
+    worst[R.cls] = max(worst.get(R.cls, 0), float(gr.max()))
+print("steepest slope per class (%):", {k: round(v, 1) for k, v in worst.items()})
 
 # ---- 5. meshes
 class Mesh:

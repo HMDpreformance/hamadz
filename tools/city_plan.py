@@ -106,7 +106,7 @@ def terrain(x, y):
     and Nad Al Sheba, a low rise under Downtown."""
     inland = max(0.0, coast_y(x) - y)
     h = 1.5 + 9.0 * min(1.0, inland / 1500.0) ** 1.3
-    for cx, cy, r, amp in ((1500, 310, 330, 16), (1250, 120, 260, 11), (2060, 420, 260, 9), (1620, 1130, 300, 3), (300, 250, 300, 6)):
+    for cx, cy, r, amp in ((1500, 310, 330, 11), (1250, 120, 260, 8), (2060, 420, 260, 6), (1620, 1130, 300, 3), (300, 250, 300, 4)):
         h += amp * math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * (r * 0.55) ** 2))
     return h
 
@@ -149,10 +149,10 @@ for r in roads:
         for o in roads:
             if o is r or o["cls"] == "street": continue
             if o["cls"] == "highway" and hw.index(o) < hw.index(r): continue
-            for at in crossings(pts, o["pts"]): add(at, 7.5, 60, 150, "flyover")
+            for at in crossings(pts, o["pts"]): add(at, 6.2, 60, 240, "flyover")
     if r["cls"] != "street" or r["name"] == "Palm Trunk":
-        for at in crossings(pts, water["creek"]): add(at, 8.0, 90, 130, "bridge")
-    if r["name"] == "Palm Trunk": add(150, 9.0, 120, 110, "bridge")
+        for at in crossings(pts, water["creek"]): add(at, 6.5, 90, 170, "bridge")
+    if r["name"] == "Palm Trunk": add(150, 5.0, 80, 140, "bridge")
     if r["name"] == "Downtown Blvd":
         for at in crossings(pts, hw[0]["pts"]): add(at, -6.0, 50, 110, "underpass")
     r["h"] = [round(terrain(x, y) + e, 2) for (x, y), e in zip(pts, extra)]

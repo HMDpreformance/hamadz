@@ -17,6 +17,8 @@ namespace HMD
 
         IEnumerator Start()
         {
+            // Test runs are unattended: keep going when the window loses focus (Player setting runInBackground is off).
+            Application.runInBackground = true;
             dir = Path.Combine(Path.GetDirectoryName(Application.dataPath) ?? ".", "Shots");
             Directory.CreateDirectory(dir);
             g = Game.I; car = g.car; nc = NewCity.I;
@@ -634,12 +636,16 @@ namespace HMD
                         var rd = t.rd; int k = t.k;
                         int s = back ? Mathf.Min(rd.pts.Count - 2, k + 5) : Mathf.Max(0, k - 5);
                         int e = back ? Mathf.Max(0, k - 4) : Mathf.Min(rd.pts.Count - 1, k + 4);
-                        if (s == k || e == k) continue;   // the road ends in this junction: that way only
+                        if (s == k) continue;   // the road starts here: it is driven the other way, into the junction
                         PutOn(car, rd, s, back);
                         yield return new WaitForFixedUpdate();
                         car.Body.linearVelocity = car.transform.forward * (60f / 3.6f);
                         bool passed = false; var endP = rd.pts[e];
                         yield return Follow(car, rd, s, 60f, 8f, tt => { if (Vector3.Distance(car.transform.position, endP) < 6f) passed = true; return passed ? new Vector3(9, 0, 0) : new Vector3(0, 0, -1); }, back);
+                        // A road that ends at the junction: Follow stops one point before the road's last point, so the
+                        // car never gets within 6 m of it. Reaching that last stretch counts as through.
+                        bool endsHere = back ? e == 0 : e == rd.pts.Count - 1;
+                        if (!passed && endsHere && Vector3.Distance(car.transform.position, endP) < Mathf.Max(20f, Vector3.Distance(rd.pts[back ? 1 : rd.pts.Count - 2], endP) + 6f)) passed = true;
                         passes++;
                         bool fault = !passed || mBumps > 0 || mHit > 2f || mAir > 0.15f;
                         if (fault) bad++;
@@ -664,6 +670,41 @@ namespace HMD
             Profile("Al Wasl kerb", new Vector3(1151, 2.7f, 1863), new Vector3(1176, 2.5f, 1861) + (new Vector3(1176, 0, 1861) - new Vector3(1151, 0, 1863)).normalized * 6f);
             Profile("Downtown Blvd north lane at the sidewalk hit", new Vector3(2513.9f, 4.3f, 1323.6f) - new Vector3(0.93f, 0, -0.36f) * 9f, new Vector3(2513.9f, 4.3f, 1323.6f) + new Vector3(0.93f, 0, -0.36f) * 22f);
             Profile("Downtown Blvd along the north lane 1360 to 1290", new Vector3(2524.7f + 3.8f, 3f, 1351.5f), new Vector3(2499.4f + 3.8f, 6f, 1286.3f));
+            SideClearance();
+        }
+
+        /// <summary>How close buildings stand to the highways: every 10 m along each highway, a ray sideways at bumper
+        /// height from the road edge outwards (40 m) on both sides; first thing hit (building, barrier, ...).</summary>
+        void SideClearance()
+        {
+            foreach (var rd in nc.roads)
+            {
+                if (rd.cls != "highway") continue;
+                int samples = 0, open = 0, under10 = 0, under5 = 0; float minD = 99; Vector3 minAt = Vector3.zero;
+                var close = new System.Text.StringBuilder(); int listed = 0;
+                float acc = 0;
+                for (int i = 1; i < rd.pts.Count; i++)
+                {
+                    acc += Vector3.Distance(rd.pts[i - 1], rd.pts[i]); if (acc < 10f) continue; acc = 0;
+                    var d = rd.pts[i] - rd.pts[i - 1]; d.y = 0; if (d.sqrMagnitude < 0.01f) continue; d.Normalize(); var sd = Vector3.Cross(Vector3.up, d);
+                    var surf = NewCity.Surface(rd.pts[i] + Vector3.up * 0.5f);
+                    for (int s = -1; s <= 1; s += 2)
+                    {
+                        samples++;
+                        var o = surf + Vector3.up * 0.6f + sd * s * (rd.width * 0.5f - 0.5f);
+                        if (!Physics.Raycast(o, sd * s, out var h, 40f)) continue;
+                        string n = h.collider.name;
+                        if (!n.StartsWith("Dress")) continue;   // a barrier or nothing first: fine
+                        open++;
+                        float dist = h.distance - 0.5f;   // from the road edge
+                        if (dist < 10f) under10++;
+                        if (dist < 5f) under5++;
+                        if (dist < minD) { minD = dist; minAt = h.point; }
+                        if (dist < 6f && listed < 12) { close.Append($" ({h.point.x:F0},{h.point.z:F0}) {dist:F1} m {(s > 0 ? "R" : "L")};"); listed++; }
+                    }
+                }
+                Debug.Log($"[HMD] side clearance {rd.name}: {samples} samples (both sides, every 10 m); a building is the first thing within 40 m of the edge (no barrier in between) at {open}, closer than 10 m at {under10}, closer than 5 m at {under5}; nearest {minD:F1} m at ({minAt.x:F0},{minAt.z:F0}); closest spots:{close}");
+            }
         }
 
         /// <summary>Logs the surfaces along a line every 0.25 m, one entry per change of collider or height step.</summary>

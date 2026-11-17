@@ -205,7 +205,9 @@ for hwy in [r for r in roads if r.cls == "highway"]:
                     def beside(sq, f=1.0):                              # a point beside the highway at distance sq along it
                         tq = hwy.at(min(sq + 4, hwy.s[-1])) - hwy.at(max(sq - 4, 0)); tq /= np.linalg.norm(tq)
                         return hwy.at(sq) + np.array([-tq[1], tq[0]]) * lat * side * f
-                    ctrl = [A, beside(sa - d * 45, 0.55), beside(sa - d * 95)] + [beside(sh + d * q) for q in (150, 110)]
+                    # every point is closer to the crossing than the one before (a line that went back on itself
+                    # left a fold with no asphalt where the ramp splits from the highway)
+                    ctrl = [A, beside(sa - d * 45, 0.55), beside(sa - d * 95)] + [beside(sa - d * q) for q in (120, 142)]
                     ctrl += [B + (C + th * d * 62 + nh * lat * side - B) * 0.45, B]
                     curve = np.array(ctrl)
                     for _ in range(4):                                  # corner cutting: a smooth line through the control points
@@ -238,8 +240,12 @@ for a in range(len(roads)):
         for i, t, j, u in seg_hits(A.P, B.P):
             sa = A.s[i] + t * (A.s[i + 1] - A.s[i]); sb = B.s[j] + u * (B.s[j + 1] - B.s[j])
             da, db = np.interp(sa, A.s, A.deck), np.interp(sb, B.s, B.deck)
-            if abs(da) < 1 and abs(db) < 1:
+            # two main roads that meet where one is still coming down from a bridge (up to 3 m): they join at a
+            # shared height (the lower road rises a little) instead of one passing through the other's bank
+            lim = 3.0 if (A.cls == "main" and B.cls == "main" and min(da, db) > -1) else 1.0
+            if abs(da) < lim and abs(db) < lim:
                 add_junction(A.at(sa), [(a, sa), (b, sb)])
+                if max(abs(da), abs(db)) >= 1: print("  bridge-foot junction: %s x %s at (%.0f, %.0f), decks %.1f / %.1f" % (A.name, B.name, A.at(sa)[0], A.at(sa)[1], da, db))
             elif min(da, db) < -3 and abs(max(da, db)) < 1:
                 # an underpass: the upper road becomes a short bridge slab over the dipped road
                 (up, su, lo, sl) = (a, sa, b, sb) if da > db else (b, sb, a, sa)

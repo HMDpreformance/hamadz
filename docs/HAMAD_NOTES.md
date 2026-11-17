@@ -76,3 +76,11 @@ Hamad: look up the real car before building it, so the shape and size are right.
 | GMC Sierra 1500 regular cab, 6.5 ft box (2007 to 2013) | 5.222 m | about 2.03 m | 1.87 m | 3.023 m | 0.80 m |
 
 Tool: `tools/fix_proportions.py <src> <out> <length> <width> <height> real <rear overhang> <wheelbase> <front overhang>` moves the axles to the real places.
+
+## Ideas to add to the city plan (from the road research, not yet built)
+
+- About 12 landmarks to steer by. Six are placed in part 1: the needle tower, the sail hotel, the arch hotel on the Palm, the big wheel, the twisted tower, the ski mall.
+- A good first drive out of the LSXmotorsport garage.
+- Shortcuts and a few jump and drift spots.
+- A tunnel under the creek and a mountain road with switchbacks (part 2).
+- Road rules: wide lanes, smooth arcs, slopes up to about 6%, flat junctions, no steps, smooth barriers.

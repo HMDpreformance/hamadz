@@ -30,7 +30,7 @@ def ground(X, Z):
     d = coast_y(x) - y
     if d < 0: return max(-5.0, 1.5 + d * 0.09)
     h = 1.5 + 9.0 * min(1.0, d / 1500.0) ** 1.3
-    for cx, cy, r, amp in ((1500, 310, 330, 11), (1250, 120, 260, 8), (2060, 420, 260, 6), (1620, 1130, 300, 3), (300, 250, 300, 4)):
+    for cx, cy, r, amp in ((1500, 310, 450, 10), (1250, 120, 360, 7), (2060, 420, 330, 6), (1620, 1130, 300, 3), (300, 250, 300, 4)):
         h += amp * math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * (r * 0.55) ** 2))
     return h
 
@@ -125,7 +125,7 @@ for hwy in [r for r in roads if r.cls == "highway"]:
             C = hwy.at(sh); th = hwy.at(min(sh + 5, hwy.s[-1])) - hwy.at(max(sh - 5, 0)); th /= np.linalg.norm(th)
             nh = np.array([-th[1], th[0]])
             for d in (-1, 1):
-                sa = sh + d * 212
+                sa = sh + d * 272
                 if sa < 10 or sa > hwy.s[-1] - 10 or np.interp(sa, hwy.s, hwy.deck) > 0.3: continue
                 A = hwy.at(sa)
                 for lat in (-1, 1):
@@ -134,9 +134,17 @@ for hwy in [r for r in roads if r.cls == "highway"]:
                     if not cands: continue
                     B = o.at(cands[0])
                     if max(A[0], B[0]) > PX * S - 15: continue
-                    M = A + nh * lat * 22 - th * d * 75
-                    tt = np.linspace(0, 1, 24)[:, None]
-                    curve = (1 - tt) ** 2 * A + 2 * (1 - tt) * tt * M + tt ** 2 * B
+                    # a slip road: leaves the highway, runs beside it, then turns into the main road
+                    side = hwy.w / 2 + 11.0
+                    def beside(sq, f=1.0):                              # a point beside the highway at distance sq along it
+                        tq = hwy.at(min(sq + 4, hwy.s[-1])) - hwy.at(max(sq - 4, 0)); tq /= np.linalg.norm(tq)
+                        return hwy.at(sq) + np.array([-tq[1], tq[0]]) * lat * side * f
+                    ctrl = [A, beside(sa - d * 45, 0.55), beside(sa - d * 95)] + [beside(sh + d * q) for q in (150, 110)]
+                    ctrl += [B + (C + th * d * 62 + nh * lat * side - B) * 0.45, B]
+                    curve = np.array(ctrl)
+                    for _ in range(4):                                  # corner cutting: a smooth line through the control points
+                        q1 = curve[:-1] * 0.75 + curve[1:] * 0.25; q2 = curve[:-1] * 0.25 + curve[1:] * 0.75
+                        curve = np.vstack([curve[:1], np.stack([q1, q2], 1).reshape(-1, 2), curve[-1:]])
                     ramps.append(Road("Ramp", "ramp", curve, np.zeros(len(curve))))
 roads += ramps
 
@@ -370,10 +378,12 @@ for iz in range(nz):
             idx = np.array(idx); d = np.linalg.norm(allP[idx] - [X, Z], axis=1) - allE[idx]
             lowroad = allD[idx] < 0.5
             cap = np.where(lowroad, allH[idx] - 0.15, allH[idx] - 1.6)        # never above a road or a ramp
-            near = d < 7.0
+            flat = 26.0 if g < 0.5 else 7.0              # in the sea the road carries a strip of land (the Palm)
+            run = 12.0 if g < 0.5 else 26.0
+            near = d < flat
             if near.any(): g = min(g, cap[near].min()) if not (near & lowroad).any() else cap[near & lowroad].min()
             else:
-                k = int(np.argmin(d)); w = min(1.0, (d[k] - 7.0) / 26.0); w = w * w * (3 - 2 * w)
+                k = int(np.argmin(d)); w = min(1.0, (d[k] - flat) / run); w = w * w * (3 - 2 * w)
                 target = cap[k] if lowroad[k] else min(g, cap[k])
                 g = target * (1 - w) + g * w
         TH[iz, ix] = g
@@ -393,6 +403,133 @@ for k, m in M.items():
 out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(CITY, "city_part1.glb")
 scene.export(out)
 
+
+# ---- 6. what stands beside the roads: building lots, street lights and trees, as data for the game.
+# Styles follow the real areas (docs/DUBAI_REFERENCE.md). The game picks the models; this only says what goes where.
+rng = np.random.default_rng(7)
+def th(X, Z):
+    fx, fz = (X - x0) / G, (Z - z0) / G
+    ix, iz = int(np.clip(fx, 0, nx - 2)), int(np.clip(fz, 0, nz - 2)); ax, az = fx - ix, fz - iz
+    return float(TH[iz, ix] * (1 - ax) * (1 - az) + TH[iz, ix + 1] * ax * (1 - az) + TH[iz + 1, ix] * (1 - ax) * az + TH[iz + 1, ix + 1] * ax * az)
+
+#          style            width      depth      height     gap   area
+STYLE = {"Downtown Dubai": ("tower",      (30, 46), (30, 46), (70, 230), 10),
+         "Dubai Marina":   ("tower_res",  (26, 34), (26, 34), (110, 260), 8),
+         "JBR":            ("tower_beige", (28, 36), (24, 30), (95, 140), 7),
+         "Al Quoz":        ("warehouse",  (34, 60), (24, 40), (8, 13), 8),
+         "Jebel Ali":      ("warehouse",  (40, 70), (28, 44), (9, 14), 12),
+         "Al Barsha":      ("midrise",    (24, 40), (18, 26), (18, 48), 7),
+         "Jumeirah":       ("villa",      (14, 20), (13, 18), (7, 10), 7),
+         "Al Wasl":        ("villa",      (14, 20), (13, 18), (7, 10), 7),
+         "Dubai Hills":    ("villa",      (15, 22), (14, 20), (7, 10), 9),
+         "Palm Jumeirah":  ("villa",      (14, 20), (13, 18), (7, 10), 6)}
+DC = [(d["name"], d["x"] * S, d["y"] * S) for d in plan["districts"] if d["name"] in STYLE]
+def district(X, Z):
+    k = int(np.argmin([(X - dx) ** 2 + (Z - dz) ** 2 for _, dx, dz in DC])); return DC[k][0]
+
+lots, cells = [], {}
+def free(cx, cz, w, d, t, n, own):
+    """True when the footprint keeps clear of every road, of the sea and of the other buildings."""
+    for a in np.linspace(-w / 2, w / 2, max(2, int(w / 6) + 1)):
+        for b in np.linspace(-d / 2, d / 2, max(2, int(d / 6) + 1)):
+            p = np.array([cx, cz]) + t * a + n * b
+            if p[0] < 4 or p[0] > PX * S - 12 or p[1] < 4 or th(p[0], p[1]) < 0.9: return False
+            idx = tree.query_ball_point(p, 26.0)
+            if idx:
+                idx = np.array(idx)
+                if (np.linalg.norm(allP[idx] - p, axis=1) < allE[idx] + 1.5).any(): return False
+    rad = (min(w, d) * 0.55 + max(w, d) * 0.5) / 2 * 1.05
+    gx, gz = int(cx // 40), int(cz // 40)
+    for i in range(gx - 2, gx + 3):
+        for j in range(gz - 2, gz + 3):
+            for (ox, oz, orad) in cells.get((i, j), ()):
+                if math.hypot(cx - ox, cz - oz) < rad + orad: return False
+    cells.setdefault((gx, gz), []).append((cx, cz, rad)); return True
+
+def add_lot(cx, cz, w, d, h, t, n, style, shops):
+    yaw = math.degrees(math.atan2(-n[0], -n[1]))        # the front looks back at the road (yaw 0 = looks to +Z)
+    base = min(th(cx + t[0] * a + n[0] * b, cz + t[1] * a + n[1] * b) for a in (-w / 2, w / 2) for b in (-d / 2, d / 2))
+    lots.append({"x": round(cx, 1), "z": round(cz, 1), "y": round(base, 2), "w": round(w, 1), "d": round(d, 1), "h": round(h, 1), "yaw": round(yaw, 1), "style": style, "shops": bool(shops)})
+
+order = sorted(range(len(roads)), key=lambda k: {"highway": 0, "main": 1, "street": 2, "ramp": 3}[roads[k].cls])
+for k in order:
+    R = roads[k]
+    if R.cls == "ramp": continue
+    T, N = R.frame()
+    for side in (1, -1):
+        s_at = 8.0 + rng.uniform(0, 10)
+        while s_at < R.s[-1] - 8:
+            i = int(np.searchsorted(R.s, s_at)); i = min(i, len(R.P) - 1)
+            p = R.at(s_at); dn = district(p[0], p[1]); style, wr, dr, hr, gap = STYLE[dn]
+            if R.cls == "highway":
+                # the highway wall of towers in the tall areas (thin line of towers, low city behind); nothing elsewhere
+                if dn not in ("Downtown Dubai", "Dubai Marina", "Al Barsha", "JBR"): s_at += 40; continue
+                style, wr, dr, hr, gap = "tower", (32, 48), (32, 48), (120, 300), 26
+            if R.cls == "street" and style != "villa":     # the small streets take smaller footprints
+                wr, dr = (min(wr[0], 20), min(wr[1], 28)), (min(dr[0], 18), min(dr[1], 24))
+                if style.startswith("tower"): hr = (hr[0] * 0.6, hr[1] * 0.75)
+            w, d, h = rng.uniform(*wr), rng.uniform(*dr), rng.uniform(*hr)
+            if R.deck[i] > 0.5 and R.cls != "highway": s_at += 12; continue
+            edge = R.w / 2 + (WALK if R.cls in ("main", "street") else 0.0)
+            back = edge + (16.0 if R.cls == "highway" else 3.0 if style != "villa" else 5.0) + d / 2
+            c = p + N[i] * side * back
+            ok = free(c[0], c[1], w, d, T[i], N[i] * side, k)
+            if ok: add_lot(c[0], c[1], w, d, h, T[i], N[i] * side, style, style in ("tower", "tower_res", "tower_beige", "midrise") and R.cls != "highway")
+            for row in (1, 2):                            # the rows behind fill the block (low areas only)
+                if style not in ("villa", "warehouse", "midrise") or R.cls == "highway": break
+                c2 = p + N[i] * side * (back + row * (d + 7.0))
+                h2 = h * rng.uniform(0.8, 1.15)
+                if free(c2[0], c2[1], w, d, T[i], N[i] * side, k): add_lot(c2[0], c2[1], w, d, h2, T[i], N[i] * side, style, False)
+            s_at += (w + gap * rng.uniform(0.7, 1.5)) if ok else 7.0
+# landmarks (look-alikes of the real ones, no names in the game)
+landmarks = []
+def landmark(kind, px, py, w, d, h):
+    X, Z = px * S, py * S
+    landmarks.append({"kind": kind, "x": round(X, 1), "z": round(Z, 1), "y": round(max(th(X, Z), 0.0), 2), "w": w, "d": d, "h": h})
+landmark("needle_tower", 1700, 1175, 60, 60, 420)        # the tallest tower, inside the Downtown ring
+landmark("sail_hotel", 1420, 1900, 60, 40, 160)           # on its own island off Jumeirah
+landmark("arch_hotel", 620, 2215, 150, 40, 95)            # at the top of the Palm crescent
+landmark("big_wheel", 250, 1720, 20, 120, 125)            # observation wheel off JBR
+landmark("twisted_tower", 520, 1440, 30, 30, 240)         # Marina
+landmark("ski_mall", 560, 1130, 140, 90, 60)              # Al Barsha, the long sloped box
+for L_ in landmarks:   # buildings make way for a landmark
+    lots[:] = [b for b in lots if math.hypot(b["x"] - L_["x"], b["z"] - L_["z"]) > (max(L_["w"], L_["d"]) + max(b["w"], b["d"])) / 2 + 6]
+
+lamps, trees = [], []
+GREEN = ("Downtown Dubai", "Dubai Marina", "JBR", "Jumeirah", "Al Wasl", "Palm Jumeirah", "Dubai Hills")
+for R in roads:
+    T, N = R.frame()
+    step = 46.0 if R.cls == "highway" else 34.0 if R.cls == "main" else 38.0
+    s_at, q = 6.0, 0
+    while s_at < R.s[-1] - 4:
+        i = min(int(np.searchsorted(R.s, s_at)), len(R.P) - 1); p = R.at(s_at); y = float(np.interp(s_at, R.s, R.h))
+        if not in_junction(R, s_at, 5):
+            if R.cls == "highway":
+                lamps.append([round(float(p[0]), 1), round(y, 2), round(float(p[1]), 1), round(math.degrees(math.atan2(N[i][0], N[i][1])), 1), "highway"])
+            else:
+                side = 1 if q % 2 == 0 else -1
+                off = (R.w / 2 + (1.0 if R.cls != "ramp" else 0.6)) * side
+                c = p + N[i] * off
+                lamps.append([round(float(c[0]), 1), round(y + (KERB if R.cls != "ramp" else 0), 2), round(float(c[1]), 1), round(math.degrees(math.atan2(-N[i][0] * side, -N[i][1] * side)), 1), "street"])
+                if R.cls == "main" and R.deck[i] < 0.5 and district(p[0], p[1]) in GREEN:      # palm rows on the boulevards
+                    for sd in (1, -1):
+                        for ds in (step * 0.33, step * 0.66):
+                            if s_at + ds < R.s[-1] - 4 and not in_junction(R, s_at + ds, 6):
+                                pc = R.at(s_at + ds) + N[i] * sd * (R.w / 2 + 2.0)
+                                trees.append([round(float(pc[0]), 1), round(float(np.interp(s_at + ds, R.s, R.h)) + KERB, 2), round(float(pc[1]), 1), "palm", round(float(rng.uniform(0.85, 1.2)), 2)])
+        s_at += step; q += 1
+# garden trees between the villas of Dubai Hills (the green area), and palms on the Palm
+for _ in range(1400):
+    X, Z = rng.uniform(4, PX * S - 12), rng.uniform(4, plan["size"][1] * S)
+    dn = district(X, Z)
+    if dn not in ("Dubai Hills", "Palm Jumeirah", "Jumeirah") or th(X, Z) < 1.0: continue
+    idx = tree.query_ball_point([X, Z], 26.0)
+    if idx and (np.linalg.norm(allP[np.array(idx)] - [X, Z], axis=1) < allE[np.array(idx)] + 2).any(): continue
+    if any(abs(X - b["x"]) < b["w"] / 2 + b["d"] / 2 and abs(Z - b["z"]) < b["w"] / 2 + b["d"] / 2 for b in lots): continue
+    trees.append([round(X, 1), round(th(X, Z), 2), round(Z, 1), "tree" if dn == "Dubai Hills" else "palm", round(float(rng.uniform(0.8, 1.3)), 2)])
+from collections import Counter
+print("lots", len(lots), dict(Counter(b["style"] for b in lots)), "| lamps", len(lamps), "| trees", len(trees), "| landmarks", len(landmarks))
+
 g = plan["garage"]
 info = {
     "bounds": [x0, z0, x1, z1], "scale": S, "grid": {"x0": x0, "z0": z0, "step": G, "nx": nx, "nz": nz},
@@ -402,6 +539,7 @@ info = {
     "junctions": [{"x": round(float(J["pos"][0]), 1), "z": round(float(J["pos"][1]), 1), "y": round(J["h"], 2), "r": float(J["r"]), "roads": sorted({int(k) for k, s in J["members"]})} for J in junctions],
     "blocks": blocks,
     "garage": {"x": g["x"] * S, "z": g["y"] * S, "y": round(ground(g["x"] * S, g["y"] * S), 2)},
+    "lots": lots, "landmarks": landmarks, "lamps": lamps, "trees": trees,
     "districts": [{"name": d["name"], "x": d["x"] * S, "z": d["y"] * S} for d in plan["districts"] if d["x"] <= PX],
 }
 json.dump(info, open(out[:-4] + ".json", "w"), separators=(",", ":"))

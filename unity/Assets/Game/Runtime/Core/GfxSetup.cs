@@ -34,7 +34,14 @@ namespace HMD
                 var ns = new Material(nightSky);
                 ns.SetFloat("_Exposure", 2.6f);
                 ns.SetFloat("_Cover", 0.6f);
+                // Dubai at night: a deep blue sky with a soft orange city glow low on the horizon, not a red sunset band
+                ns.SetColor("_Zenith", new Color(0.006f, 0.012f, 0.05f));
+                ns.SetColor("_Horizon", new Color(0.04f, 0.055f, 0.12f));
+                ns.SetColor("_Glow", new Color(0.26f, 0.14f, 0.08f));
+                ns.SetColor("_CloudDark", new Color(0.05f, 0.06f, 0.1f));
+                ns.SetColor("_CloudLit", new Color(0.22f, 0.17f, 0.2f));
                 RenderSettings.skybox = ns;
+                sky = ns;
                 cam.clearFlags = CameraClearFlags.Skybox;
             }
             else if (skyMat != null)
@@ -127,16 +134,18 @@ namespace HMD
             var profile = ScriptableObject.CreateInstance<VolumeProfile>();
             // soft wide bloom: lights glow into the wet air without blowing out
             var bloom = profile.Add<Bloom>(true);
-            bloom.intensity.Override(IsMobile ? 0.8f : 0.95f);
-            bloom.threshold.Override(1.1f);
-            bloom.scatter.Override(0.78f);
+            // lamps, signs and lit windows are well above 1 (HDR): a threshold of 1 lets them bloom hard while lit
+            // walls and road (below 1) stay crisp; less scatter keeps the glow round the light instead of a wash
+            bloom.intensity.Override(IsMobile ? 0.9f : 1.15f);
+            bloom.threshold.Override(1.0f);
+            bloom.scatter.Override(0.66f);
             bloom.tint.Override(new Color(1f, 0.93f, 0.88f));
             bloom.highQualityFiltering.Override(!IsMobile);
             var tone = profile.Add<Tonemapping>(true);
             tone.mode.Override(TonemappingMode.ACES);
             var ca = profile.Add<ColorAdjustments>(true);
-            ca.postExposure.Override(0.7f);
-            ca.contrast.Override(18f);
+            ca.postExposure.Override(0.6f);
+            ca.contrast.Override(26f);
             ca.saturation.Override(12f);
             // street-racer night grade: teal shadows, warm orange highlights
             var split = profile.Add<SplitToning>(true);
@@ -167,8 +176,24 @@ namespace HMD
         }
 #endif
 
+        Material sky;
+        /// <summary>Where the sky glows most (the Downtown towers); set by the game once the city is built.</summary>
+        public static Vector3? SkyGlowCentre;
+
         void LateUpdate()
         {
+            if (sky != null && follow != null)
+            {
+                if (SkyGlowCentre.HasValue)
+                {
+                    var d = SkyGlowCentre.Value - follow.position;
+                    // strongest from outside Downtown; standing among the towers the whole horizon glows a little
+                    float dist = new Vector2(d.x, d.z).magnitude;
+                    sky.SetVector("_GlowDir", new Vector4(d.x, 0, d.z, 0));
+                    sky.SetFloat("_GlowBoost", Mathf.Lerp(0.4f, 1.1f, Mathf.InverseLerp(150f, 900f, dist)));
+                }
+                else sky.SetFloat("_GlowBoost", 0f);
+            }
             if (probe == null || follow == null) return;
             probe.transform.position = follow.position + Vector3.up * 1.5f;
             // refresh a full probe every few frames (time-sliced faces keep it cheap)

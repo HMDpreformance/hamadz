@@ -432,6 +432,26 @@ for R in roads:
                 a = R.P[i] + n[i] * o; b = R.P[i] + n[i] * (o - 0.35 * side); c = R.P[i + 1] + n[i + 1] * (o - 0.35 * side); d = R.P[i + 1] + n[i + 1] * o
                 q = [V(a, R.h[i] + 0.95), V(d, R.h[i + 1] + 0.95), V(c, R.h[i + 1] + 0.95), V(b, R.h[i] + 0.95)]
                 M["concrete"].quad(*(q if side > 0 else q[::-1]))
+    if R.cls == "highway":
+        # concrete safety barrier along both edges on the ground (the bridges have their parapet), open where a slip
+        # road leaves or joins: a car that slides wide stays on the highway instead of running into the lots and pillars
+        t, n = R.frame()
+        rampP = np.concatenate([q.P for q in roads if q.cls == "ramp"]) if any(q.cls == "ramp" for q in roads) else np.zeros((0, 2))
+        rtree = cKDTree(rampP) if len(rampP) else None
+        for side in (1, -1):
+            o = hw * side
+            gap = np.array([elevated[i] or in_junction(R, R.s[i], 6.0) or (rtree is not None and len(rtree.query_ball_point(R.P[i] + n[i] * o, 9.0)) > 0) for i in range(len(R.P))])
+            g2 = gap.copy()
+            for i in np.where(gap)[0]: g2[max(0, i - 2):i + 3] = True      # a little more room at each opening
+            bar = lambda i, R=R, g2=g2: R.h[i] + (0.0 if g2[i] else 0.85)
+            wall(M["concrete"], R, o, bar, lambda i, R=R: R.h[i], -side)
+            wall(M["concrete"], R, o + 0.4 * side, bar, lambda i, R=R: R.h[i], side)
+            for i in range(len(R.P) - 1):
+                if g2[i] or g2[i + 1]: continue
+                a_ = R.P[i] + n[i] * o; b_ = R.P[i] + n[i] * (o + 0.4 * side); c_ = R.P[i + 1] + n[i + 1] * (o + 0.4 * side); d_ = R.P[i + 1] + n[i + 1] * o
+                q = [V(a_, R.h[i] + 0.85), V(b_, R.h[i] + 0.85), V(c_, R.h[i + 1] + 0.85), V(d_, R.h[i + 1] + 0.85)]
+                M["concrete"].quad(*(q if side > 0 else q[::-1]))
+            stats["barrier_m"] = stats.get("barrier_m", 0.0) + float((~g2).sum() * STEP)
     if high.any():
         t, n = R.frame()
         for i in range(len(R.P) - 1):                 # underside of the slab
@@ -689,7 +709,7 @@ for R in roads:
             s_at += 650.0
         else: s_at += 40.0
     if R.name == "E11":
-        OFF, UP = R.w / 2 + 8.0, 12.0
+        OFF, UP = R.w / 2 + 9.0, 12.0
         pts, pil = [], []
         for i in range(0, len(R.P), 3):
             c = R.P[i] - N[i] * OFF
@@ -703,7 +723,7 @@ for R in roads:
                 pil.append([round(float(c[0]), 1), round(float(th(c[0], c[1])), 2), round(float(c[1]), 1)]); s_at += 32.0
             else: s_at += 4.0
         metro.append({"pts": pts, "pillars": pil, "width": 8.0})
-print("gantries", len(gantries), "| metro", sum(len(m["pts"]) for m in metro), "pts,", sum(len(m["pillars"]) for m in metro), "pillars")
+print("highway barrier %.0f m" % stats.get("barrier_m", 0)); print("gantries", len(gantries), "| metro", sum(len(m["pts"]) for m in metro), "pts,", sum(len(m["pillars"]) for m in metro), "pillars")
 from collections import Counter
 print("lots", len(lots), dict(Counter(b["style"] for b in lots)), "| lamps", len(lamps), "| trees", len(trees), "| landmarks", len(landmarks))
 

@@ -68,7 +68,10 @@ namespace HMD
                 gfx.Setup(rig.Cam);
                 var dress = new GameObject("NewCityDressing").AddComponent<NewCityDressing>();
                 dress.Build(newCity);
-                new GameObject("LampLights").AddComponent<LampLights>().Setup(dress.lampHeads.Count > 0 ? dress.lampHeads : newCity.lampHeads, camGo.transform);
+                if (dress.lampHeads.Count > 0) new GameObject("LampLights").AddComponent<LampLights>().Setup(dress.lampHeads, camGo.transform, dress.lampCool);
+                else new GameObject("LampLights").AddComponent<LampLights>().Setup(newCity.lampHeads, camGo.transform);
+                // the sky glows over the tallest landmark (the needle tower in Downtown)
+                float tallest = 0; foreach (var lm in NewCityDressing.Landmarks) if (lm.h > tallest) { tallest = lm.h; GfxSetup.SkyGlowCentre = lm.p; }
                 yield return null;
                 startPos = newCity.SpawnPos; startRot = newCity.SpawnRot;
                 garageDoor = newCity.Garage;   // the real LSX building at json.garage (Al Quoz), door facing -Z

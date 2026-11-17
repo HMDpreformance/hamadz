@@ -13,6 +13,8 @@ Shader "HMD/NightSky"
         _Cover ("Cloud cover", Range(0, 1)) = 0.52
         _Stars ("Stars", Range(0, 3)) = 1.2
         _Exposure ("Exposure", Range(0, 4)) = 1
+        _GlowDir ("Downtown glow direction (xz)", Vector) = (0, 0, 0, 0)
+        _GlowBoost ("Downtown glow strength", Range(0, 4)) = 0
     }
     SubShader
     {
@@ -29,6 +31,7 @@ Shader "HMD/NightSky"
             CBUFFER_START(UnityPerMaterial)
             float4 _Zenith, _Horizon, _Glow, _CloudDark, _CloudLit;
             float _Cover, _Stars, _Exposure;
+            float4 _GlowDir; float _GlowBoost;
             CBUFFER_END
 
             struct A { float4 pos : POSITION; };
@@ -66,7 +69,10 @@ Shader "HMD/NightSky"
                 // base gradient + city glow hugging the horizon
                 float3 col = lerp(_Horizon.rgb, _Zenith.rgb, pow(up, 0.45));
                 float glow = exp(-up * 9.0) * (h > -0.05 ? 1 : 0);
-                col += _Glow.rgb * glow;
+                // brighter, taller dome of light over the Downtown towers (direction set from the game each frame)
+                float2 gd = _GlowDir.xz; float towards = length(gd) > 0.01 ? saturate(dot(normalize(d.xz + 1e-5), normalize(gd))) : 0;
+                float dome = pow(towards, 8.0) * exp(-up * 3.5) * _GlowBoost * (h > -0.05 ? 1 : 0);
+                col += _Glow.rgb * glow + _Glow.rgb * float3(1.15, 0.95, 0.85) * dome;
 
                 // stars (above the haze only)
                 float3 sp = d * 220.0;

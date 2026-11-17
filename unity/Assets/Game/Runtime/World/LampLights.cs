@@ -17,25 +17,32 @@ namespace HMD
 
         public void Setup(City c, Transform camT) => Setup(c.lampHeads, camT);
 
-        public void Setup(List<Vector3> lampHeads, Transform camT)
+        List<bool> cool;   // per head: highway LED (cool white) instead of sodium
+        static readonly Color Sodium = new Color(1f, 0.6f, 0.27f), Led = new Color(0.8f, 0.89f, 1f);
+
+        public void Setup(List<Vector3> lampHeads, Transform camT, List<bool> coolHeads = null)
         {
-            heads = lampHeads; cam = camT;
-            int n = GfxSetup.IsMobile ? 10 : 24;
+            heads = lampHeads; cam = camT; cool = coolHeads != null && coolHeads.Count == lampHeads.Count ? coolHeads : null;
+            // Forward+ renderer: no per-object light limit, so a bigger pool lights more of the road ahead
+            int n = GfxSetup.IsMobile ? 12 : 40;
             for (int i = 0; i < n; i++)
             {
                 var l = new GameObject("Lamp" + i).AddComponent<Light>();
                 l.transform.SetParent(transform, false);
                 l.type = LightType.Spot;
                 l.transform.rotation = Quaternion.Euler(90, 0, 0);
-                l.spotAngle = 130; l.innerSpotAngle = 70;
-                l.range = 30f;
-                l.intensity = 26f;
-                l.color = new Color(1f, 0.8f, 0.55f);
+                // a tighter cone with a soft edge: a bright pool under each lamp and darker road between them
+                l.spotAngle = 118; l.innerSpotAngle = 38;
+                l.range = 24f;
+                l.intensity = 34f;
+                l.color = Sodium;
                 l.shadows = LightShadows.None;
                 pool.Add(l);
             }
             Halos();
         }
+
+        bool Cool(int i) => cool != null && cool[i];
 
         /// <summary>A soft glow sprite around every lamp head (the wet air catching the light). One static particle each.</summary>
         void Halos()
@@ -58,7 +65,7 @@ namespace HMD
             var shape = ps.shape; shape.enabled = false;
             var r = go.GetComponent<ParticleSystemRenderer>();
             r.renderMode = ParticleSystemRenderMode.Billboard;
-            r.sharedMaterial = Res.Particle(new Color(1f, 0.72f, 0.42f, 0.22f), Res.SoftDot);
+            r.sharedMaterial = Res.Particle(Color.white, Res.SoftDot);   // colour per particle (sodium / LED)
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             r.receiveShadows = false;
             r.maxParticleSize = 0.5f;
@@ -66,8 +73,8 @@ namespace HMD
             for (int i = 0; i < heads.Count; i++)
             {
                 parts[i].position = heads[i] + Vector3.down * 0.15f;
-                parts[i].startSize = 3.4f;
-                parts[i].startColor = new Color(1f, 0.75f, 0.45f, 0.22f);
+                parts[i].startSize = Cool(i) ? 3.8f : 3.4f;
+                parts[i].startColor = Cool(i) ? new Color(0.78f, 0.88f, 1f, 0.2f) : new Color(1f, 0.66f, 0.34f, 0.24f);
                 parts[i].remainingLifetime = 1e6f;
                 parts[i].startLifetime = 1e6f;
             }
@@ -98,7 +105,14 @@ namespace HMD
             {
                 bool on = k < best.Count;
                 pool[k].enabled = on;
-                if (on) pool[k].transform.position = heads[best[k]];
+                if (on)
+                {
+                    int h = best[k]; var l = pool[k];
+                    l.transform.position = heads[h];
+                    bool c = Cool(h);
+                    // highway LED poles are 12 m tall: a wider, stronger, cooler pool
+                    l.color = c ? Led : Sodium; l.intensity = c ? 52f : 34f; l.range = c ? 32f : 24f; l.spotAngle = c ? 124f : 118f;
+                }
             }
         }
     }

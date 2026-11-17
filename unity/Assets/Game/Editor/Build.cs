@@ -67,6 +67,8 @@ namespace HMD.EditorTools
             CopyDir("unity_assets/tower", Imp + "/Tower", "*.jpg");
             CopyDir("unity_assets/gen", Imp + "/Gen", "*.jpg", "*.png");
             CopyDir("unity_assets/props", Imp + "/Props", "*.glb");
+            if (Directory.Exists(Path.Combine(RepoRoot, "unity_assets/buildings"))) CopyDir("unity_assets/buildings", Imp + "/Buildings", "*.glb", "*.json");
+            if (Directory.Exists(Path.Combine(RepoRoot, "unity_assets/buildings/landmarks"))) CopyDir("unity_assets/buildings/landmarks", Imp + "/Buildings/Landmarks", "*.glb", "*.json");
             CopyDir("unity_assets/city", Imp + "/City", "city_part1.glb", "city_part1.json", "map_full.jpg", "map_base.jpg", "map_base.png", "map_full.png");
             CopyDir("audio/engines", Imp + "/Audio/engines", "*.wav");
             CopyDir("audio/car", Imp + "/Audio/car", "*.wav");

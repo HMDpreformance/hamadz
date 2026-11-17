@@ -42,6 +42,7 @@ namespace HMD
             if (part == "tests") yield return OwnerTests();
             else if (part == "profiles") Profiles();
             else if (part == "junctions") yield return JunctionTests();
+            else if (part == "bridge") yield return BridgeTests();
             else if (part == "default")
             {
                 foreach (var rd in nc.roads) if (rd.cls == "highway") yield return Drive(rd, 230f, rd.name == "E11");
@@ -125,6 +126,7 @@ namespace HMD
                 Vector3 dn = (needle - best); dn.y = 0; dn.Normalize();
                 best += Vector3.Cross(Vector3.up, dn) * 6.5f;   // right-hand lane, clear of the median lamps
                 Park(best, dn);
+                Debug.Log($"[HMD] shot nc_11 from {V(best)}, heading to the needle at {V(needle)}");
                 Cam(NewCity.Surface(best) - dn * 7f + Vector3.up * 2.2f, needle + Vector3.up * 120f); yield return Shot("nc_11_needle_ahead");
                 Vector3 tw = LM("twisted_tower", new Vector3(390f, 2f, 1080f));
                 Cam(S(tw.x - 120, tw.z - 140) + Vector3.up * 25f, tw + Vector3.up * 80f); yield return Shot("nc_12_marina");
@@ -663,6 +665,70 @@ namespace HMD
                 }
             }
             Debug.Log($"[HMD] junction summary: {passes} passes, {bad} flagged, districts {perD.Count}");
+        }
+
+        /// <summary>-ncdrive bridge: the Creek Bridge foot at the Downtown Ring (near 3402,2061, a short steep stretch),
+        /// both ways at 80 and 120 km/h; then two shots of a ramp leaving the highway (from above, at road level).</summary>
+        IEnumerator BridgeTests()
+        {
+            var foot = new Vector3(3405, 0, 2062);
+            NewCity.Road br = null;
+            foreach (var rd in nc.roads) if (rd.name == "Creek Bridge") { br = rd; break; }
+            if (br == null) Debug.Log("[HMD] test BRIDGE: no road named Creek Bridge");
+            else
+            {
+                int fi = 0; float fd = float.MaxValue;
+                for (int i = 0; i < br.pts.Count; i++) { float d = new Vector2(br.pts[i].x - foot.x, br.pts[i].z - foot.z).sqrMagnitude; if (d < fd) { fd = d; fi = i; } }
+                float maxG = 0; Vector3 gAt = br.pts[fi];
+                for (int i = Mathf.Max(1, fi - 10); i < Mathf.Min(br.pts.Count, fi + 10); i++)
+                {
+                    var a = br.pts[i - 1]; var b = br.pts[i]; float h = new Vector2(b.x - a.x, b.z - a.z).magnitude;
+                    if (h > 0.5f) { float gr = Mathf.Abs(b.y - a.y) / h; if (gr > maxG) { maxG = gr; gAt = b; } }
+                }
+                Debug.Log($"[HMD] test BRIDGE Creek Bridge foot: point {fi}/{br.pts.Count} {V(br.pts[fi])}, {Mathf.Sqrt(fd):F0} m from (3405,2062); steepest json grade nearby {maxG * 100:F1}% at {V(gAt)}");
+                foreach (float kmh in new[] { 80f, 120f })
+                    foreach (bool back in new[] { false, true })
+                    {
+                        // forward = along the json order; start 12 points before the foot, finish 10 points past it
+                        int s = back ? Mathf.Min(br.pts.Count - 2, fi + 12) : Mathf.Max(0, fi - 12);
+                        int e = back ? Mathf.Max(0, fi - 10) : Mathf.Min(br.pts.Count - 1, fi + 10);
+                        // the road starts at the foot: forward = start at the foot already at speed and climb onto the bridge
+                        if (s == fi) s = back ? Mathf.Min(br.pts.Count - 2, fi + 1) : fi;
+                        PutOn(car, br, s, back); g.rig.SnapChase();
+                        yield return new WaitForFixedUpdate();
+                        car.Body.linearVelocity = car.transform.forward * (kmh / 3.6f);
+                        bool passed = false, crossed = false; float minV = 999; var endP = br.pts[e]; var footP = br.pts[fi];
+                        yield return Follow(car, br, s, kmh, 25f, t =>
+                        {
+                            if (t > 2f) minV = Mathf.Min(minV, car.SpeedKmh);
+                            if (Vector3.Distance(car.transform.position, footP) < 8f) crossed = true;
+                            if (crossed && Vector3.Distance(car.transform.position, endP) < 8f) passed = true;
+                            return passed ? new Vector3(9, 0, 0) : new Vector3(0, 0, -1);
+                        }, back);
+                        bool endsHere = back ? e == 0 : e == br.pts.Count - 1;
+                        // a road that ends at the foot: Follow stops a point early, so reaching its last stretch counts
+                        if (!passed && endsHere && Vector3.Distance(car.transform.position, endP) < 25f) passed = true;
+                        if (s == fi && !back && Vector3.Distance(car.transform.position, endP) < 8f) passed = true;
+                        bool fault = !passed || mBumps > 0 || mHit > 2f || mAir > 0.15f;
+                        Debug.Log($"[HMD] test BRIDGE Creek Bridge foot {(back ? "backward" : "forward")} at {kmh:F0} km/h: {(passed ? "through" : "DID NOT get through")}, slowest {minV:F0} km/h, now {V(car.transform.position)} ({car.SpeedKmh:F0} km/h), {M()}{(fault ? "  <-- CHECK" : "")}");
+                    }
+            }
+            // two shots of a ramp leaving the highway: the first ramp, about 8 points in (where the old fold was)
+            NewCity.Road rp = null;
+            foreach (var rd in nc.roads) if (rd.cls == "ramp") { rp = rd; break; }
+            if (rp != null)
+            {
+                int k = Mathf.Min(rp.pts.Count - 2, 8);
+                var p = rp.pts[k]; var d = Dir(rp, k); var side = Vector3.Cross(Vector3.up, d);
+                Park(rp.pts[Mathf.Max(0, k - 3)], Dir(rp, Mathf.Max(0, k - 3)));
+                yield return new WaitForSeconds(0.6f);
+                // steep view from behind and above the split (a lower side view had a lamp-lit LED fin right in front)
+                Cam(p - d * 24f - side * 6f + Vector3.up * 42f, p + d * 12f); yield return Shot("nc_22_ramp_split_top");
+                Cam(rp.pts[Mathf.Max(0, k - 6)] + Vector3.up * 1.6f - d * 4f, p + Vector3.up * 1f); yield return Shot("nc_22_ramp_split_road");
+                g.rig.mode = CameraRig.Mode.Chase;
+                Debug.Log($"[HMD] ramp shots at ramp starting {V(rp.pts[0])}, point {k} {V(p)}");
+            }
+            Debug.Log("[HMD] test BRIDGE done");
         }
 
         void Profiles()

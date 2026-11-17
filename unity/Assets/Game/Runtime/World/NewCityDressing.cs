@@ -20,6 +20,7 @@ namespace HMD
         readonly List<(Vector3 p, float yaw, bool highway)> lamps = new List<(Vector3, float, bool)>();
         readonly List<(Vector3 p, bool palm, float s)> trees = new List<(Vector3, bool, float)>();
         public readonly List<Vector3> lampHeads = new List<Vector3>();
+        public readonly List<bool> lampCool = new List<bool>();   // per lamp head: true = highway LED (cool white)
         System.Random rng = new System.Random(21);
         float R() => (float)rng.NextDouble();
 
@@ -29,7 +30,8 @@ namespace HMD
         const int M_FAC0 = 6;            // 6..13 facades (midrise)
         const int M_STUCCO = 14, M_SAND = 15, M_CORR = 16, M_SHUTTER = 17, M_ROOF = 18, M_SHOP = 19, M_ROOMS = 20,
                   M_LED_W = 21, M_LED_B = 22, M_LED_P = 23, M_LED_G = 24, M_RED = 25, M_POLE = 26, M_LAMP = 27,
-                  M_BARK = 28, M_LEAF = 29, M_TREE = 30, M_GLASS = 31, M_WALL = 32, M_SIGN0 = 33, M_SHORE = 37, M_LAND = 38, M_SHALLOW = 39, M_ARCH = 40, M_COUNT = 41;
+                  M_BARK = 28, M_LEAF = 29, M_TREE = 30, M_GLASS = 31, M_WALL = 32, M_SIGN0 = 33, M_SHORE = 37, M_LAND = 38, M_SHALLOW = 39, M_ARCH = 40, M_LAMP_LED = 41, M_SIGN_GREEN = 42, M_SIGN_WHITE = 43, M_STEEL = 44,
+                  M_PLOT_SAND = 45, M_PLOT_CONC = 46, M_PLOT_TILE = 47, M_POOL = 48, M_COUNT = 49;
         float[] towerTile = { 34f, 30f, 44f, 26f, 38f, 24f };
 
         public void Build(NewCity nc)
@@ -57,15 +59,24 @@ namespace HMD
                 { l0.style = "warehouse"; l0.h = Mathf.Clamp(l0.h, 7f, 12f); l0.shops = true; lots[i] = l0; }
                 else if ((new Vector2(l0.p.x - g.x, l0.p.z - g.z)).magnitude < 200f * (nc.Scale / 0.75f) && l0.style == "warehouse") { l0.shops = true; lots[i] = l0; }
             }
+            LoadModels();
+            int modelled = 0;
             foreach (var l in lots)
             {
                 float rr = Mathf.Max(l.w, l.d) * 0.5f;
                 if (l.p.x + rr > g.x - 19f && l.p.x - rr < g.x + 19f && l.p.z + rr > g.z - 14f && l.p.z - rr < g.z + 30f) { skipped++; continue; }
                 if (OnRoad(l)) { onRoad++; continue; }
+                Plot(l);
+                if (PlaceModel(l)) { modelled++; continue; }
                 Building(Cell(l.p), l);
             }
+            foreach (var kv in plots) MeshBuilder.Spawn("Plots_" + kv.Key.x + "_" + kv.Key.y, kv.Value.Build("plots"), mats, transform, false, false).isStatic = true;
+            if (models.Count > 0) Debug.Log($"[HMD] building models: {models.Count} loaded, {modelled} lots use a model, the rest keep the box");
             Landmarks.Clear(); foreach (var m in marks) Landmarks.Add((m.kind, m.p, m.h));
-            foreach (var m in marks) Landmark(Cell(m.p), m);
+            LoadLandmarkModels();
+            int lmModels = 0;
+            foreach (var m in marks) { if (PlaceLandmark(nc, m)) lmModels++; else Landmark(Cell(m.p), m); }
+            if (landmarkModels.Count > 0) Debug.Log($"[HMD] landmark models: {lmModels} of {marks.Count} landmarks use a model");
             // lamps and trees in their own meshes without colliders (thin poles must never stop the car)
             var props = new Dictionary<Vector2Int, MeshBuilder>();
             MeshBuilder Prop(Vector3 p)
@@ -77,6 +88,10 @@ namespace HMD
             foreach (var lp in lamps) Lamp(Prop(lp.p), lp.p, lp.yaw, lp.highway);
             foreach (var t in trees) if (t.palm) Palm(Prop(t.p), t.p, t.s); else Tree(Prop(t.p), t.p, t.s);
             PalmShores(nc, Prop);
+            // green overhead sign gantries across the highways, and the elevated metro beside the E11
+            foreach (var gt in gantries) Gantry(Prop(gt.p), gt.p, gt.yaw, gt.width);
+            foreach (var mt in metros) Metro(mt, Cell, Prop);
+            if (gantries.Count > 0 || metros.Count > 0) Debug.Log($"[HMD] gantries {gantries.Count}, metro lines {metros.Count}");
             foreach (var kv in props) MeshBuilder.Spawn("Props_" + kv.Key.x + "_" + kv.Key.y, kv.Value.Build("props"), mats, transform, false, false).isStatic = true;
             int n = 0;
             foreach (var kv in cells)
@@ -144,7 +159,7 @@ namespace HMD
                             var b = prop(p);
                             RBox(b, M_POLE, p, new Vector3(0.14f, 3.2f, 0.14f), 0, Vector2.one);
                             RBox(b, M_LAMP, p + Vector3.up * 3.2f, new Vector3(0.35f, 0.35f, 0.35f), 0, Vector2.one);
-                            lampHeads.Add(p + Vector3.up * 3.4f);
+                            lampHeads.Add(p + Vector3.up * 3.4f); lampCool.Add(false);
                             lampsAdded++;
                         }
                     }
@@ -221,7 +236,355 @@ namespace HMD
             if (tm.Success)
                 foreach (Match m in Regex.Matches(tm.Groups[1].Value + "]", @"\[([-\d.]+),([-\d.]+),([-\d.]+),""([a-z]+)"",([-\d.]+)\]"))
                     trees.Add((new Vector3(F(m.Groups[1].Value), F(m.Groups[2].Value), F(m.Groups[3].Value)), m.Groups[4].Value == "palm", F(m.Groups[5].Value)));
-            Debug.Log($"[HMD] newcity json dressing: lots={lots.Count} landmarks={marks.Count} lamps={lamps.Count} trees={trees.Count}");
+            // "gantries": [[x, y, z, yawDeg, roadWidth], ...]
+            var gm = Regex.Match(j, @"""gantries"":\[(.*?)\]\]");
+            if (gm.Success)
+                foreach (Match m in Regex.Matches(gm.Groups[1].Value + "]", @"\[([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+)\]"))
+                    gantries.Add((new Vector3(F(m.Groups[1].Value), F(m.Groups[2].Value), F(m.Groups[3].Value)), F(m.Groups[4].Value), F(m.Groups[5].Value)));
+            // "metro": [{"pts": [[x,y,z],...], "pillars": [[x,y,z],...], "width": 8}, ...]
+            var mm = Regex.Match(j, @"""metro"":\[(\{.*?\})\]");
+            if (mm.Success)
+                foreach (Match line in Regex.Matches(mm.Groups[1].Value, @"\{""pts"":\[(.*?)\]\],""pillars"":\[(.*?)\]\],""width"":([-\d.]+)\}"))
+                {
+                    var ml = new MetroLine { width = F(line.Groups[3].Value) };
+                    foreach (Match p in Regex.Matches(line.Groups[1].Value + "]", @"\[([-\d.]+),([-\d.]+),([-\d.]+)\]")) ml.pts.Add(new Vector3(F(p.Groups[1].Value), F(p.Groups[2].Value), F(p.Groups[3].Value)));
+                    foreach (Match p in Regex.Matches(line.Groups[2].Value + "]", @"\[([-\d.]+),([-\d.]+),([-\d.]+)\]")) ml.pillars.Add(new Vector3(F(p.Groups[1].Value), F(p.Groups[2].Value), F(p.Groups[3].Value)));
+                    metros.Add(ml);
+                }
+            Debug.Log($"[HMD] newcity json dressing: lots={lots.Count} landmarks={marks.Count} lamps={lamps.Count} trees={trees.Count} gantries={gantries.Count} metro={metros.Count}");
+        }
+
+        // ---------------------------------------------------------------- building models (unity_assets/buildings)
+        // buildings.json: {"models":[{"id":"marina_tower","w":32,"d":30,"h":170,"styles":["tower_res"],"yaw":0}, ...]}
+        //   id = the GLB name (Buildings/<id>.glb), w/d/h = its real size in metres (x, z, y), styles = the lot styles it
+        //   may stand on, yaw = extra turn in degrees so the model's front faces local +Z (the road side of a lot).
+        [System.Serializable] class BModelJson { public string id; public float w, d, h, yaw; public float weight = 1f; public string[] styles; }
+        [System.Serializable] class BModelsJson { public BModelJson[] models; }
+        class BModel { public BModelJson j; public Mesh mesh; public Material[][] variants; public Material far; public Vector3 size; }
+        readonly Dictionary<string, BModel> lastModel = new Dictionary<string, BModel>();
+        // colour variants per model: as made, a warmer sand tone, a cooler grey tone (multiplied onto the albedo)
+        static readonly Color[] Tints = { Color.white, new Color(1.06f, 0.97f, 0.86f), new Color(0.88f, 0.93f, 1.02f) };
+        readonly List<BModel> models = new List<BModel>();
+        readonly Dictionary<string, List<BModel>> byStyle = new Dictionary<string, List<BModel>>();
+        static Mesh unitBox;
+        Transform modelRoot;
+        readonly Dictionary<Vector2Int, Transform> modelCells = new Dictionary<Vector2Int, Transform>();
+
+        void LoadModels()
+        {
+            var ta = Res.Load<TextAsset>("Buildings/buildings");
+            if (ta == null) return;
+            BModelsJson list = null;
+            try { list = JsonUtility.FromJson<BModelsJson>(ta.text); } catch (System.Exception e) { Debug.LogWarning("[HMD] buildings.json: " + e.Message); }
+            if (list?.models == null) return;
+            foreach (var j in list.models)
+            {
+                var prefab = Res.Load<GameObject>("Buildings/" + j.id);
+                if (prefab == null) { Debug.LogWarning($"[HMD] building model {j.id}: no GLB"); continue; }
+                var m = Bake(prefab, j);
+                if (m == null) continue;
+                models.Add(m);
+                if (j.styles != null)
+                    foreach (var s in j.styles) { if (!byStyle.TryGetValue(s, out var l)) byStyle[s] = l = new List<BModel>(); l.Add(m); }
+            }
+        }
+
+        /// <summary>Merges a model's meshes into one, bottom-centred at the origin, front along +Z; its materials get the
+        /// albedo as emission too (the windows are painted into the texture, so they glow at night).</summary>
+        BModel Bake(GameObject prefab, BModelJson j)
+        {
+            var mfs = prefab.GetComponentsInChildren<MeshFilter>(true);
+            if (mfs.Length == 0) return null;
+            var root = prefab.transform.worldToLocalMatrix;
+            var combines = new List<CombineInstance>(); var mats = new List<Material>();
+            foreach (var mf in mfs)
+            {
+                var mr = mf.GetComponent<MeshRenderer>(); if (mf.sharedMesh == null || mr == null) continue;
+                for (int s = 0; s < mf.sharedMesh.subMeshCount; s++)
+                {
+                    combines.Add(new CombineInstance { mesh = mf.sharedMesh, subMeshIndex = s, transform = root * mf.transform.localToWorldMatrix });
+                    mats.Add(mr.sharedMaterials[Mathf.Min(s, mr.sharedMaterials.Length - 1)]);
+                }
+            }
+            if (combines.Count == 0) return null;
+            var mesh = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32, name = "bld_" + j.id };
+            mesh.CombineMeshes(combines.ToArray(), false, true);
+            // bottom centre to the origin, turned so the front is +Z
+            var b = mesh.bounds; var rot = Quaternion.Euler(0, j.yaw, 0);
+            var v = mesh.vertices; var nrm = mesh.normals;
+            for (int i = 0; i < v.Length; i++) v[i] = rot * (v[i] - new Vector3(b.center.x, b.min.y, b.center.z));
+            if (nrm != null && nrm.Length == v.Length) for (int i = 0; i < nrm.Length; i++) nrm[i] = rot * nrm[i];
+            mesh.vertices = v; if (nrm != null && nrm.Length == v.Length) mesh.normals = nrm; else mesh.RecalculateNormals();
+            mesh.RecalculateBounds(); mesh.UploadMeshData(false);
+            var variants = new Material[Tints.Length][]; Color avg = new Color(0.5f, 0.5f, 0.52f);
+            for (int t = 0; t < Tints.Length; t++)
+            {
+                variants[t] = new Material[mats.Count];
+                for (int i = 0; i < mats.Count; i++)
+                {
+                    var src = mats[i];
+                    Texture tex = src != null ? (src.HasProperty("_BaseMap") ? src.GetTexture("_BaseMap") : src.HasProperty("baseColorTexture") ? src.GetTexture("baseColorTexture") : src.mainTexture) : null;
+                    var m = Res.Mat(Tints[t], 0.35f, 0f);
+                    if (tex) { Res.SetMainTex(m, tex, Vector2.one); Res.SetEmission(m, Color.white * 0.9f, tex); if (i == 0 && t == 0) avg = AverageColour(tex); }
+                    else if (src != null && src.HasProperty("_BaseColor")) Res.SetColor(m, src.GetColor("_BaseColor") * Tints[t]);
+                    m.enableInstancing = true;
+                    variants[t][i] = m;
+                }
+            }
+            // the average includes the bright painted windows: darken it so far boxes sit in the night haze
+            var far = Res.Mat(avg * 0.55f, 0.3f, 0f); Res.SetEmission(far, avg * 0.18f); far.enableInstancing = true;
+            return new BModel { j = j, mesh = mesh, variants = variants, far = far, size = mesh.bounds.size };
+        }
+
+        static Color AverageColour(Texture t)
+        {
+            var rt = RenderTexture.GetTemporary(8, 8, 0, RenderTextureFormat.ARGB32);
+            Graphics.Blit(t, rt);
+            var prev = RenderTexture.active; RenderTexture.active = rt;
+            var tx = new Texture2D(8, 8, TextureFormat.RGBA32, false); tx.ReadPixels(new Rect(0, 0, 8, 8), 0, 0); tx.Apply();
+            RenderTexture.active = prev; RenderTexture.ReleaseTemporary(rt);
+            Color s = Color.black; foreach (var c in tx.GetPixels()) s += c; Object.Destroy(tx);
+            return s / 64f;
+        }
+
+        /// <summary>A model on a lot instead of the box, when one exists for the lot's style. Scaled to the lot within
+        /// limits (footprint fits the lot, height within 0.75-1.35 of the footprint scale), front to the road (lot yaw).
+        /// LOD: the model near, a coloured box far, culled beyond. A box collider keeps cars out.</summary>
+        bool PlaceModel(Lot l)
+        {
+            if (!byStyle.TryGetValue(l.style, out var cands) || cands.Count == 0) return false;
+            // variety: never the same model as the last one placed for this style (neighbouring lots come in order)
+            lastModel.TryGetValue(l.style, out var prevM);
+            // weighted pick (json "weight": rare models like the mosque or petrol station stay rare), never the previous one
+            BModel Pick(BModel skip)
+            {
+                float tot = 0; foreach (var c in cands) if (c != skip) tot += Mathf.Max(0f, c.j.weight);
+                if (tot <= 0f) return cands[rng.Next(cands.Count)];
+                float r = R() * tot;
+                foreach (var c in cands) { if (c == skip) continue; r -= Mathf.Max(0f, c.j.weight); if (r <= 0f) return c; }
+                return cands[cands.Count - 1];
+            }
+            var m = Pick(cands.Count > 1 ? prevM : null);
+            lastModel[l.style] = m;
+            float sxz = Mathf.Min(l.w / Mathf.Max(1f, m.size.x), l.d / Mathf.Max(1f, m.size.z));
+            float sy = Mathf.Clamp(l.h / Mathf.Max(1f, m.size.y), sxz * 0.75f, sxz * 1.35f);
+            var scale = new Vector3(sxz, sy, sxz);
+            if (modelRoot == null) { modelRoot = new GameObject("BuildingModels").transform; modelRoot.SetParent(transform, false); }
+            var key = new Vector2Int(Mathf.FloorToInt(l.p.x / 320f), Mathf.FloorToInt(l.p.z / 320f));
+            if (!modelCells.TryGetValue(key, out var cell)) { cell = new GameObject("Bld_" + key.x + "_" + key.y).transform; cell.SetParent(modelRoot, false); modelCells[key] = cell; }
+            var go = new GameObject("bld_" + m.j.id); go.transform.SetParent(cell, false);
+            go.transform.SetPositionAndRotation(l.p - Vector3.up * 0.3f, Quaternion.Euler(0, l.yaw, 0)); go.transform.localScale = scale;
+            var near = new GameObject("lod0"); near.transform.SetParent(go.transform, false);
+            near.AddComponent<MeshFilter>().sharedMesh = m.mesh;
+            var nr = near.AddComponent<MeshRenderer>(); nr.sharedMaterials = m.variants[rng.Next(m.variants.Length)];
+            // square-ish lots: sometimes turned round (the back of a model faces the road), more variety street-side
+            if (Mathf.Abs(l.w - l.d) < 0.15f * Mathf.Max(l.w, l.d) && R() < 0.3f) near.transform.localRotation = Quaternion.Euler(0, 180f, 0);
+            if (unitBox == null)
+            {
+                var tmp = GameObject.CreatePrimitive(PrimitiveType.Cube); unitBox = Object.Instantiate(tmp.GetComponent<MeshFilter>().sharedMesh);
+                Object.DestroyImmediate(tmp);
+                var vv = unitBox.vertices; for (int i = 0; i < vv.Length; i++) vv[i] += Vector3.up * 0.5f; unitBox.vertices = vv; unitBox.RecalculateBounds();
+            }
+            var farGo = new GameObject("lod1"); farGo.transform.SetParent(go.transform, false); farGo.transform.localScale = m.size;
+            farGo.AddComponent<MeshFilter>().sharedMesh = unitBox;
+            var fr = farGo.AddComponent<MeshRenderer>(); fr.sharedMaterial = m.far; fr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            var lg = go.AddComponent<LODGroup>();
+            float tall = Mathf.Max(m.size.y * sy, 20f);
+            // the real model until the building is small on screen (stand-in boxes switching in at 6-12 % of the screen
+            // height read as pale blocks over the whole middle distance); the box only for the far haze
+            lg.SetLODs(new[] { new LOD(tall > 80f ? 0.008f : 0.018f, new Renderer[] { nr }), new LOD(tall > 80f ? 0.002f : 0.005f, new Renderer[] { fr }) });
+            var bc = go.AddComponent<BoxCollider>(); bc.center = new Vector3(0, m.size.y * 0.5f, 0); bc.size = m.size;
+            go.isStatic = true; near.isStatic = true; farGo.isStatic = true;
+            return true;
+        }
+
+        // ---------------------------------------------------------------- lot ground and light pools
+        readonly Dictionary<Vector2Int, MeshBuilder> plots = new Dictionary<Vector2Int, MeshBuilder>();
+
+        /// <summary>The ground of a lot (the flat navy between buildings read as empty): pavers, a concrete yard or granite
+        /// paving by style, 1.5 m past the footprint; and a soft warm pool of light on the ground at the road-side front
+        /// (shop fronts, villa gates). No colliders.</summary>
+        void Plot(Lot l)
+        {
+            var k = new Vector2Int(Mathf.FloorToInt(l.p.x / 320f), Mathf.FloorToInt(l.p.z / 320f));
+            if (!plots.TryGetValue(k, out var b)) { b = new MeshBuilder(M_COUNT); plots[k] = b; }
+            int mat = l.style == "villa" ? M_PLOT_SAND : l.style == "warehouse" ? M_PLOT_CONC : M_PLOT_TILE;
+            var q = Quaternion.Euler(0, l.yaw, 0);
+            float hx = l.w * 0.5f + 1.5f, hz = l.d * 0.5f + 1.5f, y = 0.05f;
+            Vector3 c = l.p + Vector3.up * y;
+            Vector3 p0 = c + q * new Vector3(-hx, 0, -hz), p1 = c + q * new Vector3(-hx, 0, hz), p2 = c + q * new Vector3(hx, 0, hz), p3 = c + q * new Vector3(hx, 0, -hz);
+            float u = hx * 2f / 4f, v = hz * 2f / 4f;   // 4 m texture repeat
+            UpQuad(b, mat, p0, p1, p2, p3, Vector2.zero, new Vector2(0, v), new Vector2(u, v), new Vector2(u, 0));
+            // light pool in front: shops and villas get one; towers get two (lobby entrances)
+            int pools = l.style.StartsWith("tower") ? 2 : (l.shops || l.style == "villa" || l.style == "midrise") ? 1 : 0;
+            for (int i = 0; i < pools; i++)
+            {
+                float ox = pools == 1 ? 0f : (i == 0 ? -l.w * 0.25f : l.w * 0.25f);
+                float pw = Mathf.Min(l.w * (pools == 1 ? 0.7f : 0.4f), 16f), pd = 7f;
+                Vector3 pc = l.p + q * new Vector3(ox, 0, l.d * 0.5f + pd * 0.35f) + Vector3.up * (y + 0.03f);
+                Vector3 a0 = pc + q * new Vector3(-pw * 0.5f, 0, -pd * 0.5f), a1 = pc + q * new Vector3(-pw * 0.5f, 0, pd * 0.5f);
+                Vector3 a2 = pc + q * new Vector3(pw * 0.5f, 0, pd * 0.5f), a3 = pc + q * new Vector3(pw * 0.5f, 0, -pd * 0.5f);
+                UpQuad(b, M_POOL, a0, a1, a2, a3, Vector2.zero, new Vector2(0, 1), Vector2.one, new Vector2(1, 0));
+            }
+        }
+
+        /// <summary>A flat quad that faces up whichever order its corners come in (same test as Band).</summary>
+        static void UpQuad(MeshBuilder b, int sub, Vector3 a, Vector3 c, Vector3 d, Vector3 e, Vector2 ua, Vector2 uc, Vector2 ud, Vector2 ue)
+        {
+            if (Vector3.Dot(Vector3.Cross(c - a, e - a), Vector3.up) < 0) b.Sub(sub).QuadUV(a, c, d, e, Vector3.up, ua, uc, ud, ue);
+            else b.Sub(sub).QuadUV(a, e, d, c, Vector3.up, ua, ue, ud, uc);
+        }
+
+        // ---------------------------------------------------------------- landmark models (unity_assets/buildings/landmarks)
+        // landmarks.json: {"models":[{"kind":"needle_tower","id":"needle_tower","h":420,"yaw":90}, ...]}
+        [System.Serializable] class LModelJson { public string kind, id; public float h, yaw; }
+        [System.Serializable] class LModelsJson { public LModelJson[] models; }
+        readonly Dictionary<string, (LModelJson j, BModel m)> landmarkModels = new Dictionary<string, (LModelJson, BModel)>();
+        NewCity cityRef;
+
+        void LoadLandmarkModels()
+        {
+            var ta = Res.Load<TextAsset>("Buildings/Landmarks/landmarks");
+            if (ta == null) return;
+            LModelsJson list = null;
+            try { list = JsonUtility.FromJson<LModelsJson>(ta.text); } catch (System.Exception e) { Debug.LogWarning("[HMD] landmarks.json: " + e.Message); }
+            if (list?.models == null) return;
+            foreach (var j in list.models)
+            {
+                var prefab = Res.Load<GameObject>("Buildings/Landmarks/" + j.id);
+                if (prefab == null) { Debug.LogWarning($"[HMD] landmark model {j.id}: no GLB"); continue; }
+                var m = Bake(prefab, new BModelJson { id = j.id, yaw = j.yaw, h = j.h });
+                if (m != null) landmarkModels[j.kind] = (j, m);
+            }
+        }
+
+        /// <summary>The landmark's model at its json spot, scaled to the json height (proportions kept), never culled:
+        /// the skyline. Which way it faces: the gold frame lines up with the nearest main road (drivers look through it),
+        /// the arch hotel looks down the Palm trunk, everything else turns its front to the nearest road.</summary>
+        bool PlaceLandmark(NewCity nc, Mark mk)
+        {
+            if (!landmarkModels.TryGetValue(mk.kind, out var lm)) return false;
+            var m = lm.m;
+            float s = lm.j.h / Mathf.Max(0.01f, m.size.y);
+            Vector3 face = Vector3.forward;
+            NewCity.Road best = null; int bi = 0; float bd = float.MaxValue;
+            foreach (var rd in nc.roads)
+            {
+                if (rd.cls == "ramp" || rd.cls == "street") continue;
+                for (int i = 0; i < rd.pts.Count; i++) { float d = new Vector2(rd.pts[i].x - mk.p.x, rd.pts[i].z - mk.p.z).sqrMagnitude; if (d < bd) { bd = d; best = rd; bi = i; } }
+            }
+            if (mk.kind == "arch_hotel")
+            {
+                foreach (var rd in nc.roads)
+                    if (rd.name == "Palm Trunk" && rd.pts.Count > 1)
+                    {
+                        // towards the far (mainland) end of the trunk
+                        var a = rd.pts[0]; var b = rd.pts[rd.pts.Count - 1];
+                        var far = (new Vector2(a.x - mk.p.x, a.z - mk.p.z)).sqrMagnitude > (new Vector2(b.x - mk.p.x, b.z - mk.p.z)).sqrMagnitude ? a : b;
+                        face = far - mk.p; break;
+                    }
+            }
+            else if (best != null)
+            {
+                if (mk.kind == "gold_frame") face = best.pts[Mathf.Min(best.pts.Count - 1, bi + 1)] - best.pts[Mathf.Max(0, bi - 1)];   // the opening along the road
+                else face = best.pts[bi] - mk.p;                                // the front to the road
+            }
+            face.y = 0; if (face.sqrMagnitude < 0.01f) face = Vector3.forward;
+            var go = new GameObject("landmark_" + mk.kind);
+            go.transform.SetParent(transform, false);
+            go.transform.SetPositionAndRotation(mk.p, Quaternion.LookRotation(face.normalized)); go.transform.localScale = Vector3.one * s;
+            go.AddComponent<MeshFilter>().sharedMesh = m.mesh;
+            var r = go.AddComponent<MeshRenderer>();
+            var mats = m.variants[0];
+            foreach (var mt in mats) Res.SetEmission(mt, Color.white * 1.15f, mt.GetTexture("_BaseMap"));   // brighter than the city blocks: the skyline
+            r.sharedMaterials = mats;
+            // solid landmarks keep cars out; open ones (the frame, the wheel) get no box
+            if (mk.kind != "gold_frame" && mk.kind != "big_wheel") { var bc = go.AddComponent<BoxCollider>(); bc.center = new Vector3(0, m.size.y * 0.5f, 0); bc.size = m.size; }
+            go.isStatic = true;
+            Landmarks.RemoveAll(x => x.kind == mk.kind && x.p == mk.p); Landmarks.Add((mk.kind, mk.p, lm.j.h));
+            return true;
+        }
+
+        // ---------------------------------------------------------------- gantries and metro
+        readonly List<(Vector3 p, float yaw, float width)> gantries = new List<(Vector3, float, float)>();
+        class MetroLine { public List<Vector3> pts = new List<Vector3>(), pillars = new List<Vector3>(); public float width = 8f; }
+        readonly List<MetroLine> metros = new List<MetroLine>();
+
+        /// <summary>A steel portal across the highway (7 m clear): two posts beyond the edges, a box truss beam, green
+        /// sign boards with white arrows and a blank white panel, on both faces (two-way highway), lit from below.</summary>
+        void Gantry(MeshBuilder b, Vector3 p, float yaw, float width)
+        {
+            var q = Quaternion.Euler(0, yaw, 0);
+            Vector3 fwd = q * Vector3.forward, side = q * Vector3.right;
+            float half = width * 0.5f + 1.6f, clear = 7f;
+            for (int s = -1; s <= 1; s += 2)
+            {
+                Vector3 post = p + side * s * half;
+                RBox(b, M_STEEL, post - Vector3.up * 0.5f, new Vector3(0.6f, clear + 2.3f, 0.6f), yaw, new Vector2(1, 4));
+                RBox(b, M_ROOF, post - Vector3.up * 0.3f, new Vector3(1.2f, 0.5f, 1.2f), yaw, Vector2.one);   // footing
+            }
+            // truss beam: two chords and a few verticals
+            for (int c = 0; c < 2; c++)
+                RBox(b, M_STEEL, p + Vector3.up * (clear + c * 1.5f), new Vector3(half * 2f + 0.6f, 0.3f, 0.5f), yaw, new Vector2(4, 1));
+            for (float x = -half; x <= half; x += 3f) RBox(b, M_STEEL, p + side * x + Vector3.up * clear, new Vector3(0.12f, 1.5f, 0.12f), yaw, Vector2.one);
+            // boards: across the lanes, three boards (two green with arrows, one blank white panel) per face
+            float[] cx = { -width * 0.28f, 0.06f * width, width * 0.33f };
+            float[] bw = { width * 0.3f, width * 0.3f, width * 0.18f };
+            for (int f = -1; f <= 1; f += 2)
+            {
+                for (int k = 0; k < 3; k++)
+                {
+                    Vector3 c = p + side * cx[k] * f + fwd * f * 0.4f + Vector3.up * (clear - 0.2f);
+                    bool white = k == 2;
+                    RBox(b, white ? M_SIGN_WHITE : M_SIGN_GREEN, c, new Vector3(bw[k], 2.6f, 0.15f), yaw, Vector2.one);
+                    if (white) continue;
+                    // a white arrow pointing up (straight on) or up-right (exit), and a white rim line under it
+                    Vector3 front = c + fwd * f * 0.09f;
+                    float ax = k == 0 ? 0f : 12f;
+                    b.Sub(M_SIGN_WHITE).Add(UnitCube(), Matrix4x4.TRS(front + Vector3.up * 1.0f, q * Quaternion.Euler(0, 0, -ax * f), new Vector3(0.22f, 1.3f, 0.04f)), M_SIGN_WHITE);
+                    b.Sub(M_SIGN_WHITE).Add(UnitCube(), Matrix4x4.TRS(front + Vector3.up * 1.75f, q * Quaternion.Euler(0, 0, 45f - ax * f), new Vector3(0.6f, 0.2f, 0.04f)), M_SIGN_WHITE);
+                    b.Sub(M_SIGN_WHITE).Add(UnitCube(), Matrix4x4.TRS(front + Vector3.up * 1.75f, q * Quaternion.Euler(0, 0, -45f - ax * f), new Vector3(0.6f, 0.2f, 0.04f)), M_SIGN_WHITE);
+                    b.Sub(M_SIGN_WHITE).Add(UnitCube(), Matrix4x4.TRS(front + Vector3.up * 0.25f, q, new Vector3(bw[k] * 0.8f, 0.07f, 0.04f)), M_SIGN_WHITE);
+                }
+                // small lamps under the boards light them softly
+                for (int k = 0; k < 3; k++)
+                    RBox(b, M_LAMP_LED, p + side * cx[k] * f + fwd * f * 0.9f + Vector3.up * (clear - 0.35f), new Vector3(bw[k] * 0.7f, 0.1f, 0.15f), yaw, Vector2.one);
+            }
+        }
+
+        /// <summary>The elevated metro: a concrete U deck (parapets both sides, a thin blue light line on the outer
+        /// edge) along the json centre line, and round pillars with flared heads (pillars collide, the deck does not).</summary>
+        void Metro(MetroLine ml, System.Func<Vector3, MeshBuilder> solid, System.Func<Vector3, MeshBuilder> prop)
+        {
+            float w = ml.width;
+            for (int i = 0; i + 1 < ml.pts.Count; i++)
+            {
+                Vector3 a = ml.pts[i], c = ml.pts[i + 1];
+                Vector3 d = c - a; d.y = 0; float len = d.magnitude; if (len < 0.1f) continue;
+                float yaw = Quaternion.LookRotation(d / len).eulerAngles.y;
+                Vector3 mid = (a + c) * 0.5f, side = Vector3.Cross(Vector3.up, d / len);
+                var b = prop(mid);
+                RBox(b, M_ROOF, mid - Vector3.up * 1.8f, new Vector3(w, 1.8f, len + 0.4f), yaw, new Vector2(6, 6));            // deck slab
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    RBox(b, M_ROOF, mid + side * s * (w * 0.5f - 0.2f), new Vector3(0.4f, 1.3f, len + 0.4f), yaw, new Vector2(6, 2));   // parapet
+                    RBox(b, M_LED_B, mid + side * s * (w * 0.5f + 0.03f) - Vector3.up * 0.9f, new Vector3(0.06f, 0.12f, len + 0.4f), yaw, Vector2.one, false);
+                }
+            }
+            foreach (var pl in ml.pillars)
+            {
+                // deck height above this pillar: nearest centre-line point
+                float top = pl.y + 10f; float bd = float.MaxValue; int ni = 0;
+                for (int i = 0; i < ml.pts.Count; i++) { var p = ml.pts[i]; float dd = new Vector2(p.x - pl.x, p.z - pl.z).sqrMagnitude; if (dd < bd) { bd = dd; top = p.y; ni = i; } }
+                var dl = ml.pts[Mathf.Min(ml.pts.Count - 1, ni + 1)] - ml.pts[Mathf.Max(0, ni - 1)]; dl.y = 0;
+                float pyaw = dl.sqrMagnitude > 0.01f ? Quaternion.LookRotation(dl).eulerAngles.y : 0f;
+                float h = top - 1.8f - pl.y; if (h < 1f) continue;
+                var b = solid(pl);
+                // round-ish pillar: two crossed boxes give an octagon from far, plus a flared head under the deck
+                RBox(b, M_ROOF, pl - Vector3.up * 0.5f, new Vector3(1.8f, h - 1.2f + 0.5f, 1.8f), 0, new Vector2(4, 4));
+                RBox(b, M_ROOF, pl - Vector3.up * 0.5f, new Vector3(1.8f, h - 1.2f + 0.5f, 1.8f), 45, new Vector2(4, 4));
+                RBox(b, M_ROOF, pl + Vector3.up * (h - 1.2f), new Vector3(w * 0.75f, 1.2f, 2.6f), pyaw, new Vector2(4, 4));
+            }
         }
 
         // ---------------------------------------------------------------- materials
@@ -264,13 +627,29 @@ namespace HMD
             mats[M_LED_G] = Res.Glow(new Color(1f, 0.75f, 0.35f), 4f);
             mats[M_RED] = Res.Glow(new Color(1f, 0.03f, 0.02f), 7f);
             mats[M_POLE] = Res.Mat(new Color(0.22f, 0.23f, 0.25f), 0.6f, 0.7f);
-            mats[M_LAMP] = Res.Glow(new Color(1f, 0.85f, 0.62f), 7f);
+            mats[M_LAMP] = Res.Glow(new Color(1f, 0.66f, 0.3f), 8f);       // sodium
+            mats[M_LAMP_LED] = Res.Glow(new Color(0.85f, 0.93f, 1f), 9f);  // highway LED
+            // highway sign boards: Dubai green, softly lit from below; white arrows and panels glow a little
+            mats[M_SIGN_GREEN] = Res.Mat(new Color(0.02f, 0.3f, 0.14f), 0.55f, 0f);
+            Res.SetEmission(mats[M_SIGN_GREEN], new Color(0.02f, 0.3f, 0.12f) * 0.9f);
+            mats[M_SIGN_WHITE] = Res.Glow(new Color(0.95f, 0.97f, 1f), 1.6f);
+            mats[M_STEEL] = Res.Mat(new Color(0.55f, 0.57f, 0.6f), 0.55f, 0.8f);
+            // ground under the lots: sand-coloured pavers round villas, concrete yards in industry, granite round towers
+            mats[M_PLOT_SAND] = Res.TexMat("Tex/patterned_paving", Vector2.one, 0.3f, 0f, new Color(0.86f, 0.76f, 0.6f));
+            mats[M_PLOT_CONC] = Res.TexMat("Tex/hangar_concrete_floor", Vector2.one, 0.35f, 0f, new Color(0.62f, 0.62f, 0.64f));
+            mats[M_PLOT_TILE] = Res.TexMat("Tex/granite_tile", Vector2.one, 0.55f, 0f, new Color(0.7f, 0.7f, 0.72f));
+            foreach (int s in new[] { M_PLOT_SAND, M_PLOT_CONC, M_PLOT_TILE }) Res.SetEmission(mats[s], new Color(0.16f, 0.12f, 0.08f) * 0.25f);   // a little city spill light
+            // warm light spilling on the ground at shop fronts and villa gates (soft, additive, no real light)
+            mats[M_POOL] = Res.Particle(new Color(1f, 0.72f, 0.42f, 0.32f), Res.SoftDot);
             var bark = Res.Tex("Gen/bark");
             mats[M_BARK] = Res.Mat(new Color(0.45f, 0.36f, 0.27f), 0.15f);
             if (bark) Res.SetMainTex(mats[M_BARK], bark, new Vector2(1, 4));
+            // Dubai boulevards uplight their palms: warm trunks and green-lit fronds instead of black cut-outs
+            Res.SetEmission(mats[M_BARK], new Color(0.55f, 0.38f, 0.22f) * 0.45f, bark);
             var frond = Res.Tex("Gen/frond");
             var leaf = Res.Mat(new Color(0.55f, 0.65f, 0.4f), 0.3f);
             if (frond) { Res.SetMainTex(leaf, frond, Vector2.one); leaf.SetFloat("_AlphaClip", 1f); leaf.SetFloat("_Cutoff", 0.4f); leaf.EnableKeyword("_ALPHATEST_ON"); }
+            Res.SetEmission(leaf, new Color(0.32f, 0.5f, 0.2f) * 0.42f, frond);
             leaf.SetFloat("_Cull", 0f); leaf.renderQueue = 2450;
             mats[M_LEAF] = leaf;
             mats[M_TREE] = Res.Mat(new Color(0.12f, 0.22f, 0.1f), 0.2f);
@@ -526,8 +905,10 @@ namespace HMD
                 float len = highway ? 2.6f : 2.2f;
                 b.Sub(M_POLE).Add(UnitCube(), Matrix4x4.TRS(p + Vector3.up * h + dir * len * 0.5f, Quaternion.LookRotation(dir), new Vector3(0.15f, 0.15f, len)), M_POLE);
                 Vector3 head = p + Vector3.up * (h - 0.2f) + dir * len;
-                b.Sub(M_LAMP).Add(UnitCube(), Matrix4x4.TRS(head, Quaternion.LookRotation(dir), new Vector3(0.45f, 0.18f, 0.8f)), M_LAMP);
-                lampHeads.Add(head);
+                // highways: cool white LED heads; streets: warm sodium
+                int hm = highway ? M_LAMP_LED : M_LAMP;
+                b.Sub(hm).Add(UnitCube(), Matrix4x4.TRS(head, Quaternion.LookRotation(dir), new Vector3(0.45f, 0.18f, 0.8f)), hm);
+                lampHeads.Add(head); lampCool.Add(highway);
             }
         }
 
@@ -542,6 +923,16 @@ namespace HMD
                 float w = Mathf.Lerp(0.42f, 0.26f, (t0 + t1) * 0.5f) * scale;
                 b.Sub(M_BARK).Box(p, new Vector3(w, h / 3f + 0.05f, w), 1f, true, true);
             }
+            // Dubai at night: many palms wrapped in warm fairy lights up the trunk, the rest have a small uplight
+            if (R() < 0.45f)
+            {
+                for (float y = 0.5f; y < h * 0.72f; y += 0.5f * scale)
+                {
+                    float t = y / h; float w = Mathf.Lerp(0.42f, 0.26f, t) * scale * 1.12f;
+                    b.Sub(M_LED_G).Box(basePos + Vector3.up * y + lean * t, new Vector3(w, 0.05f, w), 1f, false, false);
+                }
+            }
+            else b.Sub(M_LED_W).Box(basePos + new Vector3(0.45f * scale, 0.06f, 0), new Vector3(0.28f, 0.1f, 0.28f), 1f, true, false);
             Vector3 top = basePos + Vector3.up * h + lean;
             Vector3[] sp = new Vector3[4];
             float[] wid = { 0.12f, 0.7f, 0.55f, 0.1f };

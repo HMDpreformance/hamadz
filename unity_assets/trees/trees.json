@@ -1,0 +1,7 @@
+{
+ "note": "Tree models for the 'trees' list in city_part1.json. Scale each so its height is h metres times the tree's own scale value, bottom centre on the tree position, random yaw. Each GLB is one mesh with one texture (trunk and fronds together), about 1 unit tall.",
+ "models": [
+  {"id": "palm_date", "kind": "palm", "h": 9.0, "weight": 1.0},
+  {"id": "palm_lights", "kind": "palm", "h": 8.0, "weight": 0.5, "emissive": true}
+ ]
+}

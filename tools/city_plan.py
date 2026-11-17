@@ -233,6 +233,9 @@ def crossings(A, B):
         dist += seg
     return out
 
+SCALE = 1.5           # plan units to game metres: the game city is 4.8 km x 3.45 km (Hamad 2026-11-17: distances felt too small at 0.75)
+K = 0.75 / SCALE      # ramp lengths below were tuned at 0.75; K keeps them the same in metres
+
 def bump(dists, at, height, flat, ramp):
     """A bridge or underpass profile: full height for `flat` metres around `at`, smooth ramps of `ramp` metres."""
     out = []
@@ -258,17 +261,16 @@ for r in roads:
         for o in roads:
             if o is r or o["cls"] == "street": continue
             if o["cls"] == "highway" and hw.index(o) < hw.index(r): continue
-            for at in crossings(pts, o["pts"]): add(at, 6.2, 60, 240, "flyover")
+            for at in crossings(pts, o["pts"]): add(at, 6.2, 60 * K, 240 * K, "flyover")
     if r["cls"] != "street" or r["name"] == "Palm Trunk":
-        for at in crossings(pts, water["creek"]): add(at, 6.5 if r["cls"] == "highway" else 5.0, 90, 185 if r["cls"] == "highway" else 150, "bridge")
-        for at in crossings(pts, water["canal"]): add(at, 3.4, 46, 115, "bridge")
+        for at in crossings(pts, water["creek"]): add(at, 6.5 if r["cls"] == "highway" else 5.0, 90, (185 if r["cls"] == "highway" else 205) * K, "bridge")
+        for at in crossings(pts, water["canal"]): add(at, 3.4, 46, 115 * K, "bridge")
     if r["name"] == "Palm Trunk": add(140, 4.0, 50, 100, "bridge")
     if r["name"] == "Downtown Blvd":
-        for at in crossings(pts, hw[0]["pts"]): add(at, -6.0, 50, 110, "underpass")
+        for at in crossings(pts, hw[0]["pts"]): add(at, -6.0, 50 * K, 110 * K, "underpass")
     r["h"] = [round(terrain(x, y) + e, 2) for (x, y), e in zip(pts, extra)]
     r["deck"] = [round(e, 2) for e in extra]      # height above the ground (bridge deck) or below (underpass)
 
-SCALE = 0.75          # plan units to game metres: the game city is 2.4 km x 1.7 km (medium size)
 PHASE1_X = 2560       # built first: everything west of this line; roads are blocked there until phase 2
 plan = {"size": [W, H], "scale": SCALE, "phase1_x": PHASE1_X, "coast": COAST, "roads": roads, "water": water, "levels": levels, "terrain": [[round(terrain(x, y), 1) for x in range(0, W + 1, 50)] for y in range(0, H + 1, 50)],
         "districts": [{"name": d[0], "x": d[1], "y": d[2]} for d in districts] + [{"name": "Palm Jumeirah", "x": PX, "y": PY + 425}],

@@ -16,6 +16,8 @@ namespace HMD
         public static NewCity I;
         public static bool Wanted => System.Environment.CommandLine.Contains("-newcity");
 
+        /// <summary>Plan units to metres (from the json). The map pictures cover 3200 x 2300 plan units.</summary>
+        public float Scale = 0.75f;
         public class Road { public string name, cls; public float width; public List<Vector3> pts = new List<Vector3>(); }
         public readonly List<Road> roads = new List<Road>();
         public Vector3 Garage { get; private set; }
@@ -152,6 +154,8 @@ namespace HMD
             if (ta == null) { Debug.LogError("[HMD] newcity: city_part1.json not imported"); return; }
             string j = ta.text;
             var g = Regex.Match(j, "\"garage\":\\{\"x\":([-\\d.]+),\"z\":([-\\d.]+),\"y\":([-\\d.]+)\\}");
+            var sc = Regex.Match(j, "\"scale\":([\\d.]+)");
+            if (sc.Success) Scale = F(sc.Groups[1].Value);
             if (g.Success) Garage = new Vector3(F(g.Groups[1].Value), F(g.Groups[3].Value), F(g.Groups[2].Value));
             foreach (Match m in Regex.Matches(j, "\\{\"name\":\"([^\"]+)\",\"cls\":\"([a-z_]+)\",\"width\":([-\\d.]+),\"pts\":\\[(.*?)\\]\\]"))
             {

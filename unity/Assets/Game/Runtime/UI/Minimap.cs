@@ -19,7 +19,7 @@ namespace HMD
         GameObject big;
         Texture2D tex;
         const float Size = 300f;          // on-screen diameter
-        const float ViewMetres = 360f;    // world metres across the minimap
+        const float ViewMetres = 520f;    // world metres across the minimap
         const int TexSize = 1024;
         float worldMin, worldSize;
         float worldMinZ = float.NaN, worldSizeZ;   // set when the map is not square (new city pictures)
@@ -34,11 +34,11 @@ namespace HMD
             var ncity = NewCity.I;
             if (ncity != null && ncity.roads.Count > 0)
             {
-                // the new city: ready map pictures drawn from the same plan (x 0..2400, z 0..1725, north up)
+                // the new city: ready map pictures drawn from the same plan (3200 x 2300 plan units times the json scale, north up)
                 var baseT = Res.Tex("City/map_base"); var fullT = Res.Tex("City/map_full");
                 if (baseT != null && fullT != null)
                 {
-                    worldMin = 0f; worldSize = 2400f; worldMinZ = 0f; worldSizeZ = 1725f;
+                    worldMin = 0f; worldSize = 3200f * ncity.Scale; worldMinZ = 0f; worldSizeZ = 2300f * ncity.Scale;
                     baseT.wrapMode = TextureWrapMode.Clamp; fullT.wrapMode = TextureWrapMode.Clamp;
                     tex = baseT; bigTex = fullT; pictureMap = true;
                 }

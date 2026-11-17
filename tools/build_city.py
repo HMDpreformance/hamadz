@@ -24,16 +24,34 @@ COAST = np.array(plan["coast"])
 
 def coast_y(x): return float(np.interp(x, COAST[:, 0], COAST[:, 1]))
 
+def _in_poly(x, y, poly):
+    ins = False
+    for (x1, y1), (x2, y2) in zip(poly, poly[1:] + poly[:1]):
+        if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1): ins = not ins
+    return ins
+_WP = {k: np.array(v, float) for k, v in plan["water"].items()}
+_WBOX = {k: (v[:, 0].min() - 60, v[:, 0].max() + 60, v[:, 1].min() - 60, v[:, 1].max() + 60) for k, v in _WP.items()}
+def _pl_d(P, x, y):
+    a, b = P[:-1], P[1:]; ab = b - a
+    t = np.clip(((np.array([x, y]) - a) * ab).sum(1) / np.maximum((ab * ab).sum(1), 1e-9), 0, 1)
+    return float(np.linalg.norm(a + ab * t[:, None] - [x, y], axis=1).min())
+def _wet(x, y):
+    """True where the plan has water inland of the coast line (plan units)."""
+    for k in _WP:
+        x0, x1, y0, y1 = _WBOX[k]
+        if not (x0 <= x <= x1 and y0 <= y <= y1): continue
+        if k in ("creek", "canal"):
+            if _pl_d(_WP[k], x, y) < plan["widths"][k] / 2: return True
+        elif _in_poly(x, y, plan["water"][k]): return True
+    return False
 def ground(X, Z):
     """Natural ground height at a game position (the plan's terrain, with the sea bed north of the coast)."""
     x, y = X / S, Z / S
-    cm, sm_ = math.cos(math.radians(-14)), math.sin(math.radians(-14))        # the Marina's water basin
-    um, vm = (x - 430) * cm - (y - 1330) * sm_, (x - 430) * sm_ + (y - 1330) * cm
-    if (um / 172) ** 2 + (vm / 74) ** 2 < 1: return -3.0
+    if _wet(x, y): return -3.0                                                # creek, canal, lagoon, Marina basin, port
     d = coast_y(x) - y
     if d < 0: return max(-5.0, 1.5 + d * 0.09)
     h = 1.5 + 9.0 * min(1.0, d / 1500.0) ** 1.3
-    for cx, cy, r, amp in ((1500, 310, 450, 8), (1250, 120, 360, 4), (2060, 420, 330, 6), (1625, 1562, 300, 2), (300, 250, 300, 4)):
+    for cx, cy, r, amp in plan["hills"]:
         h += amp * math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * (r * 0.55) ** 2))
     return h
 
@@ -128,7 +146,7 @@ for hwy in [r for r in roads if r.cls == "highway"]:
             C = hwy.at(sh); th = hwy.at(min(sh + 5, hwy.s[-1])) - hwy.at(max(sh - 5, 0)); th /= np.linalg.norm(th)
             nh = np.array([-th[1], th[0]])
             for d in (-1, 1):
-                sa = sh + d * 272
+                sa = sh + d * 215
                 if sa < 90 or sa > hwy.s[-1] - 90 or np.interp(sa, hwy.s, hwy.deck) > 0.3: continue
                 A = hwy.at(sa)
                 for lat in (-1, 1):
@@ -439,6 +457,7 @@ STYLE = {"Downtown Dubai": ("tower",      (30, 46), (30, 46), (70, 230), 10),
          "Jebel Ali":      ("warehouse",  (40, 70), (28, 44), (9, 14), 12),
          "Ras Al Khor":    ("warehouse",  (34, 60), (24, 40), (8, 13), 8),
          "Business Bay":   ("tower",      (30, 44), (30, 44), (70, 180), 10),
+         "Deira":          ("midrise",    (22, 36), (18, 26), (14, 34), 6),
          "Nad Al Sheba":   ("villa",      (15, 22), (14, 20), (7, 10), 9),
          "Al Barsha":      ("midrise",    (24, 40), (18, 26), (18, 48), 7),
          "Jumeirah":       ("villa",      (14, 20), (13, 18), (7, 10), 7),
@@ -508,12 +527,12 @@ landmarks = []
 def landmark(kind, px, py, w, d, h):
     X, Z = px * S, py * S
     landmarks.append({"kind": kind, "x": round(X, 1), "z": round(Z, 1), "y": round(max(th(X, Z), 0.0), 2), "w": w, "d": d, "h": h})
-landmark("needle_tower", 1690, 1610, 60, 60, 420)        # the tallest tower, inside the Downtown ring
-landmark("sail_hotel", 1420, 1900, 60, 40, 160)           # on its own island off Jumeirah
-landmark("arch_hotel", 620, 2268, 110, 30, 95)            # at the top of the Palm, just inside the crescent road
-landmark("big_wheel", 250, 1720, 20, 120, 125)            # observation wheel off JBR
-landmark("twisted_tower", 520, 1440, 30, 30, 240)         # Marina
-landmark("ski_mall", 560, 960, 140, 90, 60)               # Al Barsha, the long sloped box, in a block with no streets (KEEPOUT in city_plan.py)
+landmark("needle_tower", 1820, 1480, 60, 60, 420)        # the tallest tower, inside the Downtown rings
+landmark("sail_hotel", 1300, 1800, 60, 40, 160)           # on its own island off Jumeirah
+landmark("arch_hotel", 600, 2225, 110, 30, 95)            # at the top of the Palm, just inside the crescent road
+landmark("big_wheel", 330, 1640, 20, 120, 125)            # observation wheel off the Marina and JBR
+landmark("twisted_tower", 470, 1290, 30, 30, 240)         # Marina, on the quay
+landmark("ski_mall", 680, 820, 140, 90, 60)               # Al Barsha, the long sloped box, in a block with no streets (KEEPOUT in city_plan.py)
 for L_ in landmarks:   # buildings make way for a landmark
     lots[:] = [b for b in lots if math.hypot(b["x"] - L_["x"], b["z"] - L_["z"]) > (max(L_["w"], L_["d"]) + max(b["w"], b["d"])) / 2 + 6]
 

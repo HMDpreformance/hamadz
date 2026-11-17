@@ -422,7 +422,7 @@ for R in roads:
         top = lambda i, R=R: (R.h[i] - 0.06) if in_junction(R, R.s[i], 3.5) and not elevated[i] else R.h[i] + (KERB if R.cls in ("main", "street") and not elevated[i] else 0.0)
         bot = lambda i, R=R: (R.h[i] - 1.1) if high[i] else (R.base[i] - 2.5)
         wall(M["concrete"], R, o, top, bot, side)
-        if elevated.any():                            # parapet where the road is off the ground
+        if elevated.any() and R.cls != "highway":    # parapet where the road is off the ground (a highway has its barrier all along)
             par = lambda i, R=R: R.h[i] + (0.95 if elevated[i] else 0.0)
             wall(M["concrete"], R, o, par, lambda i, R=R: R.h[i], side)
             wall(M["concrete"], R, o - 0.35 * side, par, lambda i, R=R: R.h[i], -side)
@@ -440,16 +440,25 @@ for R in roads:
         rtree = cKDTree(rampP) if len(rampP) else None
         for side in (1, -1):
             o = hw * side
-            gap = np.array([elevated[i] or in_junction(R, R.s[i], 6.0) or (rtree is not None and len(rtree.query_ball_point(R.P[i] + n[i] * o, 9.0)) > 0) for i in range(len(R.P))])
+            gap = np.array([in_junction(R, R.s[i], 6.0) or (rtree is not None and len(rtree.query_ball_point(R.P[i] + n[i] * o, 9.0)) > 0) for i in range(len(R.P))])
             g2 = gap.copy()
             for i in np.where(gap)[0]: g2[max(0, i - 2):i + 3] = True      # a little more room at each opening
-            bar = lambda i, R=R, g2=g2: R.h[i] + (0.0 if g2[i] else 0.85)
-            wall(M["concrete"], R, o, bar, lambda i, R=R: R.h[i], -side)
-            wall(M["concrete"], R, o + 0.4 * side, bar, lambda i, R=R: R.h[i], side)
+            BH = 0.95
             for i in range(len(R.P) - 1):
+                # full height right up to each opening, with a flat end cap (a barrier that tapered to the ground over
+                # the last 5 m worked as a launch ramp for a car sliding along it)
                 if g2[i] or g2[i + 1]: continue
+                for off, face in ((o, -side), (o + 0.4 * side, side)):
+                    a0 = R.P[i] + n[i] * off; b0 = R.P[i + 1] + n[i + 1] * off
+                    qq = [V(a0, R.h[i] - 0.3), V(b0, R.h[i + 1] - 0.3), V(b0, R.h[i + 1] + BH), V(a0, R.h[i] + BH)]
+                    M["concrete"].quad(*(qq if face < 0 else qq[::-1]))
+                for k_, opening in ((i, i == 0 or g2[i - 1]), (i + 1, i + 2 >= len(R.P) or g2[i + 2])):
+                    if not opening: continue
+                    e0 = R.P[k_] + n[k_] * o; e1 = R.P[k_] + n[k_] * (o + 0.4 * side)
+                    qq = [V(e0, R.h[k_] - 0.3), V(e1, R.h[k_] - 0.3), V(e1, R.h[k_] + BH), V(e0, R.h[k_] + BH)]
+                    M["concrete"].quad(*qq); M["concrete"].quad(*qq[::-1])
                 a_ = R.P[i] + n[i] * o; b_ = R.P[i] + n[i] * (o + 0.4 * side); c_ = R.P[i + 1] + n[i + 1] * (o + 0.4 * side); d_ = R.P[i + 1] + n[i + 1] * o
-                q = [V(a_, R.h[i] + 0.85), V(b_, R.h[i] + 0.85), V(c_, R.h[i + 1] + 0.85), V(d_, R.h[i + 1] + 0.85)]
+                q = [V(a_, R.h[i] + BH), V(b_, R.h[i] + BH), V(c_, R.h[i + 1] + BH), V(d_, R.h[i + 1] + BH)]
                 M["concrete"].quad(*(q if side > 0 else q[::-1]))
             stats["barrier_m"] = stats.get("barrier_m", 0.0) + float((~g2).sum() * STEP)
     if high.any():

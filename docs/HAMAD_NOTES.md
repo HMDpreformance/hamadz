@@ -137,3 +137,14 @@ Hamad's confirmed problems and fix order (2026-11-17, 14:27 Dubai time). He paus
 To test in Unity (not done yet): slopes and crests, car stability (braking downhill, quick steering, kerbs, bridge crests), crash recovery (overturned, water, flyovers).
 Also fixed from the drive test: streets that ran along a bigger road and left kerbs across it are cut (Downtown Inner Ring, Al Khail); ground cells can no longer rise through a road edge; the generator now prints a "ground through a road" self check (0 spots).
 Rule from Hamad: when he says stop, stop editing until he says what to do.
+
+Test results on the laptop, 2026-11-17 (build of 3ceeb48):
+- Locked controls: pass (0.01 m in 3 s at standstill; from 100 km/h stops in 24 m and stays, gear 1).
+- Reverse: pass (sport RWD 48 km/h, pickup AWD 27 km/h; handbrake stops it, no creep).
+- Wheels: car sits level, suspension has travel left.
+- Underpass: 4.38 m clearance, clean southbound at 90 and on the E11 above at 154. Northbound FAILED: a street crossed Downtown Blvd inside the dip and made a 3 m step. Fixed in the generator (streets are cut where a main road dips or climbs a bridge); needs a rebuild to confirm.
+- Slopes and crests: Beach Road 6.5% at 122 to 140 km/h no jump; seven highway crests at 170 km/h no air, no bottoming.
+- Stability: slalom at 80/140/200 no spin, roll under 9 degrees; hard braking downhill straight; 15 cm kerb at 60 fine. Buildings stand close to the E11 with no barrier (open point).
+- Crash recovery: changed to reset on the right lane of the nearest road, plus a reset after 0.8 s in water (the sea had no reset). Overturned and water cases pass. Falling off a flyover lands on drivable ground and does not reset.
+- Ramps: json line and asphalt agree (earlier report was a test error).
+- Blocker: Unity licence on the laptop expired, the Editor will not start until Hamad signs in to Unity again.

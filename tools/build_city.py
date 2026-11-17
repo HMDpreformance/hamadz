@@ -119,10 +119,12 @@ def cut_at_ramps(roads):
     for R in roads:
         cuts = []
         for H in roads:
-            if H is R or H.cls != "highway" or R.cls == "highway": continue
+            if H is R or R.cls == "highway": continue
+            if H.cls != "highway" and not (H.cls == "main" and R.cls == "street"): continue
             for i, t, j, u in seg_hits(R.P, H.P):
                 dk = np.interp(H.s[j] + u * STEP, H.s, H.deck)
-                if 0.8 < dk < 5.2: cuts.append(R.s[i] + t * STEP)
+                # a highway on its ramp, or a main road climbing a bridge or dipping into an underpass: no level crossing possible
+                if (H.cls == "highway" and 0.8 < dk < 5.2) or (H.cls == "main" and (dk < -0.6 or 0.8 < dk < 5.2)): cuts.append(R.s[i] + t * STEP)
         if not cuts: out.append(R); continue
         keep = np.ones(len(R.P), bool)
         for c in cuts: keep &= np.abs(R.s - c) > 26

@@ -21,6 +21,9 @@ namespace HMD
         const float ViewMetres = 360f;    // world metres across the minimap
         const int TexSize = 1024;
         float worldMin, worldSize;
+        float worldMinZ = float.NaN, worldSizeZ;   // set when the map is not square (new city pictures)
+        Texture bigTex;
+        bool pictureMap;
 
         public void Build(Transform root, Transform playerT)
         {
@@ -30,9 +33,15 @@ namespace HMD
             var ncity = NewCity.I;
             if (ncity != null && ncity.roads.Count > 0)
             {
-                // the new city: its real roads (json centre lines), square map over its bounds
-                worldMin = -100f; worldSize = 1960f;
-                tex = DrawNewCityMap(ncity);
+                // the new city: ready map pictures drawn from the same plan (x 0..2400, z 0..1725, north up)
+                var baseT = Res.Tex("City/map_base"); var fullT = Res.Tex("City/map_full");
+                if (baseT != null && fullT != null)
+                {
+                    worldMin = 0f; worldSize = 2400f; worldMinZ = 0f; worldSizeZ = 1725f;
+                    baseT.wrapMode = TextureWrapMode.Clamp; fullT.wrapMode = TextureWrapMode.Clamp;
+                    tex = baseT; bigTex = fullT; pictureMap = true;
+                }
+                else { worldMin = -100f; worldSize = 1960f; tex = DrawNewCityMap(ncity); }
             }
             else tex = DrawMap();
 
@@ -70,15 +79,16 @@ namespace HMD
             var bi = new GameObject("Map", typeof(RectTransform)).AddComponent<RawImage>();
             bi.transform.SetParent(bigRt, false);
             bi.rectTransform.anchorMin = bi.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-            bi.rectTransform.sizeDelta = new Vector2(940, 940);
-            bi.texture = tex;
+            bi.rectTransform.sizeDelta = pictureMap ? new Vector2(1320, 1320f * 1150f / 1600f) : new Vector2(940, 940);
+            bi.texture = bigTex != null ? bigTex : tex;
             bigImg = bi;
             bigGarage = UIKit.Img("Garage", bi.transform, new Vector2(0, 0), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(60, 60), Color.white, WrenchSprite).rectTransform;
             bigPlayer = UIKit.Img("Player", bi.transform, new Vector2(0, 0), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40, 46), new Color(0.55f, 0.85f, 1f), UIKit.ArrowSprite).rectTransform;
             // district labels (white with a soft shadow) and a north arrow, like a real city map
             string[] names = { "MARINA", "JUMEIRAH", "AL BARSHA", "BUSINESS BAY", "DOWNTOWN", "DEIRA", "AL QUOZ", "KARAMA", "LSX MOTORSPORT" };
             Vector2[] spots = { new Vector2(0.16f, 0.16f), new Vector2(0.16f, 0.5f), new Vector2(0.5f, 0.16f), new Vector2(0.84f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.84f, 0.84f), new Vector2(0.16f, 0.84f), new Vector2(0.5f, 0.84f), Vector2.zero };
-            if (ncity != null && ncity.districts.Count > 0)
+            if (pictureMap) { names = new[] { "" }; spots = new[] { Vector2.zero }; }   // the picture has its own names
+            else if (ncity != null && ncity.districts.Count > 0)
             {
                 // real district names at their places in the new city
                 names = new string[ncity.districts.Count + 1]; spots = new Vector2[ncity.districts.Count + 1];
@@ -95,8 +105,8 @@ namespace HMD
                 var sh = lb.GetComponent<Shadow>() ?? lb.gameObject.AddComponent<Shadow>();
                 sh.effectColor = new Color(0, 0, 0, 0.85f); sh.effectDistance = new Vector2(2, -2);
             }
-            var na = UIKit.Img("North", bi.transform, new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-50, -60), new Vector2(34, 40), Color.white, UIKit.ArrowSprite);
-            UIKit.Label("NorthN", bi.transform, new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-50, -22), new Vector2(40, 30), "N", 26, Color.white, TextAnchor.MiddleCenter, Res.TitleFont);
+            if (!pictureMap) { var na = UIKit.Img("North", bi.transform, new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-50, -60), new Vector2(34, 40), Color.white, UIKit.ArrowSprite);
+            UIKit.Label("NorthN", bi.transform, new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-50, -22), new Vector2(40, 30), "N", 26, Color.white, TextAnchor.MiddleCenter, Res.TitleFont); }
             UIKit.Label("Title", bigRt, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -20), new Vector2(800, 60), "DUBAI  ·  NIGHT CITY", 44, Color.white, TextAnchor.MiddleCenter, Res.TitleFont);
             UIKit.Btn("GoGarage", bigRt, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-40, 40), new Vector2(380, 96), "GO TO GARAGE", () => { Close(); OnGoGarage?.Invoke(); }, new Color(0.95f, 0.1f, 0.1f), 38);
             UIKit.Btn("Close", bigRt, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-40, -30), new Vector2(200, 86), "CLOSE", Close, Color.white, 36);
@@ -108,7 +118,9 @@ namespace HMD
         public void Close() { big.SetActive(false); }
         public bool IsOpen => big != null && big.activeSelf;
 
-        Vector2 ToUV(Vector3 w) => new Vector2((w.x - worldMin) / worldSize, (w.z - worldMin) / worldSize);
+        float MinZ => float.IsNaN(worldMinZ) ? worldMin : worldMinZ;
+        float SizeZ => float.IsNaN(worldMinZ) ? worldSize : worldSizeZ;
+        Vector2 ToUV(Vector3 w) => new Vector2((w.x - worldMin) / worldSize, (w.z - MinZ) / SizeZ);
 
         void LateUpdate()
         {
@@ -119,8 +131,9 @@ namespace HMD
             float worldPx = worldSize / metresPerPx;   // full map in minimap pixels
             Vector2 uv = ToUV(player.position);
             mapImg.rectTransform.anchorMin = mapImg.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-            mapImg.rectTransform.sizeDelta = new Vector2(worldPx, worldPx);
-            mapImg.rectTransform.anchoredPosition = new Vector2((0.5f - uv.x) * worldPx, (0.5f - uv.y) * worldPx);
+            float worldPxZ = SizeZ / metresPerPx;
+            mapImg.rectTransform.sizeDelta = new Vector2(worldPx, worldPxZ);
+            mapImg.rectTransform.anchoredPosition = new Vector2((0.5f - uv.x) * worldPx, (0.5f - uv.y) * worldPxZ);
             rotor.localRotation = Quaternion.Euler(0, 0, player.eulerAngles.y);
 
             Vector3 g = City.I != null ? City.I.GarageDoor : NewCity.I.Garage;   // new city: the LSX spot from the json
@@ -143,10 +156,10 @@ namespace HMD
 
             if (big.activeSelf)
             {
-                float s = bigImg.rectTransform.sizeDelta.x;
-                bigPlayer.anchoredPosition = ToUV(player.position) * s;
+                Vector2 s = bigImg.rectTransform.sizeDelta;
+                bigPlayer.anchoredPosition = Vector2.Scale(ToUV(player.position), s);
                 bigPlayer.localRotation = Quaternion.Euler(0, 0, -player.eulerAngles.y);
-                bigGarage.anchoredPosition = ToUV(g) * s;
+                bigGarage.anchoredPosition = Vector2.Scale(ToUV(g), s);
             }
         }
 

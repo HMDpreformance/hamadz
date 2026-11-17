@@ -90,4 +90,6 @@ Tool: `tools/fix_proportions.py <src> <out> <length> <width> <height> real <rear
 Hamad asked why the game map did not look like the Higgsfield map picture. Rule: the game map and the real city follow that picture's layout and style as closely as the real roads allow.
 - Done: streets everywhere, blue glowing sea, only highways yellow, Downtown above the E11 near the sea, bigger Palm. The game uses `unity_assets/city/map_full.jpg` and `map_base.jpg`, drawn from the same plan as the roads.
 - 2026-11-17, Hamad: "still the map looks not perfect, try to fix it more". Done in v3: Palm with five fanned fronds each side and water between them, water basin with piers inside the Marina, sand beach line, highway slip roads drawn, slanted labels, needle tower icon, red skyline title.
+- 2026-11-17, Hamad: the Palm was made wrong. Fixed to follow the real Palm Jumeirah: long trunk, 16 fronds (8 each side) that curve like palm leaves and fill a round shape, crescent around them, arch hotel at the top. The ski mall was moved off the E11 into its own block in Al Barsha, and no streets run under the landmarks.
+- Wheel sizes checked against the real cars: sports car front tyre made smaller (0.65 m), pickup rear tyre same size as the front.
 - Still to do: round highway junctions (cloverleaf look), Jebel Ali port piers, a mountain area in the south, more organic streets.

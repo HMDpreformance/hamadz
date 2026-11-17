@@ -67,7 +67,7 @@ namespace HMD.EditorTools
             CopyDir("unity_assets/tower", Imp + "/Tower", "*.jpg");
             CopyDir("unity_assets/gen", Imp + "/Gen", "*.jpg", "*.png");
             CopyDir("unity_assets/props", Imp + "/Props", "*.glb");
-            CopyDir("unity_assets/city", Imp + "/City", "city_part1.glb", "city_part1.json");
+            CopyDir("unity_assets/city", Imp + "/City", "city_part1.glb", "city_part1.json", "map_full.jpg", "map_base.jpg");
             CopyDir("audio/engines", Imp + "/Audio/engines", "*.wav");
             CopyDir("audio/car", Imp + "/Audio/car", "*.wav");
             CopyDir("audio/music", Imp + "/Audio/music", "*.ogg");

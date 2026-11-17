@@ -397,8 +397,8 @@ for iz in range(nz):
             idx = np.array(idx); d = np.linalg.norm(allP[idx] - [X, Z], axis=1) - allE[idx]
             lowroad = allD[idx] < 0.5
             cap = np.where(lowroad, allH[idx] - 0.15, allH[idx] - 1.6)        # never above a road or a ramp
-            flat = 20.0 if g < 0.5 else 7.0              # in the sea the road carries a strip of land (the Palm)
-            run = 12.0 if g < 0.5 else 26.0
+            flat = 12.0 if g < 0.5 else 7.0              # in the sea the road carries a strip of land (the Palm)
+            run = 6.0 if g < 0.5 else 26.0
             near = d < flat
             if near.any(): g = min(g, cap[near].min()) if not (near & lowroad).any() else cap[near & lowroad].min()
             else:
@@ -507,10 +507,10 @@ def landmark(kind, px, py, w, d, h):
     landmarks.append({"kind": kind, "x": round(X, 1), "z": round(Z, 1), "y": round(max(th(X, Z), 0.0), 2), "w": w, "d": d, "h": h})
 landmark("needle_tower", 1690, 1610, 60, 60, 420)        # the tallest tower, inside the Downtown ring
 landmark("sail_hotel", 1420, 1900, 60, 40, 160)           # on its own island off Jumeirah
-landmark("arch_hotel", 620, 2262, 150, 40, 95)            # at the top of the Palm crescent
+landmark("arch_hotel", 620, 2268, 110, 30, 95)            # at the top of the Palm, just inside the crescent road
 landmark("big_wheel", 250, 1720, 20, 120, 125)            # observation wheel off JBR
 landmark("twisted_tower", 520, 1440, 30, 30, 240)         # Marina
-landmark("ski_mall", 560, 1130, 140, 90, 60)              # Al Barsha, the long sloped box
+landmark("ski_mall", 560, 960, 140, 90, 60)               # Al Barsha, the long sloped box, in a block with no streets (KEEPOUT in city_plan.py)
 for L_ in landmarks:   # buildings make way for a landmark
     lots[:] = [b for b in lots if math.hypot(b["x"] - L_["x"], b["z"] - L_["z"]) > (max(L_["w"], L_["d"]) + max(b["w"], b["d"])) / 2 + 6]
 

@@ -66,10 +66,12 @@ namespace HMD
                 newCity.Build();
                 wx.Setup(camGo.transform, forceRain);
                 gfx.Setup(rig.Cam);
-                new GameObject("LampLights").AddComponent<LampLights>().Setup(newCity.lampHeads, camGo.transform);
+                var dress = new GameObject("NewCityDressing").AddComponent<NewCityDressing>();
+                dress.Build(newCity);
+                new GameObject("LampLights").AddComponent<LampLights>().Setup(dress.lampHeads.Count > 0 ? dress.lampHeads : newCity.lampHeads, camGo.transform);
                 yield return null;
                 startPos = newCity.SpawnPos; startRot = newCity.SpawnRot;
-                garageDoor = new Vector3(0, 0, -6000f);   // the LSX building is not placed in the new city yet: parked far away
+                garageDoor = newCity.Garage;   // the real LSX building at json.garage (Al Quoz), door facing -Z
             }
             else
             {

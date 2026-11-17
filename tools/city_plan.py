@@ -64,12 +64,16 @@ road("Nad Al Sheba", "main", [(1800, 640), (1900, 420), (2100, 250), (2440, 330)
 road("Ras Al Khor", "main", [(2000, 860), (2150, 760), (2400, 620)])
 # the Palm: trunk from the Beach Road out to sea, fronds, and the crescent
 PX, PY = 620, 1700
-road("Palm Trunk", "main", [(PX, PY - 60), (PX + 6, PY + 120), (PX, PY + 400)])
-for i_, (ang, ln) in enumerate(((12, 275), (20, 275), (29, 252), (39, 215), (51, 168))):   # five fronds each side, fanned like a palm leaf, water between them
-    y0 = PY + 100 + 62 * i_; ca, sa = math.cos(math.radians(ang)), math.sin(math.radians(ang))
+road("Palm Trunk", "main", [(PX, PY - 60), (PX + 4, PY + 120), (PX, PY + 300), (PX, PY + 505)])
+# like the real Palm: a long trunk, 16 fronds (8 each side) that curve up like palm leaves and together fill a
+# round shape, and a crescent breakwater around them with the arch hotel at the top
+for i_ in range(8):
+    y0 = PY + 178 + 46 * i_; th_ = math.radians(-24 + i_ * 14.6)
     for sg in (1, -1):
-        road("Frond", "street", [(PX, y0), (PX + sg * ln * 0.5 * ca, y0 + ln * 0.5 * sa - 10), (PX + sg * ln * ca, y0 + ln * sa)])
-road("Crescent", "street", ring(PX, PY + 315, 410, 262, 0, 44, -25, 205), smooth=False)
+        tip = (PX + sg * 232 * math.cos(th_), PY + 322 + 196 * math.sin(th_))
+        mx, my = (PX + tip[0]) / 2, (y0 + tip[1]) / 2; dx, dy = tip[0] - PX, tip[1] - y0; ln = math.hypot(dx, dy)
+        road("Frond", "street", [(PX, y0), (mx + sg * dy / ln * 0.13 * ln, my - abs(dx) / ln * 0.13 * ln), tip])   # bowed, tip swept up
+road("Crescent", "street", ring(PX, PY + 318, 305, 250, 0, 48, -38, 218), smooth=False)
 
 # districts: local street grids, turned and clipped to an ellipse
 districts = [
@@ -96,11 +100,18 @@ def in_marina(x, y, k=1.0):
     cx, cy, rx, ry, rot = MARINA; c, s_ = math.cos(math.radians(-rot)), math.sin(math.radians(-rot))
     u, v = (x - cx) * c - (y - cy) * s_, (x - cx) * s_ + (y - cy) * c
     return (u / (rx * k)) ** 2 + (v / (ry * k)) ** 2 < 1
+KEEPOUT = [(1690, 1610, 75), (520, 1440, 45), (560, 960, 135)]   # no streets under the landmarks: needle tower, twisted tower, ski mall (same spots as tools/build_city.py)
+def _seg_clear(a, b):
+    for kx, ky, kr in KEEPOUT:
+        dx, dy = b[0] - a[0], b[1] - a[1]; t = max(0.0, min(1.0, ((kx - a[0]) * dx + (ky - a[1]) * dy) / (dx * dx + dy * dy or 1e-9)))
+        if math.hypot(kx - a[0] - t * dx, ky - a[1] - t * dy) < kr: return False
+    return True
 RINGED = {"Dubai Marina": (430, 1330, 250, 150, 14), "Downtown Dubai": (1625, 1562, 240, 158, 4), "Dubai Hills": (1500, 310, 300, 180, 0)}
 for name, cx, cy, rx, ry, rot, pitch in districts:
     if name not in RINGED: continue                 # the other areas are covered by the city-wide street net below
     for seg in clipped_grid(cx, cy, rx, ry, rot, pitch):
         if not all(p[1] < coast_y(p[0]) - 25 and 0 <= p[0] <= W and 0 <= p[1] <= H for p in seg): continue
+        if not _seg_clear(seg[0], seg[1]): continue
         if name != "Dubai Marina":
             roads.append({"name": name, "cls": "street", "width": 13, "pts": seg}); continue
         # the Marina has a water basin in the middle: its streets stop at the quay
@@ -134,6 +145,7 @@ def _f_in(x): return 430 + 0.03 * x                      # the inland base line 
 def _street_ok(q, dirn):
     x, y = q
     if not (8 <= x <= W - 8 and 8 <= y <= H - 8) or y > coast_y(x) - 45: return False
+    if any(math.hypot(x - kx, y - ky) < kr for kx, ky, kr in KEEPOUT): return False
     for cx, cy, rx, ry, rot in RINGED.values():
         c, s_ = math.cos(math.radians(-rot)), math.sin(math.radians(-rot))
         u, v = (x - cx) * c - (y - cy) * s_, (x - cx) * s_ + (y - cy) * c
@@ -226,7 +238,7 @@ for r in roads:
             for at in crossings(pts, o["pts"]): add(at, 6.2, 60, 310, "flyover")
     if r["cls"] != "street" or r["name"] == "Palm Trunk":
         for at in crossings(pts, water["creek"]): add(at, 6.5, 90, 170, "bridge")
-    if r["name"] == "Palm Trunk": add(150, 5.0, 80, 140, "bridge")
+    if r["name"] == "Palm Trunk": add(105, 4.0, 50, 95, "bridge")
     if r["name"] == "Downtown Blvd":
         for at in crossings(pts, hw[0]["pts"]): add(at, -6.0, 50, 110, "underpass")
     r["h"] = [round(terrain(x, y) + e, 2) for (x, y), e in zip(pts, extra)]
@@ -254,7 +266,7 @@ PALM = [r for r in roads if r["name"] in ("Palm Trunk", "Frond", "Crescent")]
 def shore(dr, col, grow):
     dr.polygon(land, fill=col)
     if grow: dr.line(land[:len(COAST)], fill=col, width=grow)
-    for r in PALM: fat(dr, r["pts"], col, (36 if r["name"] == "Frond" else 64) + grow)
+    for r in PALM: fat(dr, r["pts"], col, (24 if r["name"] == "Frond" else 56) + grow)
 glow = Image.new("RGB", im.size, SEA); shore(ImageDraw.Draw(glow), (70, 190, 255), 44)
 im = glow.filter(ImageFilter.GaussianBlur(16))          # light-blue glow along every shore
 d = ImageDraw.Draw(im)

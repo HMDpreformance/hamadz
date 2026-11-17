@@ -77,6 +77,30 @@ namespace HMD
                 Cam(b.pos - f * 18f + Vector3.up * 3f + Vector3.Cross(Vector3.up, f) * 3f, b.pos + Vector3.up);
                 yield return Shot("nc_07_road_block");
             }
+            // round 10: the dressed city
+            {
+                Vector3 S(float x, float z) => NewCity.Surface(new Vector3(x, 40f, z));
+                Vector3 gar = nc.Garage;
+                Cam(gar + new Vector3(-16, 5, -26), gar + new Vector3(0, 4, 6)); yield return Shot("nc_10_lsx");
+                Vector3 needle = new Vector3(1267.5f, 3.7f, 1207.5f);
+                // on a road west of Downtown looking east at the needle tower
+                Vector3 best = Vector3.zero; float bd = float.MaxValue;
+                foreach (var rd in nc.roads) if (rd.cls == "highway" || rd.cls == "main") foreach (var p in rd.pts) { float d = Mathf.Abs(Vector3.Distance(p, needle) - 650f) + Mathf.Abs(p.z - needle.z) * 0.5f; if (d < bd) { bd = d; best = p; } }
+                Vector3 dn = (needle - best); dn.y = 0; dn.Normalize();
+                best += Vector3.Cross(Vector3.up, dn) * 6.5f;   // right-hand lane, clear of the median lamps
+                Park(best, dn);
+                Cam(NewCity.Surface(best) - dn * 7f + Vector3.up * 2.2f, needle + Vector3.up * 120f); yield return Shot("nc_11_needle_ahead");
+                Vector3 tw = new Vector3(390f, 2f, 1080f);
+                Cam(S(tw.x - 120, tw.z - 140) + Vector3.up * 25f, tw + Vector3.up * 80f); yield return Shot("nc_12_marina");
+                Vector3 wheel = new Vector3(187.5f, 0f, 1290f);
+                Cam(S(wheel.x + 90, wheel.z - 120) + Vector3.up * 6f, wheel + Vector3.up * 50f); yield return Shot("nc_13_jbr_beach");
+                Vector3 arch = new Vector3(465f, 1.35f, 1696.5f);
+                Cam(arch + new Vector3(-60, 90, -260), arch + Vector3.up * 30f); yield return Shot("nc_14_palm");
+                Cam(S(gar.x - 60, gar.z - 40) + Vector3.up * 2f, gar + new Vector3(60, 5, 30)); yield return Shot("nc_15_al_quoz");
+                Vector3 hl = new Vector3(1125f, 0, 232.5f);
+                Cam(S(hl.x - 70, hl.z - 70) + Vector3.up * 18f, S(hl.x, hl.z)); yield return Shot("nc_16_hills_villas");
+                Cam(nc.MeshBounds.center + new Vector3(-700, 520, -900), needle + Vector3.up * 60f); yield return Shot("nc_17_aerial_city");
+            }
             // the full map of the new city, and the minimap while driving
             g.hud.Map.Open();
             yield return Shot("nc_09_map");
@@ -142,7 +166,14 @@ namespace HMD
                 if (p.y < onLine.y - 2.5f) { drops++; Debug.Log($"[HMD] nc DROP on {rd.name} at ({p.x:F0},{p.y:F1},{p.z:F0}) line y={onLine.y:F1}"); break; }
                 if (side > rd.width * 0.5f + 3f) { offs++; Debug.Log($"[HMD] nc RUN-OFF on {rd.name} at ({p.x:F0},{p.z:F0}) {side:F1} m from the centre"); break; }
                 slow = (t > 4f && v < 15f) ? slow + Time.deltaTime : 0;
-                if (slow > 1.2f) { stops++; Debug.Log($"[HMD] nc STOP (wall?) on {rd.name} at ({p.x:F0},{p.y:F1},{p.z:F0})"); break; }
+                if (slow > 1.2f)
+                {
+                    stops++;
+                    string what = "nothing";
+                    foreach (var hc in Physics.OverlapSphere(p + Vector3.up * 0.8f, 3.5f)) if (!hc.transform.IsChildOf(car.transform)) what = hc.name + "/" + (hc.transform.parent ? hc.transform.parent.name : "-") + (hc is MeshCollider ? "" : " " + hc.bounds.size);
+                    Debug.Log($"[HMD] nc STOP (wall?) on {rd.name} at ({p.x:F0},{p.y:F1},{p.z:F0}) touching {what}");
+                    break;
+                }
                 if ((logT -= Time.deltaTime) <= 0) { logT = 1f; Debug.Log($"[HMD] nc {rd.name} ({p.x:F0},{p.y:F1},{p.z:F0}) {v:F0} km/h idx {idx}/{rd.pts.Count}"); }
                 if (shoot && !shot && v > 180f) { shot = true; yield return Shot("nc_01_highway_chase"); }
                 yield return null;

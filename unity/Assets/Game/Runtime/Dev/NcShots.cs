@@ -108,7 +108,9 @@ namespace HMD
                 // from above the trunk, looking along the fronds to the arch hotel on the crescent
                 Vector3 toArch = arch - palmC; toArch.y = 0; toArch = toArch.sqrMagnitude > 1 ? toArch.normalized : Vector3.forward;
                 Cam(palmC - toArch * 260f + Vector3.up * 210f, mid + Vector3.up * 10f); yield return Shot("nc_14_palm");
-                Cam(palmC + new Vector3(0, 620f, -240f), palmC + Vector3.forward * 40f); yield return Shot("nc_14b_palm_top");
+                Vector3 frondC = (palmC + arch) * 0.5f; frondC.y = 0;
+                g.rig.Cam.transform.position = frondC + Vector3.up * 700f; g.rig.SetFixed(frondC + Vector3.up * 700f, frondC + Vector3.forward * 0.5f, false);   // straight down
+                yield return Shot("nc_14b_palm_top");
                 Cam(NewCity.Surface(mid) + Vector3.up * 1.8f - toArch * 20f, arch + Vector3.up * 40f); yield return Shot("nc_14c_palm_road");
                 Debug.Log($"[HMD] palm: centre {palmC} arch {arch}");
                 Cam(S(gar.x - 60, gar.z - 40) + Vector3.up * 2f, gar + new Vector3(60, 5, 30)); yield return Shot("nc_15_al_quoz");

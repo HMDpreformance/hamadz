@@ -69,7 +69,7 @@ namespace HMD
             var concrete = Res.TexMat("Tex/concrete_panels", Vector2.one * (10f / 4f), 0.3f, 0f, new Color(0.62f, 0.62f, 0.64f));
             var sand = Res.Mat(new Color(0.26f, 0.22f, 0.17f), 0.12f, 0f);   // plain dark sand, no stone pattern
             // sea: lighter blue and mirror-like (the wet-road shader at full wetness gives it the planar reflection)
-            var water = Res.Mat(new Color(0.07f, 0.16f, 0.28f), 0.95f, 0f);
+            var water = Res.Mat(new Color(0.1f, 0.21f, 0.34f), 0.95f, 0f);
             Res.MakeWet(water);
             var white = Res.Mat(new Color(0.85f, 0.85f, 0.82f), 0.55f); Res.MakeWet(white);
             var yellow = Res.Mat(new Color(0.9f, 0.7f, 0.1f), 0.55f); Res.MakeWet(yellow);

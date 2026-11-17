@@ -29,7 +29,7 @@ namespace HMD
         const int M_FAC0 = 6;            // 6..13 facades (midrise)
         const int M_STUCCO = 14, M_SAND = 15, M_CORR = 16, M_SHUTTER = 17, M_ROOF = 18, M_SHOP = 19, M_ROOMS = 20,
                   M_LED_W = 21, M_LED_B = 22, M_LED_P = 23, M_LED_G = 24, M_RED = 25, M_POLE = 26, M_LAMP = 27,
-                  M_BARK = 28, M_LEAF = 29, M_TREE = 30, M_GLASS = 31, M_WALL = 32, M_SIGN0 = 33, M_SHORE = 37, M_COUNT = 38;
+                  M_BARK = 28, M_LEAF = 29, M_TREE = 30, M_GLASS = 31, M_WALL = 32, M_SIGN0 = 33, M_SHORE = 37, M_LAND = 38, M_SHALLOW = 39, M_ARCH = 40, M_COUNT = 41;
         float[] towerTile = { 34f, 30f, 44f, 26f, 38f, 24f };
 
         public void Build(NewCity nc)
@@ -100,16 +100,19 @@ namespace HMD
 
         public static readonly List<(string kind, Vector3 p, float h)> Landmarks = new List<(string, Vector3, float)>();
 
-        /// <summary>Makes the Palm readable at night: a light sand shore strip along both edges of every frond and the
-        /// crescent (12 m from the road, where the land ends), and warm promenade lamps on short posts along them.</summary>
+        /// <summary>Makes the Palm readable at night like a night photo of the real island: warm sand land along the
+        /// trunk, fronds and crescent, a wide bright shore with a turquoise shallow-water edge, promenade lamps, two
+        /// rows of small lit villas on every frond and lit apartment blocks along the trunk.</summary>
         void PalmShores(NewCity nc, System.Func<Vector3, MeshBuilder> prop)
         {
-            int lampsAdded = 0;
+            int lampsAdded = 0, villas = 0, blocks = 0;
             foreach (var rd in nc.roads)
             {
-                if (rd.name != "Frond" && rd.name != "Crescent") continue;
-                float off = rd.width * 0.5f + 10.5f;
-                float acc = 0;
+                bool frond = rd.name == "Frond", cres = rd.name == "Crescent", trunk = rd.name == "Palm Trunk";
+                if (!frond && !cres && !trunk) continue;
+                float edge = rd.width * 0.5f;                 // road edge
+                float land = trunk ? 22f : 11.5f;             // land beyond the road edge
+                float acc = 0, accV = 0, accB = 0;
                 for (int i = 1; i < rd.pts.Count; i++)
                 {
                     Vector3 a = rd.pts[i - 1], c = rd.pts[i];
@@ -117,22 +120,19 @@ namespace HMD
                     Vector3 side = Vector3.Cross(Vector3.up, d);
                     for (int s = -1; s <= 1; s += 2)
                     {
-                        // shore: a 3 m wide pale sand band sloping into the water
-                        Vector3 a0 = a + side * s * off, c0 = c + side * s * off;
-                        Vector3 a1 = a + side * s * (off + 3f) + Vector3.down * 1.2f, c1 = c + side * s * (off + 3f) + Vector3.down * 1.2f;
                         var b = prop(a);
-                        Vector2 u0 = new Vector2(0, 0), u1 = new Vector2(len / 4f, 0), u2 = new Vector2(len / 4f, 1), u3 = new Vector2(0, 1);
-                        if (s > 0) b.Sub(M_SHORE).QuadUV(a0 + Vector3.up * 0.15f, c0 + Vector3.up * 0.15f, c1, a1, Vector3.up, u0, u1, u2, u3);
-                        else b.Sub(M_SHORE).QuadUV(c0 + Vector3.up * 0.15f, a0 + Vector3.up * 0.15f, a1, c1, Vector3.up, u1, u0, u3, u2);
+                        // bands from the road edge outwards: sand land (flat), bright shore (6 m, sloping), turquoise shallows (6 m, at sea level)
+                        Band(b, M_LAND, a, c, side * s, edge + 0.3f, edge + land, 0.08f, 0.08f, len);
+                        Band(b, M_SHORE, a, c, side * s, edge + land, edge + land + 6f, 0.08f, -1.0f, len);
+                        Band(b, M_SHALLOW, a, c, side * s, edge + land + 6f, edge + land + 12f, -1.0f, -1.3f, len);
                     }
-                    // promenade lamps every 28 m on both shores
-                    acc += len;
-                    if (acc >= 28f)
+                    acc += len; accV += len; accB += len;
+                    if (acc >= 26f)
                     {
                         acc = 0;
                         for (int s = -1; s <= 1; s += 2)
                         {
-                            Vector3 p = c + side * s * (off - 1.2f);
+                            Vector3 p = c + side * s * (edge + land - 0.8f);
                             var b = prop(p);
                             RBox(b, M_POLE, p, new Vector3(0.14f, 3.2f, 0.14f), 0, Vector2.one);
                             RBox(b, M_LAMP, p + Vector3.up * 3.2f, new Vector3(0.35f, 0.35f, 0.35f), 0, Vector2.one);
@@ -140,9 +140,60 @@ namespace HMD
                             lampsAdded++;
                         }
                     }
+                    // villas: two rows (both sides) every ~20 m on fronds and the crescent, 9 x 8 m, set back from the road
+                    if ((frond || cres) && accV >= 20f)
+                    {
+                        accV = 0;
+                        for (int s = -1; s <= 1; s += 2)
+                        {
+                            Vector3 p = c + side * s * (edge + 1.5f + 4.2f);
+                            if (Physics.Raycast(p + Vector3.up * 20f, Vector3.down, out var hit, 40f) && hit.collider.name.ToLowerInvariant().Contains("asphalt")) continue;
+                            float yaw = Quaternion.LookRotation(-side * s).eulerAngles.y;   // front faces the road
+                            SmallVilla(prop(p), new Vector3(p.x, a.y + 0.08f, p.z), yaw);
+                            villas++;
+                        }
+                    }
+                    // apartment blocks along the trunk every ~55 m
+                    if (trunk && accB >= 55f)
+                    {
+                        accB = 0;
+                        for (int s = -1; s <= 1; s += 2)
+                        {
+                            Vector3 p = c + side * s * (edge + 10f);
+                            var b = prop(p);
+                            float yaw = Quaternion.LookRotation(-side * s).eulerAngles.y;
+                            RBox(b, M_SAND, new Vector3(p.x, a.y - 1f, p.z), new Vector3(16f, 23f, 13f), yaw, new Vector2(4, 4));
+                            for (int f = 0; f < 6; f++)
+                                Face(b, M_ROOMS, new Vector3(p.x, a.y + 1.5f + f * 3.4f, p.z), yaw, 6.5f, -7f, 7f, 0f, 1.6f, new Vector2(14f, 2.2f));
+                            RBox(b, M_LED_G, new Vector3(p.x, a.y + 21.6f, p.z), new Vector3(16.3f, 0.35f, 13.3f), yaw, Vector2.one, false);
+                            blocks++;
+                        }
+                    }
                 }
             }
-            Debug.Log($"[HMD] palm shores: {lampsAdded} promenade lamps");
+            Debug.Log($"[HMD] palm: {lampsAdded} promenade lamps, {villas} villas, {blocks} trunk blocks");
+        }
+
+        /// <summary>A flat band parallel to a road segment, from distance d0 to d1 along 'side', heights y0 (inner) to y1 (outer).</summary>
+        static void Band(MeshBuilder b, int sub, Vector3 a, Vector3 c, Vector3 side, float d0, float d1, float y0, float y1, float len)
+        {
+            Vector3 a0 = a + side * d0 + Vector3.up * y0, c0 = c + side * d0 + Vector3.up * y0;
+            Vector3 a1 = a + side * d1 + Vector3.up * y1, c1 = c + side * d1 + Vector3.up * y1;
+            a0.y = a.y + y0; c0.y = c.y + y0; a1.y = Mathf.Min(a.y + y1, a.y + y0); c1.y = Mathf.Min(c.y + y1, c.y + y0);
+            Vector2 u0 = new Vector2(0, 0), u1 = new Vector2(len / 4f, 0), u2 = new Vector2(len / 4f, 1), u3 = new Vector2(0, 1);
+            // keep the quad facing up whichever side it is on
+            if (Vector3.Dot(Vector3.Cross(c0 - a0, a1 - a0), Vector3.up) < 0) b.Sub(sub).QuadUV(a0, c0, c1, a1, Vector3.up, u0, u1, u2, u3);
+            else b.Sub(sub).QuadUV(c0, a0, a1, c1, Vector3.up, u1, u0, u3, u2);
+        }
+
+        void SmallVilla(MeshBuilder b, Vector3 p, float yaw)
+        {
+            int m = R() < 0.6f ? M_STUCCO : M_SAND;
+            RBox(b, m, p - Vector3.up * 1f, new Vector3(9f, 6.5f, 8f), yaw, new Vector2(4, 4));
+            RBox(b, m, p + Vector3.up * 5.5f, new Vector3(5.5f, 2.8f, 5f), yaw, new Vector2(4, 4));
+            Face(b, M_ROOMS, p + Vector3.up * 0.8f, yaw, 4f, -3.5f, 3.5f, 0f, 1.9f, new Vector2(7f, 2.2f));
+            Face(b, M_ROOMS, p + Vector3.up * 6f, yaw, 2.5f, -2f, 2f, 0f, 1.4f, new Vector2(4f, 2.2f));
+            Face(b, M_LED_G, p + Vector3.up * 5.4f, yaw, 4.02f, -4.4f, 4.4f, 0f, 0.12f, Vector2.one, 0.06f);
         }
 
         // ---------------------------------------------------------------- parsing
@@ -220,8 +271,15 @@ namespace HMD
             var sc = new[] { new Color(1f, 0.15f, 0.2f), new Color(0.1f, 0.85f, 1f), new Color(1f, 0.6f, 0.1f), new Color(0.3f, 1f, 0.45f) };
             for (int k = 0; k < 4; k++) mats[M_SIGN0 + k] = Res.Glow(sc[k], 4.5f);
             // pale wet sand shore with a faint warm glow, so the Palm's outline shows from above at night
-            mats[M_SHORE] = Res.Mat(new Color(0.78f, 0.7f, 0.55f), 0.55f, 0f);
-            Res.SetEmission(mats[M_SHORE], new Color(0.62f, 0.48f, 0.3f) * 1.1f);
+            mats[M_SHORE] = Res.Mat(new Color(0.9f, 0.82f, 0.66f), 0.5f, 0f);
+            Res.SetEmission(mats[M_SHORE], new Color(0.7f, 0.56f, 0.36f) * 1.6f);
+            mats[M_LAND] = Res.Mat(new Color(0.62f, 0.52f, 0.38f), 0.3f, 0f);
+            Res.SetEmission(mats[M_LAND], new Color(0.42f, 0.32f, 0.2f) * 0.55f);   // warm sand lit by the street lights
+            mats[M_SHALLOW] = Res.Mat(new Color(0.1f, 0.45f, 0.48f), 0.9f, 0f);
+            Res.SetEmission(mats[M_SHALLOW], new Color(0.05f, 0.35f, 0.4f) * 0.9f);   // turquoise shallow water
+            var archT = Res.Tex("Tower/hotel");
+            mats[M_ARCH] = Res.Mat(new Color(0.95f, 0.72f, 0.62f), 0.45f, 0f);   // pink-sand hotel facade
+            if (archT) { Res.SetMainTex(mats[M_ARCH], archT, Vector2.one); Res.SetEmission(mats[M_ARCH], new Color(1f, 0.75f, 0.55f) * 1.3f, archT); }
         }
 
         // ---------------------------------------------------------------- geometry helpers
@@ -378,11 +436,22 @@ namespace HMD
                 }
                 case "arch_hotel":
                 {
-                    float tw = m.w * 0.25f;
-                    RBox(b, M_TOWER0 + 5, c + new Vector3(-m.w * 0.5f + tw * 0.5f, 0, 0), new Vector3(tw, m.h + 3f, m.d), 0, new Vector2(24, 24));
-                    RBox(b, M_TOWER0 + 5, c + new Vector3(m.w * 0.5f - tw * 0.5f, 0, 0), new Vector3(tw, m.h + 3f, m.d), 0, new Vector2(24, 24));
-                    RBox(b, M_TOWER0 + 5, c + new Vector3(0, m.h * 0.78f, 0), new Vector3(m.w - tw * 1.6f, m.h * 0.22f + 3f, m.d * 0.7f), 0, new Vector2(24, 24));
-                    RBox(b, M_LED_G, c + new Vector3(0, m.h * 0.78f - 0.5f, 0), new Vector3(m.w - tw * 1.6f, 0.6f, m.d * 0.72f), 0, Vector2.one, false);
+                    // pink-sand towers on both sides stepping in near the top, a bridge block over a tall arch, lit arch and crown
+                    float tw = m.w * 0.3f, gap = m.w - 2f * tw;
+                    for (int s = -1; s <= 1; s += 2)
+                    {
+                        Vector3 tc = c + new Vector3(s * (m.w * 0.5f - tw * 0.5f), 0, 0);
+                        RBox(b, M_ARCH, tc, new Vector3(tw, m.h * 0.62f + 3f, m.d), 0, new Vector2(26, 26));
+                        RBox(b, M_ARCH, tc + new Vector3(-s * tw * 0.08f, m.h * 0.62f + 3f, 0), new Vector3(tw * 0.84f, m.h * 0.38f, m.d * 0.86f), 0, new Vector2(26, 26));
+                        RBox(b, M_LED_G, tc + new Vector3(-s * tw * 0.08f, m.h + 3f, 0), new Vector3(tw * 0.86f, 0.6f, m.d * 0.88f), 0, Vector2.one, false);
+                        RBox(b, M_LED_G, tc + new Vector3(s * tw * 0.5f, 0, 0), new Vector3(0.6f, m.h + 3f, 0.6f), 0, Vector2.one);
+                    }
+                    float archTop = m.h * 0.72f;
+                    RBox(b, M_ARCH, c + new Vector3(0, archTop + 3f, 0), new Vector3(gap + 2f, m.h * 0.2f, m.d * 0.7f), 0, new Vector2(26, 26));
+                    // the arch outline: a lit band under the bridge and up both inner walls
+                    RBox(b, M_LED_G, c + new Vector3(0, archTop + 2.4f, m.d * 0.36f), new Vector3(gap, 0.8f, 0.4f), 0, Vector2.one);
+                    RBox(b, M_LED_G, c + new Vector3(0, archTop + 2.4f, -m.d * 0.36f), new Vector3(gap, 0.8f, 0.4f), 0, Vector2.one);
+                    for (int s = -1; s <= 1; s += 2) RBox(b, M_LED_G, c + new Vector3(s * gap * 0.5f, 0, m.d * 0.5f + 0.2f), new Vector3(0.6f, archTop + 3f, 0.4f), 0, Vector2.one);
                     break;
                 }
                 case "big_wheel":

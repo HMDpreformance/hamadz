@@ -1,0 +1,15 @@
+{
+  "note": "w/d/h are real size in metres (x, z, y). weight is the pick chance among models of the same lot style (default 1). yaw turns the model so its front faces +Z; not checked yet.",
+  "models": [
+    {"id": "marina_tower",   "w": 56, "d": 37, "h": 170, "styles": ["tower_res"],          "yaw": 0, "weight": 1},
+    {"id": "hotel_tower",    "w": 66, "d": 89, "h": 130, "styles": ["tower", "tower_res"], "yaw": 0, "weight": 1},
+    {"id": "office_tower",   "w": 46, "d": 58, "h": 150, "styles": ["tower"],              "yaw": 0, "weight": 1},
+    {"id": "beige_tower",    "w": 38, "d": 55, "h": 95,  "styles": ["tower_beige"],        "yaw": 0, "weight": 1},
+    {"id": "midrise_shops",  "w": 18, "d": 23, "h": 28,  "styles": ["midrise"],            "yaw": 0, "weight": 1},
+    {"id": "shop_row",       "w": 10, "d": 26, "h": 7,   "styles": ["midrise", "villa"],   "yaw": 0, "weight": 0.08},
+    {"id": "villa_white",    "w": 22, "d": 21, "h": 14.6, "styles": ["villa"],             "yaw": 0, "weight": 1},
+    {"id": "mosque",         "w": 29, "d": 27, "h": 30,  "styles": ["villa"],              "yaw": 0, "weight": 0.03},
+    {"id": "warehouse_a",    "w": 30, "d": 30, "h": 16.5, "styles": ["warehouse"],         "yaw": 0, "weight": 1},
+    {"id": "petrol_station", "w": 21, "d": 22, "h": 10,  "styles": ["warehouse", "midrise"], "yaw": 0, "weight": 0.05}
+  ]
+}

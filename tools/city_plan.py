@@ -214,8 +214,9 @@ for t, x, y in (("E11", 300, 1040), ("E44", 1350, 580), ("E311", 2475, 680)):
     d.rounded_rectangle([cx - 30, cy - 15, cx + 30, cy + 15], 5, fill=(24, 70, 170), outline=(255, 255, 255), width=2)
     d.text((cx, cy), t, font=FS, fill=(255, 255, 255), anchor="mm")
 g = plan["garage"]; cx, cy = g["x"] / 2, (H - g["y"]) / 2
-d.ellipse([cx - 16, cy - 16, cx + 16, cy + 16], fill=(215, 30, 30), outline=(255, 255, 255), width=3)
-label(g["x"], g["y"] - 60, "LSX GARAGE", FS, (255, 120, 110))
+if not os.environ.get("PLAIN"):
+    d.ellipse([cx - 16, cy - 16, cx + 16, cy + 16], fill=(215, 30, 30), outline=(255, 255, 255), width=3)
+    label(g["x"], g["y"] - 60, "LSX GARAGE", FS, (255, 120, 110))
 cx, cy = 1620 / 2, (H - 1150) / 2
 d.polygon([(cx, cy - 46), (cx + 7, cy), (cx - 7, cy)], fill=(255, 255, 255), outline=(0, 0, 0))
 T = ImageFont.truetype(os.path.join(ROOT, "fonts", "russoone_RussoOne-Regular.ttf"), 54)

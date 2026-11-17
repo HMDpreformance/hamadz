@@ -33,8 +33,11 @@ namespace HMD
         void Awake()
         {
             I = this;
-            carId = PlayerPrefs.GetString("car", "tuner");
-            if (System.Array.IndexOf(CarDB.Order, carId) < 0) carId = "tuner";
+            carId = PlayerPrefs.GetString("car", "sport");
+            // -car <id> on the command line picks the car for this run (used for screenshots)
+            var argv = System.Environment.GetCommandLineArgs();
+            for (int a = 0; a + 1 < argv.Length; a++) if (argv[a] == "-car") carId = argv[a + 1];
+            if (System.Array.IndexOf(CarDB.Order, carId) < 0) carId = "sport";
         }
 
         IEnumerator Start()

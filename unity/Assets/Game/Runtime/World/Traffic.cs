@@ -28,7 +28,7 @@ namespace HMD
         readonly List<TCar> cars = new List<TCar>();
         Transform player;
         System.Random rng = new System.Random(3);
-        static readonly string[] Models = { "sedan", "suv", "euro", "tuner", "muscle", "classic", "rotary" };
+        static readonly string[] Models = { "sedan", "suv", "euro", "tuner", "muscle", "classic", "rotary", "pickup", "sport" };
 
         public void Setup(Transform playerT)
         {

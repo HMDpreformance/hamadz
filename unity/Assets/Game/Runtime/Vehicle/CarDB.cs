@@ -24,7 +24,7 @@ namespace HMD
     /// <summary>The same 8 original cars as the Godot game (names and specs carried over).</summary>
     public static class CarDB
     {
-        public static readonly string[] Order = { "tuner", "classic", "muscle", "sedan", "rotary", "euro", "suv", "exotic" };
+        public static readonly string[] Order = { "sport", "pickup", "tuner", "classic", "muscle", "sedan", "rotary", "euro", "suv", "exotic" };
         static Dictionary<string, CarSpec> cars;
 
         public static CarSpec Get(string id)
@@ -44,6 +44,9 @@ namespace HMD
         static void Build()
         {
             cars = new Dictionary<string, CarSpec>();
+            // the two main cars (made-up names, no badges): an American V8 sports coupe and a full-size pickup
+            Add(new CarSpec { id = "sport", name = "VORTEX Z6", tag = "AMERICAN V8 SPORTS CAR", price = 0, hp = 400, torqueNm = 542, topKmh = 300, weightKg = 1440, handling = 84, drive = Drive.RWD, engine = "v8", cyl = "6.0L V8", length = 4.44f, rpmRedline = 6500, gears = new[] { 2.66f, 1.78f, 1.3f, 1.0f, 0.74f, 0.5f }, finalDrive = 3.42f, paint = new Color(0.78f, 0.03f, 0.03f) });
+            Add(new CarSpec { id = "pickup", name = "DUNE 1500", tag = "FULL-SIZE V8 PICKUP", price = 0, hp = 315, torqueNm = 458, topKmh = 180, weightKg = 2380, handling = 48, drive = Drive.AWD, engine = "v8", cyl = "5.3L V8", length = 5.84f, rpmRedline = 5800, wheelRadius = 0.40f, finalDrive = 3.42f, paint = new Color(0.03f, 0.03f, 0.035f) });
             Add(new CarSpec { id = "tuner", name = "KAIDO RS-7", tag = "JAPANESE TUNER COUPE", price = 0, hp = 276, torqueNm = 353, topKmh = 245, weightKg = 1280, handling = 78, drive = Drive.RWD, engine = "i4", cyl = "2.0L TURBO I4", length = 4.45f, rpmRedline = 8000, paint = new Color(0.62f, 0.85f, 0.22f) });
             Add(new CarSpec { id = "muscle", name = "BRAWLER 427", tag = "AMERICAN MUSCLE", price = 18500, hp = 390, torqueNm = 624, topKmh = 254, weightKg = 1620, handling = 58, drive = Drive.RWD, engine = "v8", cyl = "7.0L V8", length = 4.75f, rpmRedline = 6500, gears = new[] { 2.9f, 1.9f, 1.35f, 1.0f, 0.8f }, finalDrive = 3.5f, paint = new Color(0.02f, 0.02f, 0.025f) });
             Add(new CarSpec { id = "euro", name = "VERANO GT", tag = "EUROPEAN PERFORMANCE", price = 32000, hp = 340, torqueNm = 420, topKmh = 275, weightKg = 1390, handling = 88, drive = Drive.RWD, engine = "i6", cyl = "3.6L FLAT 6", length = 4.5f, rpmRedline = 7800, paint = new Color(0.45f, 0.95f, 0.1f) });

@@ -77,7 +77,7 @@ namespace HMD
         {
             var im = Img(name, parent, anchor, pivot, pos, size, new Color(0.02f, 0.03f, 0.05f, 0.72f), RoundedSprite);
             im.type = Image.Type.Sliced;
-            var edge = Img("Edge", im.transform, new Vector2(0.5f, 0), new Vector2(0.5f, 0), Vector2.zero, new Vector2(size.x - 16, 5), accent ?? new Color(1f, 0.82f, 0.1f));
+            var edge = Img("Edge", im.transform, new Vector2(0.5f, 0), new Vector2(0.5f, 0), Vector2.zero, new Vector2(size.x - 16, 5), accent ?? new Color(0.24f, 0.63f, 1f));
             var b = im.gameObject.AddComponent<Button>();
             var cb = b.colors; cb.pressedColor = new Color(0.7f, 0.7f, 0.7f); b.colors = cb;
             if (onClick != null) b.onClick.AddListener(() => onClick());

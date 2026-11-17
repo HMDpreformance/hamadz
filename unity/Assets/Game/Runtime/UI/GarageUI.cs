@@ -24,7 +24,7 @@ namespace HMD
                 li.preserveAspect = true;
             }
             carName = UIKit.Label("Name", r, new Vector2(0, 1), new Vector2(0, 1), new Vector2(40, -150), new Vector2(900, 80), "", 72, Color.white, TextAnchor.MiddleLeft, Res.TitleFont);
-            carTag = UIKit.Label("Tag", r, new Vector2(0, 1), new Vector2(0, 1), new Vector2(44, -222), new Vector2(900, 40), "", 32, new Color(1f, 0.82f, 0.1f), TextAnchor.MiddleLeft);
+            carTag = UIKit.Label("Tag", r, new Vector2(0, 1), new Vector2(0, 1), new Vector2(44, -222), new Vector2(900, 40), "", 32, new Color(0.55f, 0.82f, 1f), TextAnchor.MiddleLeft);
             carStats = UIKit.Label("Stats", r, new Vector2(0, 1), new Vector2(0, 1), new Vector2(44, -262), new Vector2(900, 200), "", 30, new Color(0.9f, 0.92f, 0.95f), TextAnchor.UpperLeft);
 
             buttons = UIKit.Rect("Buttons", r, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 40), new Vector2(1500, 110)).gameObject;

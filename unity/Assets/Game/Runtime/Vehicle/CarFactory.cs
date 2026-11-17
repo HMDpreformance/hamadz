@@ -105,12 +105,31 @@ namespace HMD
                 var vis = new GameObject((front ? "F" : "R") + (left ? "L" : "R"));
                 vis.transform.SetParent(wheelRoot, false);
                 vis.transform.localPosition = wpos;
+                var realWheel = RealWheel(id);
+                if (realWheel != null)
+                {
+                    // real 3D wheel (unit diameter, axle along X, outer face at x = 0 looking +X): scale to the tyre,
+                    // outer face on the tyre face, mirrored on the left side
+                    var rw = Object.Instantiate(realWheel, vis.transform);
+                    rw.name = "Mesh";
+                    float k = 2f * r;
+                    rw.transform.localPosition = new Vector3((left ? -1 : 1) * tw * 0.5f, 0, 0);
+                    rw.transform.localRotation = Quaternion.identity;
+                    // the glTF import can come in mirrored on X: the body must lie on -X behind the outer face (x = 0)
+                    float flip = RealWheelFlip(realWheel);
+                    rw.transform.localScale = new Vector3((left ? -1 : 1) * k * flip, k, k);
+                    foreach (var c in rw.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(c);
+                    foreach (var wr0 in rw.GetComponentsInChildren<Renderer>()) { wr0.sharedMaterials = RealWheelMats(id, wr0.sharedMaterials); wr0.shadowCastingMode = ShadowCastingMode.On; }
+                }
+                else
+                {
                 var mesh = new GameObject("Mesh");
                 mesh.transform.SetParent(vis.transform, false);
                 mesh.transform.localScale = new Vector3(left ? -1 : 1, 1, 1);
                 mesh.AddComponent<MeshFilter>().sharedMesh = WheelMesh.Get(r, tw, style);
                 var mr = mesh.AddComponent<MeshRenderer>();
                 mr.sharedMaterials = wheelMats;
+                }
                 car.wheelVisuals[i] = vis.transform;
 
                 // dark matte arch liner: a cylinder around the wheel drawn from the inside only (front faces culled),
@@ -185,6 +204,86 @@ namespace HMD
         }
         static Material trimMat;
         static Material TrimMat { get { if (trimMat == null) { trimMat = Res.UnlitMat(new Color(0.01f, 0.01f, 0.012f)); trimMat.SetFloat("_Cull", 0f); } return trimMat; } }
+
+        /// <summary>The real 3D wheel model for the main cars (null: use the procedural wheel).</summary>
+        static GameObject RealWheel(string id) =>
+            id == "sport" ? Res.Load<GameObject>("Cars/wheel_sport") : id == "pickup" ? Res.Load<GameObject>("Cars/wheel_truck") : null;
+
+        static Texture2D MetalFromBrightness(Texture src)
+        {
+            const int S = 512;
+            var rt = RenderTexture.GetTemporary(S, S, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            Graphics.Blit(src, rt);
+            var prev = RenderTexture.active; RenderTexture.active = rt;
+            var t = new Texture2D(S, S, TextureFormat.RGBA32, true, true);
+            t.ReadPixels(new Rect(0, 0, S, S), 0, 0);
+            RenderTexture.active = prev; RenderTexture.ReleaseTemporary(rt);
+            var px = t.GetPixels32();
+            for (int i = 0; i < px.Length; i++)
+            {
+                Color c = px[i];
+                Color.RGBToHSV(c, out float hh, out float ss, out float vv);
+                float metalK = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.28f, 0.55f, vv)) * (1f - Mathf.InverseLerp(0.25f, 0.5f, ss));
+                byte mt = (byte)(metalK * 0.75f * 255), sm = (byte)(Mathf.Lerp(0.22f, 0.78f, metalK) * 255);
+                px[i] = new Color32(mt, mt, mt, sm);
+            }
+            t.SetPixels32(px); t.Apply(true);
+            return t;
+        }
+
+        static readonly Dictionary<GameObject, float> wheelFlip = new Dictionary<GameObject, float>();
+        static float RealWheelFlip(GameObject prefab)
+        {
+            if (wheelFlip.TryGetValue(prefab, out var f)) return f;
+            float cx = 0; int n = 0;
+            foreach (var mf in prefab.GetComponentsInChildren<MeshFilter>())
+            {
+                if (mf.sharedMesh == null) continue;
+                var b = mf.sharedMesh.bounds;
+                cx += prefab.transform.InverseTransformPoint(mf.transform.TransformPoint(b.center)).x; n++;
+            }
+            f = n > 0 && cx / n > 0 ? -1f : 1f;
+            Debug.Log($"[HMD] wheel {prefab.name}: centre x {(n > 0 ? cx / n : 0):F3} -> flip {f}");
+            wheelFlip[prefab] = f;
+            return f;
+        }
+
+        static readonly Dictionary<string, Material[]> wheelMatCache = new Dictionary<string, Material[]>();
+        /// <summary>Lit copies of the wheel model's materials: metal parts bright (not a pure mirror, which shows the dark
+        /// night and reads black), a little self light from their own texture; rubber matte.</summary>
+        static Material[] RealWheelMats(string id, Material[] src)
+        {
+            string key = id + src.Length + (src.Length > 0 && src[0] ? src[0].name : "");
+            if (wheelMatCache.TryGetValue(key, out var hit)) return hit;
+            var outM = new Material[src.Length];
+            for (int i = 0; i < src.Length; i++)
+            {
+                var s = src[i];
+                var tex = FindTex(s, "baseColorTexture", "_BaseMap", "_MainTex");
+                Color col = s && s.HasProperty("_BaseColor") ? s.GetColor("_BaseColor") : Color.white;
+                float metal = s && s.HasProperty("_Metallic") ? s.GetFloat("_Metallic") : 0f;
+                var nrm = FindTex(s, "normalTexture", "_BumpMap");
+                string mn = s ? s.name.ToLowerInvariant() : "";
+                bool rubber = mn.Contains("tire") || mn.Contains("tyre") || mn.Contains("rubber");
+                bool isMetal = !rubber && (metal > 0.3f || mn.Contains("rim") || mn.Contains("metal") || mn.Contains("chrome") || mn.Contains("spoke"));
+                Debug.Log($"[HMD] wheel mat {id}: {mn} metallic={metal:F2} tex={(tex ? tex.name : "-")} -> metal={isMetal}");
+                var m = Res.Mat(col, isMetal ? 0.72f : 0.25f, isMetal ? 0.55f : 0f);
+                if (tex) { Res.SetMainTex(m, tex, Vector2.one); if (isMetal) Res.SetEmission(m, Color.white * 0.06f, tex); }
+                if (!isMetal && !rubber && tex)
+                {
+                    // one texture for tyre and rim: derive a metal/smoothness map from it (bright grey = polished metal,
+                    // dark = rubber), so the rim shines and the tyre stays matte
+                    m.SetTexture("_MetallicGlossMap", MetalFromBrightness(tex));
+                    m.EnableKeyword("_METALLICSPECGLOSSMAP");
+                    m.SetFloat("_Smoothness", 1f); m.SetFloat("_Metallic", 1f);
+                    Res.SetEmission(m, Color.white * 0.05f, tex);
+                }
+                if (nrm) { m.SetTexture("_BumpMap", nrm); m.EnableKeyword("_NORMALMAP"); }
+                outM[i] = m;
+            }
+            wheelMatCache[key] = outM;
+            return outM;
+        }
 
         public const int CarLayer = 9;
 

@@ -27,7 +27,14 @@ namespace HMD
             player = playerT;
             worldMin = -City.Road - 20f;
             worldSize = City.Extent + City.Road + 40f;
-            tex = DrawMap();
+            var ncity = NewCity.I;
+            if (ncity != null && ncity.roads.Count > 0)
+            {
+                // the new city: its real roads (json centre lines), square map over its bounds
+                worldMin = -100f; worldSize = 1960f;
+                tex = DrawNewCityMap(ncity);
+            }
+            else tex = DrawMap();
 
             var frame = UIKit.Img("Minimap", root, Vector2.zero, Vector2.zero, new Vector2(48, 268), new Vector2(Size + 14, Size + 14), new Color(0, 0, 0, 0.6f), UIKit.CircleSprite);
             var maskImg = UIKit.Img("Mask", frame.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(Size, Size), Color.white, UIKit.CircleSprite);
@@ -71,6 +78,17 @@ namespace HMD
             // district labels (white with a soft shadow) and a north arrow, like a real city map
             string[] names = { "MARINA", "JUMEIRAH", "AL BARSHA", "BUSINESS BAY", "DOWNTOWN", "DEIRA", "AL QUOZ", "KARAMA", "LSX MOTORSPORT" };
             Vector2[] spots = { new Vector2(0.16f, 0.16f), new Vector2(0.16f, 0.5f), new Vector2(0.5f, 0.16f), new Vector2(0.84f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.84f, 0.84f), new Vector2(0.16f, 0.84f), new Vector2(0.5f, 0.84f), Vector2.zero };
+            if (ncity != null && ncity.districts.Count > 0)
+            {
+                // real district names at their places in the new city
+                names = new string[ncity.districts.Count + 1]; spots = new Vector2[ncity.districts.Count + 1];
+                for (int n = 0; n < ncity.districts.Count; n++)
+                {
+                    names[n] = ncity.districts[n].name.ToUpperInvariant();
+                    var dp = ncity.districts[n].pos;
+                    spots[n] = new Vector2((dp.x - worldMin) / worldSize, (dp.z - worldMin) / worldSize);
+                }
+            }
             for (int n = 0; n < names.Length - 1; n++)
             {
                 var lb = UIKit.Label("District", bi.transform, spots[n], new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(260, 40), names[n], 26, new Color(1f, 1f, 1f, 0.92f), TextAnchor.MiddleCenter, Res.TitleFont);
@@ -94,7 +112,7 @@ namespace HMD
 
         void LateUpdate()
         {
-            if (player == null || City.I == null) return;
+            if (player == null || (City.I == null && NewCity.I == null)) return;
             // minimap: map texture slides under the player and turns with the car (heading up)
             float px = Size * 1.5f;   // rotor size in pixels
             float metresPerPx = ViewMetres / Size;
@@ -105,7 +123,7 @@ namespace HMD
             mapImg.rectTransform.anchoredPosition = new Vector2((0.5f - uv.x) * worldPx, (0.5f - uv.y) * worldPx);
             rotor.localRotation = Quaternion.Euler(0, 0, player.eulerAngles.y);
 
-            Vector3 g = City.I.GarageDoor;
+            Vector3 g = City.I != null ? City.I.GarageDoor : NewCity.I.Garage;   // new city: the LSX spot from the json
             Vector3 d = g - player.position;
             Vector2 local = new Vector2(d.x, d.z) / metresPerPx;
             garageIcon.anchoredPosition = local;
@@ -136,6 +154,71 @@ namespace HMD
         {
             float a = deg * Mathf.Deg2Rad, c = Mathf.Cos(a), s = Mathf.Sin(a);
             return new Vector2(v.x * c - v.y * s, v.x * s + v.y * c);
+        }
+
+        /// <summary>The new city as a dark game map (Hamad's Dubai reference): dark ground, faint grid, grey streets with
+        /// a darker edge and round joins, yellow highways and main roads drawn on top, sea in dark blue past the coast.</summary>
+        Texture2D DrawNewCityMap(NewCity nc)
+        {
+            Physics.SyncTransforms();
+            int S = TexSize;
+            var col = new Color[S * S];
+            Color ground = new Color(0.075f, 0.08f, 0.09f), sea = new Color(0.03f, 0.08f, 0.15f), grid = new Color(0.12f, 0.13f, 0.15f);
+            float ppm = S / worldSize;
+            var b = nc.MeshBounds;
+            for (int y = 0; y < S; y++)
+                for (int x = 0; x < S; x++)
+                {
+                    float wx = worldMin + (x + 0.5f) / ppm, wz = worldMin + (y + 0.5f) / ppm;
+                    // land where the terrain is above the sea (raycast once per 4 px block, cheap enough at load)
+                    Color c = ground;
+                    if ((x & 3) == 0 && (y & 3) == 0)
+                    {
+                        bool land = Physics.Raycast(new Vector3(wx, 200f, wz), Vector3.down, out var hit, 400f) && hit.point.y > 0.3f;
+                        c = land ? ground : sea;
+                        for (int dy = 0; dy < 4 && y + dy < S; dy++) for (int dx = 0; dx < 4 && x + dx < S; dx++) col[(y + dy) * S + x + dx] = c;
+                    }
+                }
+            for (int y = 0; y < S; y++)
+                for (int x = 0; x < S; x++)
+                {
+                    float wx = worldMin + (x + 0.5f) / ppm, wz = worldMin + (y + 0.5f) / ppm;
+                    if (col[y * S + x] != sea && (Mathf.Repeat(wx, 100f) < 1f / ppm || Mathf.Repeat(wz, 100f) < 1f / ppm)) col[y * S + x] = Color.Lerp(col[y * S + x], grid, 0.6f);
+                }
+            void Stamp(Vector3 p, float radiusM, Color c)
+            {
+                float cx = (p.x - worldMin) * ppm, cy = (p.z - worldMin) * ppm, r = Mathf.Max(1.2f, radiusM * ppm);
+                int x0 = Mathf.Max(0, (int)(cx - r - 1)), x1 = Mathf.Min(S - 1, (int)(cx + r + 1)), y0 = Mathf.Max(0, (int)(cy - r - 1)), y1 = Mathf.Min(S - 1, (int)(cy + r + 1));
+                for (int yy = y0; yy <= y1; yy++)
+                    for (int xx = x0; xx <= x1; xx++)
+                    {
+                        float d = Mathf.Sqrt((xx + 0.5f - cx) * (xx + 0.5f - cx) + (yy + 0.5f - cy) * (yy + 0.5f - cy));
+                        float a = Mathf.Clamp01(r - d + 0.5f);
+                        if (a > 0) col[yy * S + xx] = Color.Lerp(col[yy * S + xx], c, a);
+                    }
+            }
+            void Road(NewCity.Road rd, float extra, Color c)
+            {
+                for (int i = 1; i < rd.pts.Count; i++)
+                {
+                    var a = rd.pts[i - 1]; var bb = rd.pts[i];
+                    int steps = Mathf.Max(1, (int)(Vector3.Distance(a, bb) * ppm / 1.5f));
+                    for (int s = 0; s <= steps; s++) Stamp(Vector3.Lerp(a, bb, s / (float)steps), rd.width * 0.5f + extra, c);
+                }
+            }
+            Color edge = new Color(0.02f, 0.02f, 0.025f), street = new Color(0.6f, 0.62f, 0.66f), main = new Color(0.98f, 0.76f, 0.25f);
+            bool Big(NewCity.Road r) => r.cls == "highway" || r.cls == "main";
+            foreach (var rd in nc.roads) if (!Big(rd)) Road(rd, 2.5f, edge);
+            foreach (var rd in nc.roads) if (!Big(rd)) Road(rd, 0f, street);
+            foreach (var rd in nc.roads) if (Big(rd)) Road(rd, 3f, edge);
+            foreach (var rd in nc.roads) if (Big(rd)) Road(rd, 0.5f, main);
+            var t = new Texture2D(S, S, TextureFormat.RGBA32, true);
+            t.SetPixels(col);
+            t.Apply(true);
+            t.wrapMode = TextureWrapMode.Clamp;
+            t.filterMode = FilterMode.Trilinear;
+            t.anisoLevel = 4;
+            return t;
         }
 
         Texture2D DrawMap()

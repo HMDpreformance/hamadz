@@ -77,6 +77,10 @@ namespace HMD
                 Cam(b.pos - f * 18f + Vector3.up * 3f + Vector3.Cross(Vector3.up, f) * 3f, b.pos + Vector3.up);
                 yield return Shot("nc_07_road_block");
             }
+            // the full map of the new city, and the minimap while driving
+            g.hud.Map.Open();
+            yield return Shot("nc_09_map");
+            g.hud.Map.Close();
             var c = nc.MeshBounds.center;
             Cam(c + new Vector3(-500, 650, -700), c);
             yield return Shot("nc_08_aerial");

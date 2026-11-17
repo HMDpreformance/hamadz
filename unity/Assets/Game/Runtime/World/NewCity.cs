@@ -67,7 +67,7 @@ namespace HMD
             var walk = Res.TexMat("Tex/concrete_pavement", Vector2.one * (10f / 3f), 0.35f, 0f, new Color(0.7f, 0.68f, 0.66f));
             Res.MakeWet(walk);
             var concrete = Res.TexMat("Tex/concrete_panels", Vector2.one * (10f / 4f), 0.3f, 0f, new Color(0.62f, 0.62f, 0.64f));
-            var sand = Res.TexMat("Tex/white_sandstone_bricks_03", Vector2.one * 0.5f, 0.15f, 0f, new Color(0.6f, 0.52f, 0.4f), 0.3f);
+            var sand = Res.Mat(new Color(0.26f, 0.22f, 0.17f), 0.12f, 0f);   // plain dark sand, no stone pattern
             var water = Res.Mat(new Color(0.01f, 0.03f, 0.06f), 0.96f, 0.4f);
             var white = Res.Mat(new Color(0.85f, 0.85f, 0.82f), 0.55f); Res.MakeWet(white);
             var yellow = Res.Mat(new Color(0.9f, 0.7f, 0.1f), 0.55f); Res.MakeWet(yellow);

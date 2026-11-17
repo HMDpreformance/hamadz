@@ -130,6 +130,9 @@ namespace HMD
                 g.rig.SetFixed(cc + car.transform.forward * Lw * 0.85f - car.transform.right * Lw * 0.75f + Vector3.up * 1.3f, cc + Vector3.up * 0.5f, false);
                 yield return new WaitForSeconds(0.4f);
                 yield return Shot("car34_" + car.spec.id);
+                g.rig.SetFixed(cc - car.transform.right * Lw * 1.25f + Vector3.up * 0.75f, cc + Vector3.up * 0.55f, false);   // pure side view
+                yield return new WaitForSeconds(0.4f);
+                yield return Shot("side_" + car.spec.id);
             }
             g.rig.SetFixed(g.shop.transform.TransformPoint(new Vector3(-10, 3.2f, 2)), g.shop.transform.TransformPoint(new Vector3(4, 1.5f, 22)), false);
             yield return new WaitForSeconds(0.5f);

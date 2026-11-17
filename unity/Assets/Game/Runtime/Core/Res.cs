@@ -201,9 +201,9 @@ namespace HMD
                     {
                         float dx = Mathf.Abs((x + 0.5f) / n * 2 - 1), dy = Mathf.Abs((y + 0.5f) / n * 2 - 1);
                         // distance outside an inner rounded box, faded to the edge
-                        float ox = Mathf.Max(0, dx - 0.45f) / 0.55f, oy = Mathf.Max(0, dy - 0.45f) / 0.55f;
+                        float ox = Mathf.Max(0, dx - 0.55f) / 0.45f, oy = Mathf.Max(0, dy - 0.55f) / 0.45f;   // solid core under the body, soft fall-off past the tyres
                         float a = Mathf.Clamp01(1 - Mathf.Sqrt(ox * ox + oy * oy));
-                        softBox.SetPixel(x, y, new Color(1, 1, 1, a * a * (3 - 2 * a)));
+                        softBox.SetPixel(x, y, new Color(1, 1, 1, Mathf.Sqrt(a)));   // eases out slowly: stays dark well past the body, fades only at the rim
                     }
                 softBox.Apply();
                 softBox.wrapMode = TextureWrapMode.Clamp;
@@ -218,11 +218,23 @@ namespace HMD
             get
             {
                 if (shadowMat != null) return shadowMat;
-                shadowMat = Particle(new Color(0, 0, 0, 0.78f), SoftBox);
-                shadowMat.SetFloat("_SrcBlend", 5f); shadowMat.SetFloat("_DstBlend", 10f); shadowMat.SetFloat("_ZWrite", 0f);
-                shadowMat.SetFloat("_Blend", 0f);
-                shadowMat.DisableKeyword("_ALPHAPREMULTIPLY_ON"); shadowMat.DisableKeyword("_ALPHAMODULATE_ON");
-                shadowMat.renderQueue = 2900;   // after opaque ground and road paint, before glass and glows
+                // the alpha-blended glass template (the particle template is additive, so black added nothing);
+                // black, matte and without reflections it simply darkens what is under it
+                shadowMat = new Material(GlassT());
+                SetColor(shadowMat, new Color(0, 0, 0, 0.9f));
+                // plain alpha blending, set explicitly (the template came out additive, so black added nothing)
+                shadowMat.SetFloat("_Surface", 1f); shadowMat.SetFloat("_Blend", 0f); shadowMat.SetFloat("_BlendModePreserveSpecular", 0f);
+                shadowMat.SetFloat("_SrcBlend", 5f); shadowMat.SetFloat("_DstBlend", 10f);          // SrcAlpha, OneMinusSrcAlpha
+                shadowMat.SetFloat("_SrcBlendAlpha", 1f); shadowMat.SetFloat("_DstBlendAlpha", 10f); // One, OneMinusSrcAlpha
+                shadowMat.SetFloat("_ZWrite", 0f);
+                shadowMat.DisableKeyword("_ALPHAPREMULTIPLY_ON"); shadowMat.DisableKeyword("_ALPHAMODULATE_ON"); shadowMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                SetMainTex(shadowMat, SoftBox, Vector2.one);
+                shadowMat.SetFloat("_Smoothness", 0f);
+                shadowMat.SetFloat("_Metallic", 0f);
+                shadowMat.SetFloat("_SpecularHighlights", 0f); shadowMat.EnableKeyword("_SPECULARHIGHLIGHTS_OFF");
+                shadowMat.SetFloat("_EnvironmentReflections", 0f); shadowMat.EnableKeyword("_ENVIRONMENTREFLECTIONS_OFF");
+                shadowMat.SetFloat("_Cull", 0f);   // two-sided: the quad is visible whichever way it ends up facing
+                shadowMat.renderQueue = 2950;   // after opaque ground and road paint, before car glass and glows
                 return shadowMat;
             }
         }

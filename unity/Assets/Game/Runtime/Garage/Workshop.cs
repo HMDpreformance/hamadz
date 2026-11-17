@@ -383,6 +383,18 @@ namespace HMD
             Prop("workbench", new Vector3(-12.9f, 0, 25f), 0, 1.05f, new Vector3(0.7f, 1f, 1.3f));
             Prop("oil_drums", new Vector3(12.4f, 0, 32.4f), 30, 1.05f, new Vector3(1.1f, 1f, 1.2f));
             Prop("oil_drums", new Vector3(-12.6f, 0, 2f), 200, 1.05f, new Vector3(1.1f, 1f, 1.2f));
+
+            // more of the same so the room looks like a busy shop; the drive path from the shutter
+            // (x -7..-1, z 0..14), the display spot, the lifts and the dyno bay stay clear
+            Prop("engine_stand", new Vector3(-9f, 0, 21.5f), 40, 1.35f, new Vector3(0.8f, 1.3f, 1.1f));
+            Prop("tool_chest", new Vector3(-12.4f, 0, 20.3f), 0, 1.25f, new Vector3(0.8f, 1.2f, 1.5f));
+            Prop("tool_chest", new Vector3(12.6f, 0, 18f), 180, 1.25f, new Vector3(0.8f, 1.2f, 1.5f));
+            Prop("tyre_stack", new Vector3(12.7f, 0, 6.4f), 45, 1.0f, new Vector3(0.75f, 1f, 0.75f));
+            Prop("tyre_stack", new Vector3(12.7f, 0, 7.5f), 100, 1.0f, new Vector3(0.75f, 1f, 0.75f));
+            Prop("tyre_stack", new Vector3(1.4f, 0, 33.1f), 15, 1.0f, new Vector3(0.75f, 1f, 0.75f));
+            Prop("workbench", new Vector3(-1.2f, 0, 33.3f), 90, 1.05f, new Vector3(0.7f, 1f, 1.3f));
+            Prop("oil_drums", new Vector3(-4.2f, 0, 33.1f), 10, 1.05f, new Vector3(1.1f, 1f, 1.2f));
+            Prop("oil_drums", new Vector3(10.8f, 0, 1.0f), 160, 1.05f, new Vector3(1.1f, 1f, 1.2f));
         }
 
         void Banners()

@@ -41,6 +41,11 @@ namespace HMD
             g.rig.SetFixed(City.BlockCenter(1, 1) + new Vector3(-60, 170, -60), City.BlockCenter(4, 4) + Vector3.up * 10, false);   // aerial, above the towers
             yield return new WaitForSeconds(0.6f);
             yield return Shot("04_city_high");
+            // street level at a crossing, looking up at the tower facades
+            Vector3 cross = City.BlockCenter(3, 3) + new Vector3(City.Block * 0.5f + City.Road * 0.5f, 0, City.Block * 0.5f + City.Road * 0.5f);
+            g.rig.SetFixed(cross + new Vector3(-6, 1.7f, -6), City.BlockCenter(4, 4) + Vector3.up * 55, false);
+            yield return new WaitForSeconds(0.6f);
+            yield return Shot("04b_towers_up");
 
             // garage outside: forecourt, door closed
             g.GoToGarage();
@@ -76,6 +81,14 @@ namespace HMD
             g.rig.SetFixed(g.shop.transform.TransformPoint(new Vector3(-10, 3.2f, 2)), g.shop.transform.TransformPoint(new Vector3(4, 1.5f, 22)), false);
             yield return new WaitForSeconds(0.5f);
             yield return Shot("08_workshop_wide");
+            // the west wall: tool chests, tool wall, workbench, banners
+            g.rig.SetFixed(g.shop.transform.TransformPoint(new Vector3(-2, 2.0f, 6)), g.shop.transform.TransformPoint(new Vector3(-14, 1.4f, 18)), false);
+            yield return new WaitForSeconds(0.5f);
+            yield return Shot("08b_workshop_tools");
+            // the east side: lift, tyre stacks, tool chest, back wall banners
+            g.rig.SetFixed(g.shop.transform.TransformPoint(new Vector3(-5, 2.2f, 4)), g.shop.transform.TransformPoint(new Vector3(10, 1.4f, 16)), false);
+            yield return new WaitForSeconds(0.5f);
+            yield return Shot("08c_workshop_props");
 
             // dyno
             g.SendMessage("RunDyno", SendMessageOptions.DontRequireReceiver);

@@ -168,3 +168,4 @@ Retest on the rebuilt city (a24f9bc), 2026-11-17 evening: underpass passes both 
 - b5 was wrong ("u gave me very old update"): the Dubai city only loaded with a test option. Fixed, the Dubai city is now the default.
 - Map bug fixed in code (click handler was on the HUD root). Road mirror effect is off on phones. A phone speed pass is in progress.
 - Rule reminder: show him the changes before the next APK. Always test the game with no start options before any APK.
+- Hamad 01:32: phone is a Galaxy S21. The game will go to iOS users later too. Do not lose the graphics. 30 to 60 FPS is fine.

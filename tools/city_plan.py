@@ -158,7 +158,9 @@ for r in roads:
     r["h"] = [round(terrain(x, y) + e, 2) for (x, y), e in zip(pts, extra)]
     r["deck"] = [round(e, 2) for e in extra]      # height above the ground (bridge deck) or below (underpass)
 
-plan = {"size": [W, H], "coast": COAST, "roads": roads, "water": water, "levels": levels, "terrain": [[round(terrain(x, y), 1) for x in range(0, W + 1, 50)] for y in range(0, H + 1, 50)],
+SCALE = 0.75          # plan units to game metres: the game city is 2.4 km x 1.7 km (medium size)
+PHASE1_X = 1900       # built first: everything west of this line; roads are blocked there until phase 2
+plan = {"size": [W, H], "scale": SCALE, "phase1_x": PHASE1_X, "coast": COAST, "roads": roads, "water": water, "levels": levels, "terrain": [[round(terrain(x, y), 1) for x in range(0, W + 1, 50)] for y in range(0, H + 1, 50)],
         "districts": [{"name": d[0], "x": d[1], "y": d[2]} for d in districts] + [{"name": "Palm Jumeirah", "x": PX, "y": PY + 300}],
         "garage": {"name": "LSXmotorsport", "x": 760, "y": 700}, "landmark": {"name": "Sky Tower", "x": 1620, "y": 1130}}
 os.makedirs(os.path.join(ROOT, "unity_assets", "city"), exist_ok=True)
@@ -204,6 +206,18 @@ for r in roads:        # bridges and flyovers: white side rails; underpasses: da
                 fat(d, [q[0] for q in run], ((255, 200, 70) if r["cls"] == "highway" else (215, 217, 220)) if up else (90, 92, 96), wd)
             run = []
 im = im.resize((im.width // 2, im.height // 2), Image.LANCZOS); d = ImageDraw.Draw(im)
+if not os.environ.get("PLAIN"):      # phase 2 (east): dimmed, with road blocks on the line
+    ov = Image.new("RGBA", im.size, (0, 0, 0, 0)); od = ImageDraw.Draw(ov)
+    px = PHASE1_X * S / 2
+    od.rectangle([px, 0, im.width, im.height], fill=(0, 0, 0, 120))
+    for yy in range(0, im.height, 28): od.line([(px, yy), (px, yy + 14)], fill=(255, 70, 50, 255), width=4)
+    for r in roads:
+        if r["cls"] == "street": continue
+        for (x1, y1), (x2, y2) in zip(r["pts"], r["pts"][1:]):
+            if (x1 - PHASE1_X) * (x2 - PHASE1_X) < 0:
+                yy = (H - (y1 + (y2 - y1) * (PHASE1_X - x1) / (x2 - x1))) * S / 2
+                od.rectangle([px - 7, yy - 16, px + 7, yy + 16], fill=(255, 70, 50, 255), outline=(255, 255, 255, 255), width=2)
+    im = Image.alpha_composite(im.convert("RGBA"), ov).convert("RGB"); d = ImageDraw.Draw(im)
 F = ImageFont.truetype(os.path.join(ROOT, "fonts", "rajdhani_Rajdhani-Bold.ttf"), 30)
 def label(x, y, t, font=F, fill=(255, 255, 255)):
     d.text((x * S / 2, (H - y) * S / 2), t, font=font, fill=fill, anchor="mm", stroke_width=4, stroke_fill=(0, 0, 0))
@@ -222,6 +236,10 @@ d.polygon([(cx, cy - 46), (cx + 7, cy), (cx - 7, cy)], fill=(255, 255, 255), out
 T = ImageFont.truetype(os.path.join(ROOT, "fonts", "russoone_RussoOne-Regular.ttf"), 54)
 d.text((im.width - 40, 36), "DUBAI", font=T, fill=(230, 232, 236), anchor="ra", stroke_width=3, stroke_fill=(0, 0, 0))
 d.polygon([(50, 30), (66, 74), (50, 64), (34, 74)], fill=(240, 240, 240)); d.text((50, 96), "N", font=FS, fill=(240, 240, 240), anchor="mm")
+if not os.environ.get("PLAIN"):
+    d.text((PHASE1_X * S / 2 - 16, im.height - 30), "PART 1: BUILT FIRST", font=FS, fill=(120, 255, 140), anchor="rm", stroke_width=3, stroke_fill=(0, 0, 0))
+    d.text((PHASE1_X * S / 2 + 16, im.height - 30), "PART 2: LATER (ROADS BLOCKED)", font=FS, fill=(255, 120, 100), anchor="lm", stroke_width=3, stroke_fill=(0, 0, 0))
+    d.text((40, im.height - 30), "%.1f km x %.1f km" % (W * SCALE / 1000, H * SCALE / 1000), font=FS, fill=(230, 230, 230), anchor="lm", stroke_width=3, stroke_fill=(0, 0, 0))
 out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "unity_assets", "city", "plan_preview.jpg")
 im.save(out, quality=90)
 km = sum(sum(math.dist(a, b) for a, b in zip(r["pts"], r["pts"][1:])) for r in roads) / 1000

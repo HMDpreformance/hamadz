@@ -191,7 +191,7 @@ for hwy in [r for r in roads if r.cls == "highway"]:
             C = hwy.at(sh); th = hwy.at(min(sh + 5, hwy.s[-1])) - hwy.at(max(sh - 5, 0)); th /= np.linalg.norm(th)
             nh = np.array([-th[1], th[0]])
             for d in (-1, 1):
-                sa = sh + d * 215
+                sa = sh + d * 258
                 if sa < 90 or sa > hwy.s[-1] - 90 or np.interp(sa, hwy.s, hwy.deck) > 0.3: continue
                 A = hwy.at(sa)
                 for lat in (-1, 1):
@@ -213,7 +213,7 @@ for hwy in [r for r in roads if r.cls == "highway"]:
                     for _ in range(4):                                  # corner cutting: a smooth line through the control points
                         q1 = curve[:-1] * 0.75 + curve[1:] * 0.25; q2 = curve[:-1] * 0.25 + curve[1:] * 0.75
                         curve = np.vstack([curve[:1], np.stack([q1, q2], 1).reshape(-1, 2), curve[-1:]])
-                    ramps.append(Road("Ramp", "ramp", curve, np.zeros(len(curve))))
+                    ramps.append(Road("Ramp", "ramp", curve, np.zeros(len(curve)))); ramps[-1].parent = hwy
 roads += ramps
 
 # ---- 3. height line of every road: smoothed ground + bridge deck
@@ -296,6 +296,17 @@ for k, lst in on_road.items():
 groups = {}
 for ji in range(len(junctions)): groups.setdefault(find(ji), []).append(ji)
 for R in roads: R.target = R.h.copy()
+# a slip road shares the highway's surface where it still lies on (or right beside) the highway: same height there,
+# blended out over the next few metres (it used to follow its own ground line: a step or a wall across the lane)
+def pin_ramps():
+    for R in roads:
+        hwy = getattr(R, "parent", None)
+        if hwy is None: continue
+        if not hasattr(R, "pin_w") or len(R.pin_w) != len(R.P):
+            dm = np.linalg.norm(R.P[:, None, :] - hwy.P[None, :, :], axis=2)
+            R.pin_k = dm.argmin(1); lat = dm.min(1)
+            R.pin_w = np.clip((hwy.w / 2 + R.w / 2 + 6.0 - lat) / 4.0, 0.0, 1.0)
+        R.h = R.pin_w * hwy.h[R.pin_k] + (1 - R.pin_w) * R.h
 for it in range(320):
     for R in roads:
         h = R.h; sm = h.copy()
@@ -308,6 +319,8 @@ for it in range(320):
         for ji in members:
             junctions[ji]["h"] = hv
             for k, m in masks[ji]: roads[k].h[m] = hv
+    pin_ramps()
+print("slip roads: biggest height step against the highway where they overlap: %.2f m" % max([float(np.abs(R.h - R.parent.h[R.pin_k])[R.pin_w >= 1].max()) for R in roads if getattr(R, "parent", None) is not None and (R.pin_w >= 1).any()] or [0]))
 for J in junctions:
     J.setdefault("h", float(np.interp(J["members"][0][1], roads[J["members"][0][0]].s, roads[J["members"][0][0]].h)))
     for k, sj in J["members"]: roads[k].junc.append((sj, J["r"]))

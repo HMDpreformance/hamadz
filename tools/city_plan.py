@@ -264,7 +264,7 @@ for r in roads:
             if o["cls"] == "highway" and hw.index(o) < hw.index(r): continue
             for at in crossings(pts, o["pts"]): add(at, 6.2, 60 * K, 240 * K, "flyover")
     if r["cls"] != "street" or r["name"] == "Palm Trunk":
-        for at in crossings(pts, water["creek"]): add(at, 6.5 if r["cls"] == "highway" else 5.0, 90, (185 if r["cls"] == "highway" else 205) * K, "bridge")
+        for at in crossings(pts, water["creek"]): add(at, 6.5 if r["cls"] == "highway" else 4.0, 90, (185 if r["cls"] == "highway" else 205) * K, "bridge")
         for at in crossings(pts, water["canal"]): add(at, 3.4, 46, 115 * K, "bridge")
     if r["name"] == "Palm Trunk": add(140, 4.0, 50, 100, "bridge")
     if r["name"] == "Downtown Blvd":

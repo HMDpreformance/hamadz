@@ -34,10 +34,39 @@ def to_unity_frame(mesh, ax, L, c, mn, front_sign):
     R[:3, :3] = trimesh.transformations.rotation_matrix(a, [0, 1, 0])[:3, :3]
     return R @ S @ T
 
-def prep(cid):
-    src = os.path.join(ROOT, "cars", cid + ".glb")
-    cfg = json.load(open(os.path.join(ROOT, "cars", cid + ".json")))
-    scene = trimesh.load(src)
+def clear_front_lamps(mesh, ax, c, L, front_sign):
+    """Generated bodies sometimes get red/orange head lamps. Texels used by the nose that are
+    red become clear silver (same brightness), so only the tail lamps stay red."""
+    import colorsys
+    from PIL import Image
+    mat = mesh.visual.material
+    img = np.array(mat.baseColorTexture.convert("RGB")).astype(np.float32) / 255.0
+    H, W = img.shape[:2]
+    uv = np.asarray(mesh.visual.uv)
+    cen = mesh.triangles_center
+    nose = ((cen[:, ax] - c[ax]) / L * front_sign > 0.33) & ((cen[:, 1] - mesh.vertices[:, 1].min()) / L > 0.09)
+    mask = np.zeros((H, W), bool)
+    for f in mesh.faces[nose]:
+        u, v = uv[f, 0], 1.0 - uv[f, 1]
+        x0, x1 = int(np.floor(u.min() * W)), int(np.ceil(u.max() * W)) + 1
+        y0, y1 = int(np.floor(v.min() * H)), int(np.ceil(v.max() * H)) + 1
+        mask[max(y0, 0):y1, max(x0, 0):x1] = True
+    mx, mn = img.max(2), img.min(2)
+    sat = (mx - mn) / np.maximum(mx, 1e-4)
+    red = (img[..., 0] >= mx - 1e-4) & (img[..., 0] - img[..., 2] > 0.18) & (img[..., 1] < img[..., 0] * 0.8) & (sat > 0.35)
+    sel = mask & red
+    grey = np.clip(mx * 1.05, 0, 1)
+    img[sel] = np.stack([grey, grey, grey * 1.02], -1)[sel].clip(0, 1)
+    mat.baseColorTexture = Image.fromarray((img * 255).astype(np.uint8))
+    print("  front lamp texels cleared:", int(sel.sum()))
+
+def prep(cid, src=None):
+    """src: a newer high-detail body just for Unity (the Godot game keeps cars/<id>.glb).
+    Its wheel fit is in <src minus .glb>.json (tools/fit_wheels.py <src>), with "front": +1/-1."""
+    hd = src is not None
+    src = src or os.path.join(ROOT, "cars", cid + ".glb")
+    cfg = json.load(open(src[:-4] + ".json"))
+    scene = trimesh.load(src, force="mesh") if hd else trimesh.load(src)
     mesh = scene.to_geometry() if hasattr(scene, "to_geometry") else scene
     mn, mx, ax, L, c = frame(mesh)
     lt = 2 - ax
@@ -48,25 +77,33 @@ def prep(cid):
     for w in fit["wheels"]:
         along = np.array([w["z"], 0, 0]) if fit.get("axis", "x") == "x" else np.array([0, 0, w["z"]])
         zr = -along[0] * np.sin(yaw) + along[2] * np.cos(yaw)
+        if "front" in cfg: zr = -w["z"] * cfg["front"]
         wheels.append(dict(w, front=bool(zr < 0)))
     fw = [w for w in wheels if w["front"]]
     rw = [w for w in wheels if not w["front"]]
     assert len(fw) == 1 and len(rw) == 1, (cid, wheels)
     front_sign = 1 if fw[0]["z"] > 0 else -1
+    if hd and cfg.get("clear_front_lamps"):
+        clear_front_lamps(mesh, ax, c, L, front_sign)
 
     # cut baked wheels (face centroids inside the tyre cylinder, out near the tyre face)
     cen = mesh.triangles_center
     a = (cen[:, ax] - c[ax]) / L
     y = (cen[:, 1] - mn[1]) / L
     lat = np.abs(cen[:, lt] - c[lt]) / L
-    cut_depth = CUT_DEPTH_M / CAR_LEN_M
+    cut_depth = (0.5 if hd else CUT_DEPTH_M) / CAR_LEN_M
     kill = np.zeros(len(cen), bool)
     for w in wheels:
-        kill |= (np.hypot(a - w["z"], y - w["y"]) < w["r"] * 1.03) & (lat > w["x"] - cut_depth)
+        kill |= (np.hypot(a - w["z"], y - w["y"]) < w["r"] * (1.09 if hd else 1.03)) & (lat > w["x"] - cut_depth)
     print(cid, "faces", len(cen), "cut", int(kill.sum()))
+    M = to_unity_frame(mesh, ax, L, c, mn, front_sign)
+    if hd and os.environ.get("LOD_FULL"):
+        # whole body with its baked wheels, turned the same way: the start for the traffic LOD
+        # (then: gltf-transform weld/simplify/resize -> unity_cars/<id>_lod.glb)
+        full = mesh.copy(); full.apply_transform(M); _ = full.vertex_normals
+        full.export(os.environ["LOD_FULL"], include_normals=True)
     mesh.update_faces(~kill)
     mesh.remove_unreferenced_vertices()
-    M = to_unity_frame(mesh, ax, L, c, mn, front_sign)
     mesh.apply_transform(M)
     os.makedirs(OUT, exist_ok=True)
     _ = mesh.vertex_normals  # glTFast rejects meshes without normals
@@ -80,7 +117,7 @@ def prep(cid):
 
     # traffic LOD: same turn, keep its baked wheels
     lp = os.path.join(ROOT, "w3d", "cars_lod", cid + ".glb")
-    if os.path.exists(lp):
+    if os.path.exists(lp) and not hd:
         ls = trimesh.load(lp)
         lm = ls.to_geometry() if hasattr(ls, "to_geometry") else ls
         lmn, lmx, lax, lL, lc = frame(lm)
@@ -89,6 +126,11 @@ def prep(cid):
         lm.export(os.path.join(OUT, cid + "_lod.glb"), include_normals=True)
 
 if __name__ == "__main__":
-    ids = sys.argv[1:] or ["tuner", "classic", "muscle", "sedan", "rotary", "euro", "suv", "exotic"]
-    for i in ids:
-        prep(i)
+    # unity_prep_cars.py [ids...]            from the Godot bodies in cars/
+    # unity_prep_cars.py --src new.glb tuner  from a newer high-detail body
+    args = sys.argv[1:]
+    if args and args[0] == "--src":
+        prep(args[2], args[1])
+    else:
+        for i in args or ["tuner", "classic", "muscle", "sedan", "rotary", "euro", "suv", "exotic"]:
+            prep(i)

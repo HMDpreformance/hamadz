@@ -47,6 +47,19 @@ namespace HMD
             yield return new WaitForSeconds(0.6f);
             yield return Shot("04b_towers_up");
 
+            // street furniture: traffic lights over the crossing, bus stop, benches, billboard
+            g.rig.SetFixed(cross + new Vector3(-9, 1.7f, -30), cross + new Vector3(3, 6, 10), false);
+            yield return new WaitForSeconds(0.6f);
+            yield return Shot("04c_crossing_lights");
+            Vector3 b22 = City.BlockCenter(2, 2);
+            g.rig.SetFixed(b22 + new Vector3(-30, 1.7f, City.Block * 0.5f + 7), b22 + new Vector3(-8, 2.5f, City.Block * 0.5f - 3), false);
+            yield return new WaitForSeconds(0.6f);
+            yield return Shot("04d_bus_stop");
+            Vector3 b30 = City.BlockCenter(3, 0);   // a block with a billboard on its north side
+            g.rig.SetFixed(b30 + new Vector3(-28, 1.7f, City.Block * 0.5f + 8), b30 + new Vector3(9, 8, City.Block * 0.5f), false);
+            yield return new WaitForSeconds(0.6f);
+            yield return Shot("04e_billboard");
+
             // garage outside: forecourt, door closed
             g.GoToGarage();
             yield return new WaitForSeconds(1.2f);

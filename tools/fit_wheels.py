@@ -43,11 +43,14 @@ def fit(path):
         res.append({"z": round(float(zc), 4), "y": round(float(yc), 4), "r": round(float(r), 4), "x": round(face, 4)})
     return {"axis": "x" if ax == 0 else "z", "wheels": res}
 
-for p in sorted(glob.glob(os.path.join(os.path.dirname(__file__), "..", "cars", "*.glb"))):
-    f = fit(p)
-    jp = p[:-4] + ".json"
-    cfg = json.load(open(jp)) if os.path.exists(jp) else {}
-    if f:
-        cfg["fit"] = f
-        json.dump(cfg, open(jp, "w"))
-    print(os.path.basename(p), f)
+if __name__ == "__main__":
+    # no arguments: all Godot car bodies in cars/. With arguments: just those GLB files.
+    paths = sys.argv[1:] or sorted(glob.glob(os.path.join(os.path.dirname(__file__), "..", "cars", "*.glb")))
+    for p in paths:
+        f = fit(p)
+        jp = p[:-4] + ".json"
+        cfg = json.load(open(jp)) if os.path.exists(jp) else {}
+        if f:
+            cfg["fit"] = f
+            json.dump(cfg, open(jp, "w"))
+        print(os.path.basename(p), f)

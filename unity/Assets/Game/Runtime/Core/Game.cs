@@ -56,6 +56,7 @@ namespace HMD
 
             city = new GameObject("City").AddComponent<City>();
             city.Build();
+            new GameObject("StreetProps").AddComponent<StreetProps>().Build(city);
             wx.Setup(camGo.transform, forceRain);
             gfx.Setup(rig.Cam);
             new GameObject("LampLights").AddComponent<LampLights>().Setup(city, camGo.transform);

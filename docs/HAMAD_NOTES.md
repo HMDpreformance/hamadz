@@ -113,3 +113,5 @@ Differences found and their state:
 10. Airport runways, much denser streets. Runways drawn; streets denser but still less than the picture.
 11. The extra north-south highway (Hills Link) is removed.
 Next: rich map picture made with Higgsfield from the plan render; cloverleafs; more small streets.
+
+Rich map pictures (2026-11-17): `unity_assets/city/map_full.jpg` (with names) and `map_base.jpg` (no text, for the small map) are now made with Higgsfield from the plan render, 2224x1600, roads in the same places as the plan. Do NOT overwrite them with `tools/city_plan.py`; write the plain render to `map_full_plain.jpg` instead. When the road plan changes, render the plain map again, restyle it with Higgsfield (GPT Image 2.6, reference = plain render, "keep every road exactly"), then make the no-text copy from the result. The cloud cannot reach the Higgsfield upload host, so the laptop does the upload PUT.

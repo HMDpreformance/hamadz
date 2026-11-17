@@ -9,7 +9,7 @@ namespace HMD
     /// off the map, an arrow on the rim points to it. Tap the minimap for the full-screen map, which
     /// has a GO TO GARAGE button.
     /// </summary>
-    public class Minimap : MonoBehaviour, IPointerClickHandler
+    public class Minimap : MonoBehaviour
     {
         public System.Action OnGoGarage;
         Transform player;
@@ -115,7 +115,8 @@ namespace HMD
             big.SetActive(false);
         }
 
-        public void OnPointerClick(PointerEventData e) => Open();
+        // no click handler here: this component sits on the HUD root, so every tap on any HUD control bubbled up and
+        // opened the map on touch screens. Only a tap on the minimap disc itself (MinimapTap) opens it.
         static Sprite vignette;
         static Sprite VignetteSprite
         {

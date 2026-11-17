@@ -22,7 +22,8 @@ namespace HMD
         static readonly int TexId = Shader.PropertyToID("_HMD_PlanarTex");
         static readonly int OnId = Shader.PropertyToID("_HMD_PlanarOn");
 
-        public static bool Wanted => !System.Environment.CommandLine.Contains("-noplanar");
+        // off on phones: it draws the whole city a second time every frame (b6 on the phone had low fps)
+        public static bool Wanted => !GfxSetup.IsMobile && !System.Environment.CommandLine.Contains("-noplanar");
 
         public void Setup(Camera mainCam)
         {

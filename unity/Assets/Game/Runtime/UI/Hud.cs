@@ -49,30 +49,31 @@ namespace HMD
             map = gameObject.AddComponent<Minimap>();
             map.Build(root, player);
 
-            // old-school analog dials bottom-right (above the pedals): amber speedometer with a needle,
+            // light vintage analog dials bottom-right (above the pedals): ivory speedometer with a needle,
             // a smaller rev counter up-left of it, the gear in a round badge and a small digital speed
-            var sp = UIKit.Rect("Speedo", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-30, 345), new Vector2(380, 380));
+            var sp = UIKit.Rect("Speedo", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-35, 350), new Vector2(320, 320));
             var mid = new Vector2(0.5f, 0.5f);
-            UIKit.Img("SpeedFace", sp, mid, mid, Vector2.zero, new Vector2(380, 380), Color.white, GaugeSprite("gauge_speed"));
-            var tach = UIKit.Rect("Tach", sp, mid, mid, new Vector2(-238, 125), new Vector2(236, 236));
-            UIKit.Img("TachFace", tach, mid, mid, Vector2.zero, new Vector2(236, 236), Color.white, GaugeSprite("gauge_tach"));
+            UIKit.Img("SpeedFace", sp, mid, mid, Vector2.zero, new Vector2(320, 320), Color.white, GaugeSprite("gauge_speed"));
+            var tach = UIKit.Rect("Tach", sp, mid, mid, new Vector2(-197, 108), new Vector2(196, 196));
+            UIKit.Img("TachFace", tach, mid, mid, Vector2.zero, new Vector2(196, 196), Color.white, GaugeSprite("gauge_tach"));
             // red zone: the part of the ring past this car's redline (scale 0..9000 rpm over 270 degrees)
             float redAngle = 225f - 270f * Mathf.Clamp01(c.spec.rpmRedline / TachMax);
-            var red = UIKit.Img("RedZone", tach, mid, mid, Vector2.zero, new Vector2(236, 236), Color.white, GaugeSprite("gauge_redarc"));
+            var red = UIKit.Img("RedZone", tach, mid, mid, Vector2.zero, new Vector2(196, 196), Color.white, GaugeSprite("gauge_redarc"));
             red.type = Image.Type.Filled; red.fillMethod = Image.FillMethod.Radial360;
             red.fillOrigin = (int)Image.Origin360.Top; red.fillClockwise = true;
             red.fillAmount = (redAngle + 45f) / 360f;
             red.rectTransform.localEulerAngles = new Vector3(0, 0, redAngle - 90f);
             var needleSprite = GaugeSprite("gauge_needle");
-            revNeedle = UIKit.Img("RevNeedle", tach, mid, mid, Vector2.zero, new Vector2(24, 189), Color.white, needleSprite).rectTransform;
-            speedNeedle = UIKit.Img("SpeedNeedle", sp, mid, mid, Vector2.zero, new Vector2(38, 304), Color.white, needleSprite).rectTransform;
-            var amber = new Color(1f, 0.69f, 0.13f);
-            var box = UIKit.Img("SpeedBox", sp, mid, mid, new Vector2(0, -110), new Vector2(128, 52), new Color(0, 0, 0, 0.86f), UIKit.RoundedSprite);
+            revNeedle = UIKit.Img("RevNeedle", tach, mid, mid, Vector2.zero, new Vector2(20, 157), Color.white, needleSprite).rectTransform;
+            speedNeedle = UIKit.Img("SpeedNeedle", sp, mid, mid, Vector2.zero, new Vector2(32, 256), Color.white, needleSprite).rectTransform;
+            Color ivory = new Color(0.93f, 0.9f, 0.82f), ink = new Color(0.15f, 0.13f, 0.12f), chrome = new Color(0.82f, 0.82f, 0.82f);
+            var box = UIKit.Img("SpeedBox", sp, mid, mid, new Vector2(0, -91), new Vector2(104, 42), new Color(0.09f, 0.08f, 0.08f, 0.92f), UIKit.RoundedSprite);
             box.type = Image.Type.Sliced;
-            speed = UIKit.Label("Speed", box.transform, mid, mid, Vector2.zero, new Vector2(128, 52), "0", 44, new Color(1f, 0.78f, 0.24f), TextAnchor.MiddleCenter, Res.TitleFont);
-            var gb = UIKit.Img("GearBadge", sp, mid, mid, new Vector2(-168, -67), new Vector2(88, 88), amber, UIKit.CircleSprite);
-            UIKit.Img("GearInner", gb.transform, mid, mid, Vector2.zero, new Vector2(78, 78), new Color(0.04f, 0.04f, 0.05f), UIKit.CircleSprite);
-            gear = UIKit.Label("Gear", gb.transform, mid, mid, Vector2.zero, new Vector2(88, 88), "1", 54, new Color(1f, 0.78f, 0.24f), TextAnchor.MiddleCenter, Res.TitleFont);
+            speed = UIKit.Label("Speed", box.transform, mid, mid, Vector2.zero, new Vector2(104, 42), "0", 36, new Color(1f, 0.93f, 0.78f), TextAnchor.MiddleCenter, Res.TitleFont);
+            var gb = UIKit.Img("GearBadge", sp, mid, mid, new Vector2(-141, -56), new Vector2(72, 72), chrome, UIKit.CircleSprite);
+            UIKit.Img("GearInner", gb.transform, mid, mid, Vector2.zero, new Vector2(64, 64), ivory, UIKit.CircleSprite);
+            gear = UIKit.Label("Gear", gb.transform, mid, mid, Vector2.zero, new Vector2(72, 72), "1", 46, ink, TextAnchor.MiddleCenter, Res.TitleFont);
+            gear.GetComponent<Shadow>().enabled = false;
             // nitro bar under the speedo
             var nb = UIKit.Img("NitroBg", root, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-60, 330), new Vector2(290, 16), new Color(0, 0, 0, 0.5f), UIKit.RoundedSprite);
             nb.type = Image.Type.Sliced;

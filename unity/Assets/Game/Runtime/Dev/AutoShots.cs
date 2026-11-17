@@ -56,7 +56,9 @@ namespace HMD
             yield return Shot("06_garage_door_open_close");
             // drive in
             t = 0;
-            while (t < 4f && g.state == Game.State.Drive) { t += Time.deltaTime; car.throttle = 0.4f; yield return null; }
+            car.inputLocked = false; car.brake = 0;
+            while (t < 10f && g.state == Game.State.Drive) { t += Time.deltaTime; car.throttle = 0.6f; car.steer = 0; yield return null; }
+            if (g.state == Game.State.Drive) { Debug.LogWarning("[HMD] shots: car did not reach the door, entering directly"); g.StartCoroutine("EnterGarage"); }
             car.throttle = 0;
             yield return new WaitForSeconds(2.5f);
             yield return Shot("07_workshop");

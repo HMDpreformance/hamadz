@@ -69,7 +69,8 @@ def prep(cid):
     M = to_unity_frame(mesh, ax, L, c, mn, front_sign)
     mesh.apply_transform(M)
     os.makedirs(OUT, exist_ok=True)
-    mesh.export(os.path.join(OUT, cid + ".glb"))
+    _ = mesh.vertex_normals  # glTFast rejects meshes without normals
+    mesh.export(os.path.join(OUT, cid + ".glb"), include_normals=True)
     out = {"front": None, "rear": None, "src_yaw": cfg.get("yaw", 0), "key": cfg.get("key", "")}
     for w, k in ((fw[0], "front"), (rw[0], "rear")):
         out[k] = {"z": round(abs(w["z"]) * (1 if k == "front" else -1), 4), "y": w["y"], "r": w["r"], "x": w["x"]}
@@ -84,7 +85,8 @@ def prep(cid):
         lm = ls.to_geometry() if hasattr(ls, "to_geometry") else ls
         lmn, lmx, lax, lL, lc = frame(lm)
         lm.apply_transform(to_unity_frame(lm, lax, lL, lc, lmn, front_sign))
-        lm.export(os.path.join(OUT, cid + "_lod.glb"))
+        _ = lm.vertex_normals
+        lm.export(os.path.join(OUT, cid + "_lod.glb"), include_normals=True)
 
 if __name__ == "__main__":
     ids = sys.argv[1:] or ["tuner", "classic", "muscle", "sedan", "rotary", "euro", "suv", "exotic"]

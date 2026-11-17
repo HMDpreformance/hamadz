@@ -66,7 +66,11 @@ namespace HMD
 
         void LateUpdate()
         {
-            if (rain && follow) rain.transform.position = follow.position + follow.forward * 8f + Vector3.up * 14f;
+            if (!rain || !follow) return;
+            // no rain indoors: the workshop interior lives far away from the city (z = -3000)
+            bool indoors = follow.position.z < -1500f;
+            if (rain.gameObject.activeSelf == indoors) rain.gameObject.SetActive(!indoors);
+            if (!indoors) rain.transform.position = follow.position + follow.forward * 8f + Vector3.up * 14f;
         }
     }
 }

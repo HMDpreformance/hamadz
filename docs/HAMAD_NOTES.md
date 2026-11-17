@@ -169,3 +169,5 @@ Retest on the rebuilt city (a24f9bc), 2026-11-17 evening: underpass passes both 
 - Map bug fixed in code (click handler was on the HUD root). Road mirror effect is off on phones. A phone speed pass is in progress.
 - Rule reminder: show him the changes before the next APK. Always test the game with no start options before any APK.
 - Hamad 01:32: phone is a Galaxy S21. The game will go to iOS users later too. Do not lose the graphics. 30 to 60 FPS is fine.
+- Hamad 01:33: "if things far away why u draw it from very far" (do not draw far small things on the phone).
+- Hamad 01:34: light rain all the time, streets wet from rain and reflecting, like before.

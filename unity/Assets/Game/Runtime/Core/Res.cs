@@ -47,34 +47,6 @@ namespace HMD
         static Material GlassT() => Template(ref glassTemplate, "Glass", "Universal Render Pipeline/Lit");
         static Material ParticleT() => Template(ref particleTemplate, "Particle", "Universal Render Pipeline/Particles/Unlit");
 
-        static Material wetTemplate, paintTemplate;
-        /// <summary>Switches a Lit road/pavement material to the WetRoad shader (same properties), if it is in the build.</summary>
-        public static void MakeWet(Material m)
-        {
-            if (m == null) return;
-            if (wetTemplate == null) wetTemplate = Resources.Load<Material>(Root + "Mats/WetRoad");
-            if (wetTemplate == null || wetTemplate.shader == null || !wetTemplate.shader.isSupported) return;
-            m.shader = wetTemplate.shader;
-        }
-
-        /// <summary>Clear-coated car paint (URP Complex Lit) when available, else a glossy Lit material.</summary>
-        public static Material Paint(Color color)
-        {
-            if (paintTemplate == null) paintTemplate = Resources.Load<Material>(Root + "Mats/Paint");
-            if (paintTemplate == null || !paintTemplate.shader.isSupported) return Mat(color, 0.86f, 0.2f);
-            var m = new Material(paintTemplate);
-            SetColor(m, color);
-            m.SetFloat("_Smoothness", 0.62f);      // base coat: a little soft
-            m.SetFloat("_Metallic", 0.35f);        // metallic flake look
-            m.EnableKeyword("_CLEARCOAT");
-            m.SetFloat("_ClearCoat", 1f);
-            m.SetFloat("_ClearCoatMask", 1f);
-            m.SetFloat("_ClearCoatSmoothness", 0.96f);   // the lacquer: mirror sharp
-            m.SetFloat("_EnvironmentReflections", 1f);
-            m.SetFloat("_SpecularHighlights", 1f);
-            return m;
-        }
-
         /// <summary>A PBR material. smooth = 0..1, metal = 0..1.</summary>
         public static Material Mat(Color color, float smooth = 0.5f, float metal = 0f)
         {

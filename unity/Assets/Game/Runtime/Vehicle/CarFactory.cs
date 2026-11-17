@@ -203,7 +203,7 @@ namespace HMD
                         var nrm = FindTex(s, "normalTexture", "_BumpMap");
                         if (tex != null && cfg != null && !string.IsNullOrEmpty(cfg.key) && ColorUtility.TryParseHtmlString(cfg.key, out var key))
                             tex = Repaint.Recolor(tex, key, spec.paint);
-                        var m = Res.Paint(Color.white);   // clear-coated paint, works with any model texture
+                        var m = Res.Mat(Color.white, 0.86f, 0.2f);
                         if (tex != null) Res.SetMainTex(m, tex, Vector2.one);
                         if (nrm != null) { m.SetTexture("_BumpMap", nrm); m.SetFloat("_BumpScale", 0.3f); m.EnableKeyword("_NORMALMAP"); }   // baked normal map is noisy: keep it subtle so panels read smooth
                         // the clear coat: high smoothness, environment reflections on

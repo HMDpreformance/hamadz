@@ -52,18 +52,16 @@ namespace HMD
         void ApplyRoad()
         {
             // the asphalt material is shared, so one change shows on every road
-            // the WetRoad shader does the wet look (darker, glossy, puddles, mirror); dry roads keep a soft sheen
-            Shader.SetGlobalFloat("_HMD_Wetness", Raining ? 1f : 0.3f);
-            Shader.SetGlobalFloat("_HMD_RainAmount", Raining ? 1f : 0f);
+            Shader.SetGlobalFloat("_HMD_Wetness", Wetness);
             var city = City.I;
             if (city == null) return;
             var asphalt = city.transform.Find("Asphalt");
             if (asphalt == null) return;
             var m = asphalt.GetComponent<Renderer>().sharedMaterial;
-            float smooth = 0.45f;
+            float smooth = Raining ? 0.9f : 0.42f;  // dry road keeps a light sheen
             m.SetFloat("_Smoothness", smooth);
             m.SetFloat("_GlossMapScale", smooth);
-            Res.SetColor(m, new Color(0.55f, 0.55f, 0.58f));
+            Res.SetColor(m, Raining ? new Color(0.36f, 0.36f, 0.39f) : new Color(0.55f, 0.55f, 0.58f));
         }
 
         void LateUpdate()

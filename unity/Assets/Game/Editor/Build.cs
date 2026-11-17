@@ -188,36 +188,6 @@ namespace HMD.EditorTools
                 var so = new SerializedObject(rd);
                 SetInt(so, "m_RenderingMode", 2);
                 so.ApplyModifiedPropertiesWithoutUndo();
-                // screen-space ambient occlusion: contact darkening under cars, kerbs, props
-                if (!rd.rendererFeatures.Any(f => f is ScreenSpaceAmbientOcclusion))
-                {
-                    var ssao = ScriptableObject.CreateInstance<ScreenSpaceAmbientOcclusion>();
-                    ssao.name = "SSAO";
-                    AssetDatabase.AddObjectToAsset(ssao, rd);
-                    rd.rendererFeatures.Add(ssao);
-                    if (AssetDatabase.TryGetGUIDAndLocalFileIdentifier(ssao, out string _, out long localId))
-                    {
-                        var mapField = typeof(ScriptableRendererData).GetField("m_RendererFeatureMap", BindingFlags.NonPublic | BindingFlags.Instance);
-                        if (mapField?.GetValue(rd) is System.Collections.Generic.List<long> map) map.Add(localId);
-                    }
-                    EditorUtility.SetDirty(rd);
-                    AssetDatabase.SaveAssets();
-                }
-                // tune it through its serialized settings (fields are internal)
-                var ssaoF = rd.rendererFeatures.FirstOrDefault(f => f is ScreenSpaceAmbientOcclusion);
-                if (ssaoF != null)
-                {
-                    var fs = new SerializedObject(ssaoF);
-                    var s = fs.FindProperty("m_Settings");
-                    if (s != null)
-                    {
-                        var p = s.FindPropertyRelative("Intensity"); if (p != null) p.floatValue = 1.6f;
-                        p = s.FindPropertyRelative("Radius"); if (p != null) p.floatValue = 0.45f;
-                        p = s.FindPropertyRelative("DirectLightingStrength"); if (p != null) p.floatValue = 0.35f;
-                        p = s.FindPropertyRelative("Falloff"); if (p != null) p.floatValue = 60f;
-                        fs.ApplyModifiedPropertiesWithoutUndo();
-                    }
-                }
             }
             var sa = new SerializedObject(asset);
             SetBool(sa, "m_SupportsHDR", true);
@@ -272,36 +242,6 @@ namespace HMD.EditorTools
             MakeTransparent(part, true);
             Save(part, dir + "/Particle.mat");
 
-            // wet road (planar reflections) in every keyword mix the city uses
-            var wet = Shader.Find("HMD/WetRoad");
-            if (wet != null)
-            {
-                Save(new Material(wet), dir + "/WetRoad.mat");
-                string[][] wetCombos = { new[] { "_NORMALMAP" }, new[] { "_NORMALMAP", "_METALLICSPECGLOSSMAP" }, new[] { "_METALLICSPECGLOSSMAP" } };
-                int wk = 0;
-                foreach (var c in wetCombos)
-                {
-                    var m = new Material(wet);
-                    foreach (var kw in c) m.EnableKeyword(kw);
-                    if (c.Contains("_NORMALMAP")) m.SetTexture("_BumpMap", Texture2D.normalTexture);
-                    Save(m, dir + "/Variants/Wet_" + (wk++) + ".mat");
-                }
-            }
-            else Debug.LogWarning("[HMD] HMD/WetRoad shader not found");
-
-            // car paint: URP Complex Lit with a clear coat layer
-            var complex = Shader.Find("Universal Render Pipeline/Complex Lit");
-            if (complex != null)
-            {
-                var paint = new Material(complex);
-                paint.EnableKeyword("_CLEARCOAT"); paint.SetFloat("_ClearCoat", 1f);
-                Save(paint, dir + "/Paint.mat");
-                var paintN = new Material(complex);
-                paintN.EnableKeyword("_CLEARCOAT"); paintN.SetFloat("_ClearCoat", 1f);
-                paintN.EnableKeyword("_NORMALMAP"); paintN.SetTexture("_BumpMap", Texture2D.normalTexture);
-                Save(paintN, dir + "/Variants/Paint_N.mat");
-            }
-
             var skyTex = AssetDatabase.LoadAssetAtPath<Cubemap>(Imp + "/Sky/night_sky_2k.hdr");
             var skyShader = Shader.Find("Skybox/Cubemap");
             if (skyShader != null)
@@ -355,9 +295,6 @@ namespace HMD.EditorTools
             PlayerSettings.companyName = "HMDperformance";
             PlayerSettings.productName = "HMD Night Club";
             PlayerSettings.bundleVersion = "2.0";
-            // Windows: D3D11 first (the D3D12 driver crashed on quit with the reflection camera + SSAO), D3D12 as fallback
-            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneWindows64, false);
-            PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64, new[] { UnityEngine.Rendering.GraphicsDeviceType.Direct3D11, UnityEngine.Rendering.GraphicsDeviceType.Direct3D12 });
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.AutoRotation;
             PlayerSettings.allowedAutorotateToPortrait = false;
             PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;

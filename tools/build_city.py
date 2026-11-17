@@ -71,7 +71,7 @@ class Road:
     def __init__(self, name, cls, P, deck, blocked=(False, False)):
         self.name, self.cls, self.w = name, cls, WIDTH[cls]
         self.P, self.s, self.deck = resample(P, STEP, deck)
-        self.deck = np.maximum(self.deck, 0.0)
+        # negative deck = the road dips below the ground (underpass); it is kept
         self.blocked = blocked
         self.junc = []                     # (s, radius, height index) of level junctions on this road
     def frame(self):
@@ -136,6 +136,49 @@ def cut_at_ramps(roads):
     return out
 roads = cut_at_ramps(roads)
 
+# a street that runs along a bigger road (or along another street) and overlaps it lengthwise leaves kerbs and walls lying
+# across the bigger road. Such a stretch is removed; the street ends on the bigger road instead (a T junction).
+def cut_overlaps(roads):
+    rank = {"highway": 0, "main": 1, "ramp": 1, "street": 2}
+    out = []; removed = 0.0
+    for ri, R in enumerate(roads):
+        if R.cls != "street": out.append(R); continue
+        close = np.zeros(len(R.P), bool); deep = np.zeros(len(R.P), bool)
+        for bi, B in enumerate(roads):
+            if B is R or rank[B.cls] > rank[R.cls] or (B.cls == "street" and bi > ri): continue
+            if (R.P.min(0) > B.P.max(0) + 30).any() or (R.P.max(0) < B.P.min(0) - 30).any(): continue
+            d, k = cKDTree(B.P).query(R.P)
+            lvl = np.abs(B.deck[k]) < 1.0
+            c = (d < B.w / 2 + R.w / 2 + 3.0) & lvl
+            # only runs much longer than a plain crossing count
+            i = 0
+            while i < len(c):
+                if not c[i]: i += 1; continue
+                j = i
+                while j + 1 < len(c) and c[j + 1]: j += 1
+                if R.s[j] - R.s[i] > 1.7 * (B.w + R.w + 6.0):
+                    close[i:j + 1] = True; deep[i:j + 1] = d[i:j + 1] < B.w / 2 + 2.0
+                i = j + 1
+        if not close.any(): out.append(R); continue
+        keep = ~close
+        # keep one sample that reaches into the bigger road at each cut end, so the piece joins it
+        k0 = keep.copy()
+        for i in range(1, len(keep)):
+            if k0[i - 1] and close[i]: keep[i] = True
+        for i in range(len(keep) - 2, -1, -1):
+            if k0[i + 1] and close[i]: keep[i] = True
+        removed += float((~keep).sum() * STEP)
+        i = 0
+        while i < len(keep):
+            if not keep[i]: i += 1; continue
+            j = i
+            while j + 1 < len(keep) and keep[j + 1]: j += 1
+            if R.s[j] - R.s[i] >= 30: out.append(Road(R.name, R.cls, R.P[i:j + 1], R.deck[i:j + 1], (R.blocked[0] and i == 0, R.blocked[1] and j == len(keep) - 1)))
+            i = j + 1
+    print("  streets lying along a bigger road: %.0f m removed" % removed)
+    return out
+roads = cut_overlaps(roads)
+
 # ---- 2. interchanges: where a highway flies over a main road, four ramps join the two
 ramps = []
 for hwy in [r for r in roads if r.cls == "highway"]:
@@ -177,6 +220,7 @@ for r in roads:
 
 # ---- 4. level junctions: crossings and T ends where both roads are on the ground
 junctions = []        # dicts: pos, members [(road index, s)], h
+overs = []            # (upper road, s on it, lower road, s on it): underpass crossings
 def add_junction(pos, members):
     for J in junctions:
         if np.linalg.norm(J["pos"] - pos) < 9:
@@ -191,20 +235,27 @@ for a in range(len(roads)):
         B = roads[b]
         for i, t, j, u in seg_hits(A.P, B.P):
             sa = A.s[i] + t * (A.s[i + 1] - A.s[i]); sb = B.s[j] + u * (B.s[j + 1] - B.s[j])
-            if np.interp(sa, A.s, A.deck) < 1 and np.interp(sb, B.s, B.deck) < 1:
+            da, db = np.interp(sa, A.s, A.deck), np.interp(sb, B.s, B.deck)
+            if abs(da) < 1 and abs(db) < 1:
                 add_junction(A.at(sa), [(a, sa), (b, sb)])
+            elif min(da, db) < -3 and abs(max(da, db)) < 1:
+                # an underpass: the upper road becomes a short bridge slab over the dipped road
+                (up, su, lo, sl) = (a, sa, b, sb) if da > db else (b, sb, a, sa)
+                overs.append((up, su, lo, sl))
 # T ends: a road that stops on (or just short of) another road joins it
 allP = np.concatenate([r.P for r in roads]); owner = np.concatenate([np.full(len(r.P), k) for k, r in enumerate(roads)])
 sidx = np.concatenate([np.arange(len(r.P)) for r in roads]); tree = cKDTree(allP)
 for a, A in enumerate(roads):
     for end in (0, -1):
-        if A.blocked[0 if end == 0 else 1] or A.deck[end] > 1: continue
+        if A.blocked[0 if end == 0 else 1] or abs(A.deck[end]) > 1: continue
         p = A.P[end]
-        for q in tree.query_ball_point(p, 22):
+        for q in sorted(tree.query_ball_point(p, 26), key=lambda q: np.linalg.norm(allP[q] - p)):
             b = owner[q]
             if b == a: continue
             B = roads[b]
-            if np.linalg.norm(allP[q] - p) <= B.w / 2 + 6 and B.deck[sidx[q]] < 1:
+            # allP / sidx were recorded before any point was added to a road start, so look the point up again
+            kb = int(np.argmin(np.linalg.norm(B.P - allP[q], axis=1)))
+            if np.linalg.norm(allP[q] - p) <= B.w / 2 + 12 and abs(B.deck[kb]) < 1:
                 # extend the ending road onto the other road's centre line so the surfaces overlap
                 if np.linalg.norm(allP[q] - p) > 0.5:
                     if end == 0:
@@ -214,7 +265,7 @@ for a, A in enumerate(roads):
                     else:
                         dl = np.linalg.norm(allP[q] - A.P[-1]); A.P = np.vstack([A.P, allP[q]])
                         A.s = np.concatenate([A.s, [A.s[-1] + dl]]); A.deck = np.concatenate([A.deck, [0]]); A.base = np.concatenate([A.base, [A.base[-1]]]); A.h = np.concatenate([A.h, [A.h[-1]]])
-                add_junction(allP[q], [(a, A.s[0] if end == 0 else A.s[-1]), (b, B.s[sidx[q]])])
+                add_junction(allP[q], [(a, A.s[0] if end == 0 else A.s[-1]), (b, B.s[kb])])
                 break
 
 # junction heights by relaxation: each road's height line is smoothed (no bumps, gentle slopes) while
@@ -252,7 +303,14 @@ for it in range(320):
 for J in junctions:
     J.setdefault("h", float(np.interp(J["members"][0][1], roads[J["members"][0][0]].s, roads[J["members"][0][0]].h)))
     for k, sj in J["members"]: roads[k].junc.append((sj, J["r"]))
-for R in roads: R.deck = np.maximum(R.h - R.base, 0.0) * (R.deck > 0.05)   # the real height above the ground after smoothing
+for R in roads:   # the real height above (bridge) or below (underpass) the ground after smoothing
+    R.deck = np.where(R.deck > 0.05, np.maximum(R.h - R.base, 0.0), np.where(R.deck < -0.05, np.minimum(R.h - R.base, 0.0), 0.0))
+for up, su, lo, sl in overs:
+    U, L = roads[up], roads[lo]
+    low = float(np.interp(sl, L.s, L.h))
+    m = np.abs(U.s - su) < L.w / 2 + 26.0
+    U.deck[m] = U.h[m] - low; U.base[m] = low
+    print("  underpass: %s under %s, clearance %.1f m" % (L.name, U.name, float(U.h[m].min() - 1.1 - low)))
 worst = {}
 for R in roads:
     ds = np.maximum(np.diff(R.s), 1e-6); gr = np.abs(np.diff(R.h)) / ds * 100
@@ -339,7 +397,8 @@ for R in roads:
     # sides: on the ground and on ramps a solid skirt down into the ground; high up a slab with pillars
     for side in (1, -1):
         o = edge * side
-        top = lambda i, R=R: R.h[i] + (KERB if R.cls in ("main", "street") and not elevated[i] else 0.0)
+        # inside a junction the side wall stops just under the road surface (it used to stand a kerb high across the joining road)
+        top = lambda i, R=R: (R.h[i] - 0.06) if in_junction(R, R.s[i], 3.5) and not elevated[i] else R.h[i] + (KERB if R.cls in ("main", "street") and not elevated[i] else 0.0)
         bot = lambda i, R=R: (R.h[i] - 1.1) if high[i] else (R.base[i] - 2.5)
         wall(M["concrete"], R, o, top, bot, side)
         if elevated.any():                            # parapet where the road is off the ground
@@ -363,7 +422,7 @@ for R in roads:
         for i in np.where(high)[0]:                   # pillars, not where another road passes below
             if R.s[i] - last < 28: continue
             p = R.P[i]
-            near = [q for q in tree.query_ball_point(p, 20) if roads[owner[q]] is not R and roads[owner[q]].deck[min(sidx[q], len(roads[owner[q]].deck) - 1)] < 2]
+            near = [q for q in tree.query_ball_point(p, 20) if roads[owner[q]] is not R and roads[owner[q]].deck[int(np.argmin(np.linalg.norm(roads[owner[q]].P - allP[q], axis=1)))] < 2]
             if near: continue
             g = min(ground(p[0], p[1]), 0.0) - 4.0 if ground(p[0], p[1]) < 0.5 else ground(p[0], p[1]) - 1.0
             yaw = math.atan2(t[i][1], t[i][0])
@@ -415,7 +474,8 @@ for iz in range(nz):
             idx = np.array(idx); d = np.linalg.norm(allP[idx] - [X, Z], axis=1) - allE[idx]
             lowroad = allD[idx] < 0.5
             cap = np.where(lowroad, allH[idx] - 0.15, allH[idx] - 1.6)        # never above a road or a ramp
-            flat = 12.0 if g < 0.5 else 7.0              # in the sea the road carries a strip of land (the Palm)
+            flat = 12.0             # wider than one ground cell, so no ground triangle can rise through a road edge
+            _unused = 7.0              # in the sea the road carries a strip of land (the Palm)
             run = 6.0 if g < 0.5 else 26.0
             near = d < flat
             if near.any(): g = min(g, cap[near].min()) if not (near & lowroad).any() else cap[near & lowroad].min()
@@ -448,6 +508,17 @@ def th(X, Z):
     fx, fz = (X - x0) / G, (Z - z0) / G
     ix, iz = int(np.clip(fx, 0, nx - 2)), int(np.clip(fz, 0, nz - 2)); ax, az = fx - ix, fz - iz
     return float(TH[iz, ix] * (1 - ax) * (1 - az) + TH[iz, ix + 1] * ax * (1 - az) + TH[iz + 1, ix] * (1 - ax) * az + TH[iz + 1, ix + 1] * ax * az)
+
+# self check: the ground must never be above a road surface (sampled across the full width of every road on the ground)
+_bad = []
+for R in roads:
+    t_, n_ = R.frame()
+    for i in range(len(R.P)):
+        if R.deck[i] > 0.5: continue
+        for f in (-1.0, -0.5, 0.0, 0.5, 1.0):
+            q = R.P[i] + n_[i] * (R.w / 2) * f
+            if th(q[0], q[1]) > R.h[i] - 0.01: _bad.append((R.name, R.cls, round(float(q[0])), round(float(q[1])), round(th(q[0], q[1]) - R.h[i], 2)))
+print("ground through a road: %d spots" % len(_bad), _bad[:12])
 
 #          style            width      depth      height     gap   area
 STYLE = {"Downtown Dubai": ("tower",      (30, 46), (30, 46), (70, 230), 10),

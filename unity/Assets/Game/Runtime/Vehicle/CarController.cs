@@ -80,7 +80,7 @@ namespace HMD
             {
                 if (w == null) continue;
                 w.mass = 22f;
-                w.radius = s.wheelRadius;
+                // each wheel keeps the radius CarFactory gave it (front and rear tyres can differ)
                 w.suspensionDistance = 0.16f;
                 w.forceAppPointDistance = 0.1f;
                 var sp = w.suspensionSpring;
@@ -145,7 +145,9 @@ namespace HMD
             wheels[1].steerAngle = steerSmoothed;
 
             // --- reverse: brake to a stop, then back up
-            bool wantsReverse = (brk > 0.5f && ForwardSpeed < 1.0f && thr < 0.1f) || reverseHeld;
+            // only the driver can choose reverse: locked controls (intro, garage, finish) just hold the brakes
+            bool wantsReverse = !inputLocked && ((brake > 0.5f && ForwardSpeed < 1.0f && thr < 0.1f) || reverseHeld);
+            if (inputLocked && Gear == -1) Gear = 1;
             if (wantsReverse && Gear >= 0 && ForwardSpeed < 0.5f) Gear = -1;
             if (Gear == -1 && thr > 0.1f && !reverseHeld) Gear = 1;
 
@@ -208,11 +210,17 @@ namespace HMD
                 if (i < 2) b *= 1.25f; else b *= 0.75f;
                 if (wheels[i].GetGroundHit(out var h) && Mathf.Abs(h.forwardSlip) > 0.55f) b *= 0.4f; // ABS
                 if (handbrake && i >= 2) b = brakeTorque * 3f;
-                if (Gear == -1 && brk > 0.1f) wheels[i].motorTorque = -TorqueAt(Rpm) * brk * Mathf.Abs(Ratio(-1)) * 0.5f / 4f;
+                if (Gear == -1 && brk > 0.1f)
+                {
+                    // backing up: the brake pedal is the reverse throttle. Torque goes only to the driven wheels
+                    // (same split as forward), and the handbrake still holds the rear wheels.
+                    float share = spec.drive == Drive.AWD ? (i < 2 ? 0.2f : 0.3f) : (IsDriven(i) ? 0.5f : 0f);
+                    bool held = handbrake && i >= 2;
+                    wheels[i].motorTorque = held ? 0 : -TorqueAt(Rpm) * brk * Mathf.Abs(Ratio(-1)) * 0.5f * share;
+                    b = held ? brakeTorque * 3f : 0;
+                }
                 wheels[i].brakeTorque = b;
             }
-            if (Gear == -1 && brk > 0.1f)
-                for (int i = 0; i < 4; i++) wheels[i].brakeTorque = 0;
 
             // --- handbrake drift: rear loses side grip
             var rs = rearSideBase;

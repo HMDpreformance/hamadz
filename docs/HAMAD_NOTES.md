@@ -127,3 +127,13 @@ Playtest 2026-11-17 (afternoon), Hamad's words in short:
 - Lighting looks cheap. To improve.
 - Buildings look cheap and do not match the map. To improve: real 3D building models per district (Marina, Downtown, villas, old Deira, warehouses), made with Higgsfield.
 - Chase camera a little higher, not too much. Done in code: about 0.28 m higher.
+
+Hamad's confirmed problems and fix order (2026-11-17, 14:27 Dubai time). He paused all edits at 13:59 ("stop edit things till i tell u what to do") and said "Continue" at 14:50 with this list. Work in this order and hold visual changes until it is done:
+1. Locked controls could make the car reverse (inputLocked full brake selected reverse; reverse powered all four wheels and cancelled the handbrake). FIXED in CarController.cs.
+2. Junctions kept collision walls 15 cm above the road. FIXED in tools/build_city.py (side wall stops under the surface inside junctions).
+3. Road connections used old point indexes after new start points were added. FIXED (the point is looked up again).
+4. Tyre sizes lost the front/rear difference (all four got the average). FIXED (controller keeps the factory radius).
+5. Downtown underpass was thrown away (negative heights clamped to zero). FIXED: Downtown Blvd dips 5.6 m under the E11, the E11 is a slab there, clearance 4.3 m.
+To test in Unity (not done yet): slopes and crests, car stability (braking downhill, quick steering, kerbs, bridge crests), crash recovery (overturned, water, flyovers).
+Also fixed from the drive test: streets that ran along a bigger road and left kerbs across it are cut (Downtown Inner Ring, Al Khail); ground cells can no longer rise through a road edge; the generator now prints a "ground through a road" self check (0 spots).
+Rule from Hamad: when he says stop, stop editing until he says what to do.

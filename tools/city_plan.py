@@ -260,6 +260,7 @@ for r in roads:
         # flyovers: the highway goes over every main road, and over a highway listed after it
         for o in roads:
             if o is r or o["cls"] == "street": continue
+            if o["name"] == "Downtown Blvd" and r is hw[0]: continue      # that road dips under the E11 instead (underpass)
             if o["cls"] == "highway" and hw.index(o) < hw.index(r): continue
             for at in crossings(pts, o["pts"]): add(at, 6.2, 60 * K, 240 * K, "flyover")
     if r["cls"] != "street" or r["name"] == "Palm Trunk":
@@ -267,7 +268,7 @@ for r in roads:
         for at in crossings(pts, water["canal"]): add(at, 3.4, 46, 115 * K, "bridge")
     if r["name"] == "Palm Trunk": add(140, 4.0, 50, 100, "bridge")
     if r["name"] == "Downtown Blvd":
-        for at in crossings(pts, hw[0]["pts"]): add(at, -6.0, 50 * K, 110 * K, "underpass")
+        for at in crossings(pts, hw[0]["pts"]): add(at, -5.6, 50 * K, 290 * K, "underpass")
     r["h"] = [round(terrain(x, y) + e, 2) for (x, y), e in zip(pts, extra)]
     r["deck"] = [round(e, 2) for e in extra]      # height above the ground (bridge deck) or below (underpass)
 

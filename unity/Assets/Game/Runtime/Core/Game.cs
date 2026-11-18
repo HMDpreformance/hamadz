@@ -43,6 +43,14 @@ namespace HMD
 
         IEnumerator Start()
         {
+            // the intro film (first start), the PRESS START title, then the loading screen while the city is built.
+            // Test runs (-hmdshots) and Editor runs with hmd_skipfront=1 go straight to the loading screen.
+            var front = FrontEnd.Create();
+            bool skipFront = AutoShots || (Application.isEditor && PlayerPrefs.GetInt("hmd_skipfront", 0) == 1);
+            if (!skipFront) { yield return front.IntroFilm(); yield return front.Title(); }
+            front.Progress(0.05f);
+            yield return null; yield return null;   // the loading screen is drawn before the heavy work starts
+
             // camera
             var camGo = Camera.main ? Camera.main.gameObject : new GameObject("Main Camera", typeof(Camera), typeof(AudioListener));
             camGo.tag = "MainCamera";
@@ -64,10 +72,13 @@ namespace HMD
                 // -newcity: part 1 of the Dubai city instead of the grid (no grid props, lamps or traffic yet)
                 newCity = new GameObject("NewCity").AddComponent<NewCity>();
                 newCity.Build();
+                front.Progress(0.4f); yield return null;
                 wx.Setup(camGo.transform, forceRain);
                 gfx.Setup(rig.Cam);
+                front.Progress(0.46f); yield return null;
                 var dress = new GameObject("NewCityDressing").AddComponent<NewCityDressing>();
                 dress.Build(newCity);
+                front.Progress(0.8f);
                 if (dress.lampHeads.Count > 0) new GameObject("LampLights").AddComponent<LampLights>().Setup(dress.lampHeads, camGo.transform, dress.lampCool);
                 else new GameObject("LampLights").AddComponent<LampLights>().Setup(newCity.lampHeads, camGo.transform);
                 // the sky glows over the tallest landmark (the needle tower in Downtown)
@@ -90,9 +101,11 @@ namespace HMD
 
             car = CarFactory.Build(carId, startPos, startRot, true);
             car.gameObject.AddComponent<PlayerInput>();
+            car.gameObject.AddComponent<NitroFx>();
             car.Body.isKinematic = false;
             car.Body.ResetInertiaTensor();   // recompute now that only the body box and wheels are left
             car.inputLocked = true;
+            front.Progress(0.86f); yield return null;
 
             garage = new GameObject("LSX_Garage").AddComponent<GarageBuilding>();
             garage.transform.rotation = Quaternion.identity;
@@ -104,6 +117,7 @@ namespace HMD
             shop.Build();
             dyno = shop.gameObject.AddComponent<Dyno>();
             dyno.Setup(shop, rig);
+            front.Progress(0.93f); yield return null;
 
             if (!NewCity.Wanted) { traffic = new GameObject("Traffic").AddComponent<Traffic>();
             traffic.Setup(car.transform); }
@@ -133,6 +147,12 @@ namespace HMD
             UIKit.Stretch(fade.rectTransform);
             fade.raycastTarget = false;
 
+            // the city is ready: the loading screen fades out (its music fades on its own), the game fades in from black
+            StartCoroutine(front.Finish());
+            while (front != null && front.Showing) yield return null;
+            Radio.Ensure(transform);
+            DistrictLabel.Ensure(transform);
+
             // the car intro: from the back
             rig.target = car.transform;
             state = State.Intro;
@@ -141,7 +161,7 @@ namespace HMD
                 state = State.Drive;
                 car.inputLocked = false;
                 hud.SetVisible(true);
-                hud.SetTouchVisible(Application.isMobilePlatform || Input.touchSupported || System.Environment.CommandLine.Contains("-touchui"));
+                hud.SetTouchVisible(GfxSetup.IsMobile || Input.touchSupported || System.Environment.CommandLine.Contains("-touchui"));
             };
             rig.StartIntro();
             yield return Fade(1, 0, 1.2f);
@@ -233,6 +253,7 @@ namespace HMD
             var old = car;
             car = CarFactory.Build(carId, shop.DisplaySpot, shop.DisplayRot, true);
             car.gameObject.AddComponent<PlayerInput>();
+            car.gameObject.AddComponent<NitroFx>();
             Destroy(old.gameObject);
             ParkInShop();
             car.inputLocked = true;

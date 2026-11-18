@@ -23,6 +23,7 @@ namespace HMD
         // new effects (ElevenLabs / Higgsfield, unity_assets/sfx -> Resources/Imported/AudioHD)
         AudioSource brakeSq, wind, road, city, spool;
         AudioClip crash, nitroHit, bov;
+        AudioSource nitroLoop;
         bool lastNitro; float lastCrash;
 
         /// <summary>An HD effect from AudioHD when there is one, else the old clip.</summary>
@@ -65,6 +66,7 @@ namespace HMD
             flutter = Res.Load<AudioClip>("Audio/car/flutter_1");
             crash = Hd("crash", "Audio/crash");
             nitroHit = Hd("nitro", "Audio/nitro_start");
+            if (player) { nitroLoop = Src(Res.Load<AudioClip>("Audio/nitro_loop"), player); if (nitroLoop) { nitroLoop.loop = true; nitroLoop.volume = 0f; nitroLoop.Stop(); } }
             bov = Hd("bov", "Audio/car/bov_big");
             if (player)
             {
@@ -176,8 +178,9 @@ namespace HMD
             if (road && road.clip) { road.volume = Mathf.Clamp01(v / 120f) * 0.35f * master; road.pitch = Mathf.Lerp(0.7f, 1.3f, Mathf.Clamp01(v / 220f)); }
             if (city && city.clip) city.volume = 0.22f * master;
             // nitro: the hit when the boost fires
-            if (car.nitro && !lastNitro && car.NitroAmount > 0.05f && nitroHit) sfx.PlayOneShot(nitroHit, 0.8f * master);
-            lastNitro = car.nitro;
+            if (car.NitroActive && !lastNitro && nitroHit) sfx.PlayOneShot(nitroHit, 0.8f * master);
+            if (nitroLoop) { nitroLoop.volume = Mathf.MoveTowards(nitroLoop.volume, car.NitroActive ? 0.5f * master : 0f, Time.deltaTime * 3f); if (nitroLoop.volume > 0.001f && !nitroLoop.isPlaying) nitroLoop.Play(); else if (nitroLoop.volume <= 0.001f && nitroLoop.isPlaying) nitroLoop.Stop(); }
+            lastNitro = car.NitroActive;
             // turbo whistle while pulling hard high in the rev range (turbo engines)
             bool turbo = car.spec.engine.Contains("tt") || car.spec.engine == "i4" || car.spec.engine == "i6" || car.spec.engine == "v6";
             if (turbo && spool && spool.clip)

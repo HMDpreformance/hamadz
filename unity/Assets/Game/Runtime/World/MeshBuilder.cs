@@ -161,12 +161,44 @@ namespace HMD
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
+            mats = DropEmptySubmeshes(mesh, mats);
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var mr = go.AddComponent<MeshRenderer>();
             mr.sharedMaterials = mats;
             mr.shadowCastingMode = shadows ? ShadowCastingMode.On : ShadowCastingMode.Off;
             if (collider) go.AddComponent<MeshCollider>().sharedMesh = mesh;
             return go;
+        }
+
+        // which original slots each compacted mesh kept (a mesh can be spawned more than once)
+        static readonly System.Collections.Generic.Dictionary<Mesh, int[]> kept = new System.Collections.Generic.Dictionary<Mesh, int[]>();
+
+        /// <summary>
+        /// City cells are built with one submesh per material slot (51), but each cell uses only a few. Every empty slot still
+        /// cost a draw call: 93% of all submeshes were empty, and Business Bay drew about 1900 times a frame instead of under 600.
+        /// Keeps only the submeshes that have triangles, with their materials.
+        /// </summary>
+        public static Material[] DropEmptySubmeshes(Mesh mesh, Material[] mats)
+        {
+            if (mesh == null || mats == null) return mats;
+            if (!kept.TryGetValue(mesh, out var keep))
+            {
+                if (mesh.subMeshCount < 2) return mats;
+                var k = new System.Collections.Generic.List<int>();
+                for (int s = 0; s < mesh.subMeshCount; s++) if (mesh.GetSubMesh(s).indexCount > 0) k.Add(s);
+                if (k.Count == mesh.subMeshCount || k.Count == 0) return mats;
+                keep = k.ToArray();
+                var idx = new int[keep.Length][]; var top = new MeshTopology[keep.Length];
+                for (int i = 0; i < keep.Length; i++) { idx[i] = mesh.GetIndices(keep[i]); top[i] = mesh.GetTopology(keep[i]); }
+                var b = mesh.bounds;
+                mesh.subMeshCount = keep.Length;
+                for (int i = 0; i < keep.Length; i++) mesh.SetIndices(idx[i], top[i], i, false);
+                mesh.bounds = b;
+                kept[mesh] = keep;
+            }
+            var nm = new Material[keep.Length];
+            for (int i = 0; i < keep.Length; i++) nm[i] = keep[i] < mats.Length ? mats[keep[i]] : null;
+            return nm;
         }
 
         public static GameObject Cube(string name, Transform parent, Vector3 pos, Vector3 size, Material mat, bool collider = false)

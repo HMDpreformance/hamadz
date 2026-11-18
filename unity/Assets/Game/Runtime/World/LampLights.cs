@@ -84,7 +84,7 @@ namespace HMD
 
         void Update()
         {
-            if (heads == null || cam == null) return;
+            if (heads == null || cam == null || pool.Count == 0) return;   // (empty after an Editor recompile in Play mode)
             timer -= Time.deltaTime;
             if (timer > 0) return;
             timer = 0.5f;

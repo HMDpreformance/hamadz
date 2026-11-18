@@ -33,6 +33,7 @@ namespace HMD
             string part = "default";
             var argv = System.Environment.GetCommandLineArgs();
             for (int a = 0; a + 1 < argv.Length; a++) if (argv[a] == "-ncdrive") part = argv[a + 1];
+            if (Application.isEditor && PlayerPrefs.HasKey("hmd_ncdrive")) part = PlayerPrefs.GetString("hmd_ncdrive");   // Editor test runs
             if (cl.Contains("-ncaudit")) Audit();
             if (cl.Contains("-uncap")) { Application.targetFrameRate = -1; QualitySettings.vSyncCount = 0; }
             fpsSum = 0; fpsN = 0; fpsMin = 999;
@@ -45,6 +46,7 @@ namespace HMD
             else if (part == "bridge") yield return BridgeTests();
             else if (part == "look") yield return LookShots();
             else if (part == "video") yield return VideoDrive();
+            else if (part == "nos") yield return NosTests();
             else if (part == "default")
             {
                 foreach (var rd in nc.roads) if (rd.cls == "highway") yield return Drive(rd, 230f, rd.name == "E11");
@@ -675,6 +677,47 @@ namespace HMD
                 }
             }
             Debug.Log($"[HMD] junction summary: {passes} passes, {bad} flagged, districts {perD.Count}");
+        }
+
+        /// <summary>-ncdrive nos: standing start on the flat E11 stretch, full throttle, with and without NOS (tank kept full,
+        /// then the real 6 s tank): times 0-100, 60-200, 100-200 and the top speed. Run once per car (-car sport / -car pickup).</summary>
+        IEnumerator NosTests()
+        {
+            var e11 = nc.Find("E11");
+            var argv = System.Environment.GetCommandLineArgs();
+            for (int k = 0; k + 1 < argv.Length; k++)
+            {
+                if (argv[k] == "-nostorque") CarController.NitroTorque = float.Parse(argv[k + 1], System.Globalization.CultureInfo.InvariantCulture);
+                if (argv[k] == "-nospush") CarController.NitroPushG = float.Parse(argv[k + 1], System.Globalization.CultureInfo.InvariantCulture);
+            }
+            Debug.Log($"[HMD] nos test: torque x{CarController.NitroTorque}, push {CarController.NitroPushG} g");
+            int flat = 1; float bestF = float.MaxValue;
+            for (int i = 2; i + 30 < e11.pts.Count; i++)
+            {
+                float turn = 0; for (int j = i; j < i + 29; j++) turn += Vector3.Angle(e11.pts[j + 1] - e11.pts[j], e11.pts[j + 2] - e11.pts[j + 1]);
+                float slope = Mathf.Abs(e11.pts[i + 30].y - e11.pts[i].y);
+                if (turn + slope * 3 < bestF) { bestF = turn + slope * 3; flat = i; }
+            }
+            foreach (int mode in new[] { 0, 1, 2 })   // 0 no NOS, 1 NOS all the way (tank refilled), 2 NOS with the real tank
+            {
+                var a = e11.pts[flat]; var b = e11.pts[flat + 1]; var dir = b - a; dir.y = 0;
+                car.Teleport(NewCity.Surface(a) + Vector3.up * 0.6f, Quaternion.LookRotation(dir));
+                car.NitroAmount = 1f; car.nitro = false;
+                yield return new WaitForSeconds(1.5f);
+                float t = 0, t60 = -1, t100 = -1, t180 = -1, t200 = -1, top = 0, topT = 0;
+                yield return Follow(car, e11, flat, 999f, 60f, tt =>
+                {
+                    t = tt; float v = car.SpeedKmh;
+                    car.nitro = mode > 0;
+                    if (mode == 1) car.NitroAmount = 1f;
+                    if (t60 < 0 && v >= 60) t60 = tt; if (t100 < 0 && v >= 100) t100 = tt; if (t180 < 0 && v >= 180) t180 = tt; if (t200 < 0 && v >= 200) t200 = tt;
+                    if (v > top + 0.5f) { top = v; topT = tt; }
+                    return tt - topT > 6f && tt > 20f ? new Vector3(9, 0, 0) : new Vector3(0, 0, 1);   // stop when no faster for 6 s
+                });
+                car.nitro = false;
+                string F(float x) => x < 0 ? "-" : x.ToString("F1");
+                Debug.Log($"[HMD] nos {car.spec.id} {(mode == 0 ? "no NOS" : mode == 1 ? "NOS (full tank all the way)" : "NOS (real 6 s tank)")}: 0-100 {F(t100)} s, 100-180 {(t180 > 0 && t100 > 0 ? F(t180 - t100) : "-")} s, 60-200 {(t200 > 0 && t60 > 0 ? F(t200 - t60) : "-")} s, 100-200 {(t200 > 0 && t100 > 0 ? F(t200 - t100) : "-")} s, top {top:F0} km/h at {topT:F0} s, gear {car.Gear}");
+            }
         }
 
         /// <summary>-ncdrive bridge: the Creek Bridge foot at the Downtown Ring (near 3402,2061, a short steep stretch),

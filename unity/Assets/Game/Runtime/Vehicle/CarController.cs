@@ -45,6 +45,14 @@ namespace HMD
         public float EngineLoad { get; private set; }
         public float RearSlip { get; private set; }
         public float NitroAmount { get; set; } = 1f;
+        /// <summary>True while the nitro is burning (button held, tank not empty, a forward gear, controls free).</summary>
+        public bool NitroActive { get; private set; }
+        /// <summary>Raised once when the tank is full again (the HUD flashes the NOS button).</summary>
+        public System.Action OnNitroFull;
+        // NOS: extra wheel torque, plus a push along the car that also works at the rev limiter, so it is a real shove
+        // and a higher top speed (tuned with the test driver)
+        public static float NitroTorque = 1.15f, NitroPushG = 0.06f;   // sport: 100-180 38% quicker, top +10% (real 6 s tank)
+        public const float NitroBurnSecs = 6f, NitroRefillSecs = 40f;
         public bool Shifting => shiftTimer > 0;
         public bool Grounded { get; private set; }
         public Rigidbody Body => rb;
@@ -129,6 +137,9 @@ namespace HMD
             SpeedKmh = dynoMode ? Mathf.Abs(wheelRpm) * 2 * Mathf.PI * spec.wheelRadius / 60f * 3.6f : v.magnitude * 3.6f;
 
             float thr = inputLocked ? 0 : throttle;
+            // NOS works on its own: holding it is full throttle (not in reverse, not with an empty tank, not while braking)
+            NitroActive = nitro && !inputLocked && NitroAmount > 0f && Gear >= 0 && brake < 0.5f;
+            if (NitroActive) thr = 1f;
             float brk = inputLocked ? 1 : brake;
 
             if (dynoMode) { DynoStep(dt, thr); return; }
@@ -178,12 +189,16 @@ namespace HMD
             if (Rpm >= spec.rpmRedline) engineT = 0;               // limiter
             if (shiftTimer > 0) engineT *= 0.1f;
             float nitroBoost = 1f;
-            if (nitro && NitroAmount > 0 && thr > 0.5f && Gear > 0)
+            if (NitroActive && Gear > 0)
             {
-                nitroBoost = 1.45f;
-                NitroAmount = Mathf.Max(0, NitroAmount - dt / 6f);
+                nitroBoost = NitroTorque;
+                NitroAmount = Mathf.Max(0, NitroAmount - dt / NitroBurnSecs);
             }
-            else NitroAmount = Mathf.Min(1, NitroAmount + dt / 40f);
+            else if (!NitroActive && NitroAmount < 1f)
+            {
+                NitroAmount = Mathf.Min(1, NitroAmount + dt / NitroRefillSecs);
+                if (NitroAmount >= 1f) OnNitroFull?.Invoke();
+            }
             float wheelT = engineT * ratio * 0.88f * nitroBoost;
             EngineLoad = thr;
 
@@ -237,6 +252,7 @@ namespace HMD
             foreach (var w in wheels) if (w.isGrounded) Grounded = true;
             float vv = v.magnitude;
             rb.AddForce(-v.normalized * dragK * vv * vv, ForceMode.Force);
+            if (NitroActive && Gear > 0 && Grounded) rb.AddForce(transform.forward * rb.mass * 9.81f * NitroPushG, ForceMode.Force);
             if (Grounded) rb.AddForce(-transform.up * vv * vv * 1.1f, ForceMode.Force);   // downforce
             // rolling resistance
             rb.AddForce(-v * spec.weightKg * 0.015f, ForceMode.Force);

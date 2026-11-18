@@ -136,6 +136,7 @@ namespace HMD
                 // so only its far inner wall and inner end show behind the tyre. It never catches light (unlit black).
                 var well = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 Object.DestroyImmediate(well.GetComponent<Collider>());
+                well.GetComponent<MeshFilter>().sharedMesh = HalfLinerMesh();   // upper part only: never below the sill
                 well.name = "ArchLiner";
                 well.transform.SetParent(holder, false);
                 float linerW = tw * 1.7f;
@@ -181,6 +182,34 @@ namespace HMD
         }
 
         static (List<LampFinder.Lens> tail, List<LampFinder.Lens> head) foundLamps;
+
+        static Mesh halfLiner;
+        /// <summary>
+        /// The arch liner shape: the upper part of a unit cylinder (same axes as Unity's primitive: axis Y, radius 0.5,
+        /// y -1..1; "up" after the liner's 90 degree roll is +X), from a little below the axle round over the top.
+        /// The full cylinder hung below the sills and showed as a dark second tyre beside each wheel (Hamad: "more than 4 wheels").
+        /// </summary>
+        static Mesh HalfLinerMesh()
+        {
+            if (halfLiner != null) return halfLiner;
+            const int seg = 24; float a0 = -100f * Mathf.Deg2Rad, a1 = 100f * Mathf.Deg2Rad;
+            var v = new List<Vector3>(); var n = new List<Vector3>(); var t = new List<int>();
+            for (int i = 0; i <= seg; i++)
+            {
+                float a = Mathf.Lerp(a0, a1, i / (float)seg); var d = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+                v.Add(d * 0.5f + Vector3.down); n.Add(d); v.Add(d * 0.5f + Vector3.up); n.Add(d);
+            }
+            for (int i = 0; i < seg; i++) { int a = i * 2, b = a + 2; t.AddRange(new[] { a, a + 1, b, b, a + 1, b + 1 }); }   // outward front faces
+            foreach (float y in new[] { -1f, 1f })
+            {
+                int c = v.Count; v.Add(new Vector3(0, y, 0)); n.Add(new Vector3(0, y, 0));
+                for (int i = 0; i <= seg; i++) { float a = Mathf.Lerp(a0, a1, i / (float)seg); v.Add(new Vector3(Mathf.Cos(a) * 0.5f, y, Mathf.Sin(a) * 0.5f)); n.Add(new Vector3(0, y, 0)); }
+                for (int i = 0; i < seg; i++) { if (y > 0) t.AddRange(new[] { c, c + 2 + i, c + 1 + i }); else t.AddRange(new[] { c, c + 1 + i, c + 2 + i }); }
+            }
+            halfLiner = new Mesh { name = "HalfLiner" };
+            halfLiner.SetVertices(v); halfLiner.SetNormals(n); halfLiner.SetTriangles(t, 0); halfLiner.RecalculateBounds();
+            return halfLiner;
+        }
 
         static readonly Dictionary<string, Mesh> trimMeshes = new Dictionary<string, Mesh>();
         /// <summary>A flat half ring in the Y/Z plane over the top of a wheel (from just below the axle in front to just below it behind).</summary>

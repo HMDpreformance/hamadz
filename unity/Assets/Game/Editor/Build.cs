@@ -75,6 +75,9 @@ namespace HMD.EditorTools
             if (Directory.Exists(Path.Combine(RepoRoot, "unity_assets/trees"))) CopyDir("unity_assets/trees", Imp + "/Trees", "*.glb", "*.json");
             if (Directory.Exists(Path.Combine(RepoRoot, "unity_assets/ground"))) CopyDir("unity_assets/ground", Imp + "/Ground", "*.jpg", "*.png");
             if (Directory.Exists(Path.Combine(RepoRoot, "unity_assets/buildings/landmarks"))) CopyDir("unity_assets/buildings/landmarks", Imp + "/Buildings/Landmarks", "*.glb", "*.json");
+            if (Directory.Exists(Path.Combine(RepoRoot, "unity_assets/loading"))) CopyDir("unity_assets/loading", Imp + "/Loading", "*.jpg", "*.png");
+            if (Directory.Exists(Path.Combine(RepoRoot, "unity_assets/music"))) { CopyDir("unity_assets/music", Imp + "/Music", "loading_d_boombap.mp3"); CopyDir("unity_assets/music/radio", Imp + "/Music/Radio", "*.mp3", "*.ogg"); }   // loading music: Hamad picked D
+            if (Directory.Exists(Path.Combine(RepoRoot, "unity_assets/video"))) CopyDir("unity_assets/video", "Assets/StreamingAssets/Video", "*.mp4");
             CopyDir("unity_assets/city", Imp + "/City", "city_part1.glb", "city_part1.json", "map_full.jpg", "map_base.jpg", "map_base.png", "map_full.png");
             CopyDir("audio/engines", Imp + "/Audio/engines", "*.wav");
             CopyDir("audio/car", Imp + "/Audio/car", "*.wav");

@@ -3,14 +3,15 @@ using UnityEngine;
 namespace HMD
 {
     /// <summary>
-    /// The weather changes while you drive: most of the time the night is dry with a light sheen on the
-    /// asphalt, and now and then a shower comes in, lasts a few minutes and passes. The rain fades in and
-    /// out, and the road dries slowly after it. (Hamad 2026-11-17: "not always raining, sometimes yes sometimes no".)
+    /// Light rain all the time (Hamad 2026-11-18: "add light rain all time and make the street wet from rain and reflect"):
+    /// thin soft streaks round the camera, a fainter far layer for depth, small splashes on the road, a little mist,
+    /// and the roads always soaked and glossy so lamps, neon and towers mirror in them. No rain inside the workshop.
+    /// -dry (dev flag only) turns it off for comparison shots.
     /// </summary>
     public class Weather : MonoBehaviour
     {
-        public const float RainChance = 0.25f;     // chance that a drive starts in a shower, and that the next spell is one
-        float amount, nextChange; bool forced; float wetNow;
+        float amount; float wetNow;
+        ParticleSystem[] layers;
         public static float Wetness { get; private set; }
         public static bool Raining { get; private set; }
 
@@ -22,11 +23,9 @@ namespace HMD
         public void Setup(Transform cam, bool? force = null)
         {
             follow = cam;
-            forced = force.HasValue;
-            Raining = force ?? (Random.value < RainChance);
+            Raining = force ?? true;   // always raining unless -dry
             amount = Raining ? 1f : 0f;
             Wetness = wetNow = Raining ? 1f : 0f;
-            nextChange = Time.time + (Raining ? Random.Range(90f, 240f) : Random.Range(150f, 420f));
             if (!rain) MakeRain();
             ApplyRoad();
         }
@@ -34,8 +33,8 @@ namespace HMD
         void MakeRain()
         {
             // near layer: thin soft streaks round the camera; far layer: fainter, wider, so the rain has depth
-            rain = RainLayer("Rain", new Vector3(36, 1, 36), 0.018f, 1f, new Color(0.8f, 0.84f, 0.92f, 0.22f), 2400);
-            rainFar = RainLayer("RainFar", new Vector3(110, 1, 110), 0.04f, 1.6f, new Color(0.7f, 0.74f, 0.85f, 0.1f), 3000);
+            rain = RainLayer("Rain", new Vector3(36, 1, 36), 0.018f, 1f, new Color(0.8f, 0.84f, 0.92f, 0.17f), GfxSetup.IsMobile ? 900 : 1600);
+            rainFar = RainLayer("RainFar", new Vector3(110, 1, 110), 0.04f, 1.6f, new Color(0.7f, 0.74f, 0.85f, 0.08f), GfxSetup.IsMobile ? 900 : 1800);
             // splashes: tiny flat rings popping on the road round the car
             var go = new GameObject("RainSplash");
             go.transform.SetParent(transform, false);
@@ -45,7 +44,7 @@ namespace HMD
             main.startLifetime = 0.28f; main.startSpeed = 0f;
             main.startSize = new ParticleSystem.MinMaxCurve(0.12f, 0.35f);
             main.startColor = new Color(0.85f, 0.88f, 0.95f, 0.4f);
-            main.maxParticles = 900; main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.maxParticles = GfxSetup.IsMobile ? 300 : 600; main.simulationSpace = ParticleSystemSimulationSpace.World;
             var em = splash.emission; em.rateOverTime = 0;
             var sh = splash.shape; sh.shapeType = ParticleSystemShapeType.Box; sh.scale = new Vector3(22, 22, 0.01f);
             go.transform.rotation = Quaternion.Euler(90, 0, 0);
@@ -107,24 +106,19 @@ namespace HMD
         void LateUpdate()
         {
             if (!rain || !follow) return;
-            // a new spell of weather every few minutes (not when -rain / -dry forces it for screenshots)
-            if (!forced && Time.time > nextChange)
-            {
-                Raining = !Raining && Random.value < RainChance * 1.6f;
-                nextChange = Time.time + (Raining ? Random.Range(90f, 240f) : Random.Range(150f, 420f));
-            }
-            amount = Mathf.MoveTowards(amount, Raining ? 1f : 0f, Time.deltaTime / 18f);            // fades over 18 s
-            wetNow = Mathf.MoveTowards(wetNow, Raining ? 1f : 0f, Time.deltaTime / (Raining ? 25f : 150f));   // the road dries slowly
+            amount = Mathf.MoveTowards(amount, Raining ? 1f : 0f, Time.deltaTime / 4f);
+            wetNow = Mathf.MoveTowards(wetNow, Raining ? 1f : 0f, Time.deltaTime / 10f);
             Wetness = wetNow;
             Shader.SetGlobalFloat("_HMD_Wetness", Mathf.Lerp(DrySheen, 1f, wetNow));
             Shader.SetGlobalFloat("_HMD_RainAmount", amount);
-            RenderSettings.fogDensity = Mathf.Lerp(0.0024f, 0.0046f, amount);   // light mist in a shower
-            var em = rain.emission; em.rateOverTime = 1800f * amount;
-            var ef = rainFar.emission; ef.rateOverTime = 2250f * amount;
+            RenderSettings.fogDensity = Mathf.Lerp(0.0024f, 0.0032f, amount);   // a little mist in the light rain
+            var em = rain.emission; em.rateOverTime = (GfxSetup.IsMobile ? 650f : 1100f) * amount;   // light rain: thin, not a downpour
+            var ef = rainFar.emission; ef.rateOverTime = (GfxSetup.IsMobile ? 650f : 1200f) * amount;
             // no rain indoors: the workshop interior lives far away from the city (z = -3000)
             bool indoors = follow.position.z < -1500f;
             bool show = !indoors && amount > 0.01f;
-            foreach (var ps in new[] { rain, rainFar, splash })
+            if (layers == null) layers = new[] { rain, rainFar, splash };
+            foreach (var ps in layers)
                 if (ps.gameObject.activeSelf != show) ps.gameObject.SetActive(show);
             if (show)
             {
@@ -134,7 +128,7 @@ namespace HMD
                 Vector3 c = follow.position + Vector3.ProjectOnPlane(follow.forward, Vector3.up).normalized * 7f;
                 float gy = Physics.Raycast(c + Vector3.up * 5f, Vector3.down, out var hit, 30f) ? hit.point.y : follow.position.y - 1.5f;
                 splash.transform.position = new Vector3(c.x, gy + 0.04f, c.z);
-                var es = splash.emission; es.rateOverTime = 1500f * amount * wetNow;
+                var es = splash.emission; es.rateOverTime = (GfxSetup.IsMobile ? 350f : 700f) * amount * wetNow;
             }
         }
     }

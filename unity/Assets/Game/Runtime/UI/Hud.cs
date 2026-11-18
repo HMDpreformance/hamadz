@@ -100,7 +100,7 @@ namespace HMD
             UIKit.Hold("Right", t, Vector2.zero, Vector2.zero, new Vector2(270, 36), new Vector2(200, 200), "▶", v => PlayerInput.TouchRight = v, white);
             UIKit.Hold("Gas", t, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-40, 36), new Vector2(230, 230), "GAS", v => PlayerInput.TouchGas = v, new Color(0.2f, 1f, 0.35f));
             UIKit.Hold("Brake", t, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-300, 36), new Vector2(190, 190), "BRAKE", v => PlayerInput.TouchBrake = v, new Color(1f, 0.25f, 0.2f));
-            UIKit.Hold("Nitro", t, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-600, 250), new Vector2(150, 150), "NOS", v => PlayerInput.TouchNitro = v, new Color(0.2f, 0.7f, 1f));
+            nosBtn = UIKit.Hold("Nitro", t, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-600, 250), new Vector2(150, 150), "NOS", v => PlayerInput.TouchNitro = v, new Color(0.2f, 0.7f, 1f));
             UIKit.Hold("Handbrake", t, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-540, 50), new Vector2(150, 150), "E-BRK", v => PlayerInput.TouchHandbrake = v, new Color(1f, 0.7f, 0.1f));
         }
 
@@ -109,6 +109,7 @@ namespace HMD
         public Minimap Map => map;
 
         RectTransform sp; Image nframe; Text nlbl;
+        HoldButton nosBtn; float nosFlash; bool nosHooked;
 
         void Update()
         {
@@ -134,6 +135,10 @@ namespace HMD
             speedNeedle.localEulerAngles = new Vector3(0, 0, 135f - 270f * speedShown);
             revNeedle.localEulerAngles = new Vector3(0, 0, 135f - 270f * revShown);
             nitroFill.fillAmount = car.NitroAmount;
+            // NOS: the bar pulses while it burns; the button flashes once when the tank is full again
+            if (!nosHooked) { nosHooked = true; car.OnNitroFull += () => nosFlash = 1f; }
+            nitroFill.color = car.NitroActive ? Color.Lerp(new Color(0.24f, 0.63f, 1f), Color.white, 0.5f + 0.5f * Mathf.Sin(Time.time * 18f)) : new Color(0.24f, 0.63f, 1f);
+            if (nosBtn && nosFlash > 0f) { nosFlash = Mathf.Max(0f, nosFlash - Time.deltaTime * 1.6f); float s = 1f + 0.22f * Mathf.Sin(nosFlash * Mathf.PI); nosBtn.transform.localScale = new Vector3(s, s, 1f); }
         }
     }
 }

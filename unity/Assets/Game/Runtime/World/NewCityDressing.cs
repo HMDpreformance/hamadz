@@ -38,6 +38,7 @@ namespace HMD
         {
             var ta = Res.Load<TextAsset>("City/city_part1");
             if (ta == null) return;
+            DistanceCuller.Ensure(transform);   // phones: far small things are not drawn
             Parse(ta.text);
             MakeMaterials();
             var cells = new Dictionary<Vector2Int, MeshBuilder>();
@@ -70,7 +71,11 @@ namespace HMD
                 if (PlaceModel(l)) { modelled++; continue; }
                 Building(Cell(l.p), l);
             }
-            foreach (var kv in plots) MeshBuilder.Spawn("Plots_" + kv.Key.x + "_" + kv.Key.y, kv.Value.Build("plots"), mats, transform, false, false).isStatic = true;
+            foreach (var kv in plots)
+            {
+                var pg = MeshBuilder.Spawn("Plots_" + kv.Key.x + "_" + kv.Key.y, kv.Value.Build("plots"), mats, transform, false, false); pg.isStatic = true;
+                DistanceCuller.Add(pg, CellCentre(kv.Key), DistanceCuller.Street + 230f);   // a 320 m cell: centre + half diagonal
+            }
             if (models.Count > 0) Debug.Log($"[HMD] building models: {models.Count} loaded, {modelled} lots use a model, the rest keep the box");
             Landmarks.Clear(); foreach (var m in marks) Landmarks.Add((m.kind, m.p, m.h));
             LoadLandmarkModels();
@@ -99,7 +104,11 @@ namespace HMD
             foreach (var gt in gantries) Gantry(Prop(gt.p), gt.p, gt.yaw, gt.width);
             foreach (var mt in metros) Metro(mt, Cell, Prop);
             if (gantries.Count > 0 || metros.Count > 0) Debug.Log($"[HMD] gantries {gantries.Count}, metro lines {metros.Count}");
-            foreach (var kv in props) MeshBuilder.Spawn("Props_" + kv.Key.x + "_" + kv.Key.y, kv.Value.Build("props"), mats, transform, false, false).isStatic = true;
+            foreach (var kv in props)
+            {
+                var pg = MeshBuilder.Spawn("Props_" + kv.Key.x + "_" + kv.Key.y, kv.Value.Build("props"), mats, transform, false, false); pg.isStatic = true;
+                DistanceCuller.Add(pg, CellCentre(kv.Key), DistanceCuller.Street + 230f);   // lamps, light pools, gantries, metro deck
+            }
             int n = 0;
             foreach (var kv in cells)
             {
@@ -411,6 +420,7 @@ namespace HMD
             lg.SetLODs(new[] { new LOD(tall > 80f ? 0.008f : 0.018f, new Renderer[] { nr }), new LOD(tall > 80f ? 0.002f : 0.005f, new Renderer[] { fr }) });
             var bc = go.AddComponent<BoxCollider>(); bc.center = new Vector3(0, m.size.y * 0.5f, 0); bc.size = m.size;
             go.isStatic = true; near.isStatic = true; farGo.isStatic = true;
+            DistanceCuller.Add(go, l.p, DistanceCuller.ForBuilding(m.size.y * sy));   // towers (80 m+) stay for the skyline
             return true;
         }
 
@@ -461,9 +471,12 @@ namespace HMD
             var mr = go.AddComponent<MeshRenderer>(); mr.sharedMaterials = m.variants[0];
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             var lg = go.AddComponent<LODGroup>(); lg.SetLODs(new[] { new LOD(0.025f, new Renderer[] { mr }) });
+            DistanceCuller.Add(go, p, DistanceCuller.Palm);
             go.isStatic = true;
             return true;
         }
+
+        static Vector3 CellCentre(Vector2Int k) => new Vector3((k.x + 0.5f) * 320f, 0f, (k.y + 0.5f) * 320f);
 
         // ---------------------------------------------------------------- lot ground and light pools
         readonly Dictionary<Vector2Int, MeshBuilder> plots = new Dictionary<Vector2Int, MeshBuilder>();

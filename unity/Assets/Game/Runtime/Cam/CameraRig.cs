@@ -85,7 +85,9 @@ namespace HMD
             transform.position = snap ? want : Vector3.SmoothDamp(transform.position, want, ref vel, 0.09f);
             Vector3 look = target.position + Vector3.up * 0.85f + fwd * 3f;
             transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(look - transform.position, Vector3.up), snap ? 1 : 12f * dt);
-            float nitroFov = car && car.nitro && car.NitroAmount > 0 ? 8f : 0;
+            float nitroFov = car && car.NitroActive ? 9f : 0;
+            // NOS: a small shake (cheap: two sine waves, no noise texture)
+            if (car && car.NitroActive && !snap) { float tt = Time.time * 31f; transform.rotation *= Quaternion.Euler(Mathf.Sin(tt) * 0.25f, Mathf.Sin(tt * 1.37f + 1f) * 0.25f, 0f); }
             Cam.fieldOfView = Mathf.Lerp(Cam.fieldOfView, 55f + Mathf.Clamp(speed / 260f, 0, 1) * 12f + nitroFov, 4f * dt);
         }
 

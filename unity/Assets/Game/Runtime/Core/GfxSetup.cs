@@ -14,7 +14,11 @@ namespace HMD
     /// </summary>
     public class GfxSetup : MonoBehaviour
     {
-        public static bool IsMobile => Application.isMobilePlatform;
+        /// <summary>Phone settings. -mobile on the command line (or ForceMobile in the Editor) runs the exact phone path
+        /// on a PC, to measure and look at it without a phone.</summary>
+        public static bool IsMobile => Application.isMobilePlatform || ForceMobile || System.Environment.CommandLine.Contains("-mobile")
+            || (Application.isEditor && PlayerPrefs.GetInt("hmd_mobile", 0) == 1);   // Editor: survives the Play-mode reload
+        public static bool ForceMobile;
         ReflectionProbe probe;
         Transform follow;
         int probeFrame;
@@ -94,11 +98,13 @@ namespace HMD
             probe.resolution = IsMobile ? 64 : 256;
             probe.size = new Vector3(400, 200, 400);
             probe.boxProjection = false;
-            probe.farClipPlane = 300f;
+            probe.farClipPlane = IsMobile ? 150f : 300f;   // phones: only the nearby street in the paint reflections
             probe.importance = 1;
             probe.hdr = true;
             follow = cam.transform;
 
+            // phones: the night haze (exp2, 0.0024) has fully covered everything by about 1.3 km, so draw no further
+            if (IsMobile) cam.farClipPlane = Mathf.Min(cam.farClipPlane, 1600f);
             cam.allowHDR = true;
             cam.allowMSAA = !IsMobile;
 #if HMD_URP
@@ -200,7 +206,7 @@ namespace HMD
             if (probe == null || follow == null) return;
             probe.transform.position = follow.position + Vector3.up * 1.5f;
             // refresh a full probe every few frames (time-sliced faces keep it cheap)
-            if (++probeFrame % (IsMobile ? 6 : 2) == 0) probe.RenderProbe();
+            if (++probeFrame % (IsMobile ? 12 : 2) == 0) probe.RenderProbe();
         }
 
 #if HMD_URP

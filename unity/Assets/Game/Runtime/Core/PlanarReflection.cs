@@ -10,7 +10,7 @@ namespace HMD
     /// Mirror of the city on the road: a second camera, mirrored in the ground plane (y = 0) with an
     /// oblique near plane, renders the scene into a half-resolution texture just before the main camera.
     /// The WetRoad shader samples it in screen space, so neon, lamps, tower windows and tail lights
-    /// show up on the wet asphalt. Quarter resolution on phones; off with -noplanar.
+    /// show up on the wet asphalt. Phones get a cheap version: a fifth of the resolution, only the nearest 250 m, redrawn every second frame, no mips. Off with -noplanar.
     /// </summary>
     public class PlanarReflection : MonoBehaviour
     {
@@ -22,14 +22,14 @@ namespace HMD
         static readonly int TexId = Shader.PropertyToID("_HMD_PlanarTex");
         static readonly int OnId = Shader.PropertyToID("_HMD_PlanarOn");
 
-        // off on phones: it draws the whole city a second time every frame (b6 on the phone had low fps)
-        public static bool Wanted => !GfxSetup.IsMobile && !System.Environment.CommandLine.Contains("-noplanar");
+        // phones too, in the cheap form (Hamad wants the wet streets to reflect); b6 drew the full mirror every frame and was slow
+        public static bool Wanted => !System.Environment.CommandLine.Contains("-noplanar");
 
         public void Setup(Camera mainCam)
         {
             I = this;
             main = mainCam;
-            scale = GfxSetup.IsMobile ? 0.25f : 0.5f;
+            scale = GfxSetup.IsMobile ? 0.2f : 0.5f;
             var go = new GameObject("ReflectionCam");
             go.transform.SetParent(transform, false);
             refl = go.AddComponent<Camera>();
@@ -40,7 +40,7 @@ namespace HMD
             refl.allowHDR = true;
             refl.allowMSAA = false;
             refl.cullingMask = main.cullingMask & ~(1 << LayerMask.NameToLayer("UI"));
-            refl.farClipPlane = 420f;
+            refl.farClipPlane = GfxSetup.IsMobile ? 250f : 420f;
             refl.useOcclusionCulling = false;
 #if HMD_URP
             var d = refl.GetUniversalAdditionalCameraData();
@@ -61,10 +61,19 @@ namespace HMD
             int w = Mathf.Max(64, (int)(Screen.width * scale)), h = Mathf.Max(64, (int)(Screen.height * scale));
             if (rt != null && rt.width == w && rt.height == h) return;
             if (rt != null) { refl.targetTexture = null; rt.Release(); Destroy(rt); }
-            rt = new RenderTexture(w, h, 24, RenderTextureFormat.DefaultHDR) { name = "PlanarReflection", useMipMap = true, autoGenerateMips = true, filterMode = FilterMode.Trilinear, wrapMode = TextureWrapMode.Clamp };
+            rt = new RenderTexture(w, h, 24, RenderTextureFormat.DefaultHDR) { name = "PlanarReflection", useMipMap = !GfxSetup.IsMobile, autoGenerateMips = !GfxSetup.IsMobile, filterMode = GfxSetup.IsMobile ? FilterMode.Bilinear : FilterMode.Trilinear, wrapMode = TextureWrapMode.Clamp };
             rt.Create();
             refl.targetTexture = rt;
             Shader.SetGlobalTexture(TexId, rt);
+        }
+
+        bool active = true;
+        int frame;
+        // phones: the mirror is redrawn every second frame; the texture keeps the last one in between
+        void Update()
+        {
+            if (refl == null || !GfxSetup.IsMobile) return;
+            refl.enabled = active && (++frame & 1) == 0;
         }
 
         void OnApplicationQuit() => Shutdown();

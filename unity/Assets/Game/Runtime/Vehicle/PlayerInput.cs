@@ -28,7 +28,7 @@ namespace HMD
             if (TouchRight) target += 1;
             target = Mathf.Clamp(target, -1, 1);
             // ease in, snap back faster (feels natural on buttons)
-            float rate = Mathf.Abs(target) > Mathf.Abs(steer) && Mathf.Sign(target) == Mathf.Sign(steer) ? 3.2f : 6f;
+            float rate = Mathf.Abs(target) > Mathf.Abs(steer) && Mathf.Sign(target) == Mathf.Sign(steer) ? 3.4f : 8f;   // strong self-centring
             steer = Mathf.MoveTowards(steer, target, rate * Time.deltaTime);
 
             car.steer = steer;

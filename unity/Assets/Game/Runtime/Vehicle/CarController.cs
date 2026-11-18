@@ -51,7 +51,14 @@ namespace HMD
         public System.Action OnNitroFull;
         // NOS: extra wheel torque, plus a push along the car that also works at the rev limiter, so it is a real shove
         // and a higher top speed (tuned with the test driver)
-        public static float NitroTorque = 1.15f, NitroPushG = 0.06f;   // sport: 100-180 38% quicker, top +10% (real 6 s tank)
+        public static float NitroTorque = 1.15f, NitroPushG = 0f;
+        /// <summary>NOS on the arcade curve: more push off the line and a higher top speed.</summary>
+        public static float NitroAccelGain = 1.45f, NitroTopGain = 1.12f;
+        const float LinearDamping = 0.01f;   // the value given to SetDamping below
+        const float RollingLoss = 0.016f;    // per m/s: the sport car stalled at 270 km/h without it
+        /// <summary>Share of the real engine torque still sent to the wheels while the arcade curve drives the car.</summary>
+        public static float WheelTorqueShare = 0.15f;
+        float arcadeA0, arcadeK;   // sport: 100-180 38% quicker, top +10% (real 6 s tank)
         public const float NitroBurnSecs = 6f, NitroRefillSecs = 40f;
         public bool Shifting => shiftTimer > 0;
         public bool Grounded { get; private set; }
@@ -69,7 +76,7 @@ namespace HMD
             spec = s;
             rb = GetComponent<Rigidbody>();
             rb.mass = s.weightKg;
-            rb.SetDamping(0.01f, 0.35f);
+            rb.SetDamping(LinearDamping, 0.35f);
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             rb.centerOfMass = new Vector3(0, 0.38f, 0.05f);
@@ -82,6 +89,10 @@ namespace HMD
             float vTop = s.topKmh / 3.6f;
             float watts = s.hp * 745.7f * 0.85f;
             dragK = watts / (vTop * vTop * vTop);  // F = k v^2
+            // arcade acceleration curve: from the spec, or from power to weight (hp per tonne)
+            float hpt = s.hp / (s.weightKg / 1000f);
+            arcadeA0 = s.accel0 > 0 ? s.accel0 : Mathf.Clamp(3.2f + hpt * 0.016f, 4f, 9f);
+            arcadeK = s.accelK > 0 ? s.accelK : 1.2f;
 
             float springPerWheel = s.weightKg * 9.81f / 4f / 0.09f; // ~9 cm static sag
             foreach (var w in wheels)
@@ -145,8 +156,8 @@ namespace HMD
             if (dynoMode) { DynoStep(dt, thr); return; }
 
             // --- steering: less lock at speed, smoothed, with a little counter-steer help
-            float speedFactor = Mathf.InverseLerp(10f, 200f, SpeedKmh);
-            float maxLock = Mathf.Lerp(34f, 7.5f, speedFactor);
+            float speedFactor = Mathf.Pow(Mathf.InverseLerp(10f, 290f, SpeedKmh), 0.8f);   // speed-sensitive: quick in town, calm at 300
+            float maxLock = Mathf.Lerp(34f, 5.5f, speedFactor);
             float target = steer * maxLock;
             // counter-steer assist: when the rear slides, steer into it a bit
             float slipAngle = Vector3.SignedAngle(transform.forward, v.sqrMagnitude > 4 ? v.normalized : transform.forward, Vector3.up);
@@ -200,6 +211,9 @@ namespace HMD
                 if (NitroAmount >= 1f) OnNitroFull?.Invoke();
             }
             float wheelT = engineT * ratio * 0.88f * nitroBoost;
+            // arcade drive (below): the push comes from the acceleration curve; the wheels keep a little real torque so
+            // they still bite, spin up at a launch and slide with the handbrake
+            if (Gear > 0) wheelT *= WheelTorqueShare;
             EngineLoad = thr;
 
             // traction control: back off torque when driven wheels spin much faster than the ground
@@ -218,7 +232,7 @@ namespace HMD
             }
 
             // --- brakes (with ABS) and handbrake
-            float brakeTorque = spec.weightKg * 2.6f;  // Nm per wheel at full pedal
+            float brakeTorque = spec.weightKg * 3.2f;  // Nm per wheel at full pedal (strong arcade brakes)
             for (int i = 0; i < 4; i++)
             {
                 float b = Gear == -1 ? (thr > 0.1f ? brakeTorque * thr : 0) : brakeTorque * brk;
@@ -253,6 +267,23 @@ namespace HMD
             float vv = v.magnitude;
             rb.AddForce(-v.normalized * dragK * vv * vv, ForceMode.Force);
             if (NitroActive && Gear > 0 && Grounded) rb.AddForce(transform.forward * rb.mass * 9.81f * NitroPushG, ForceMode.Force);
+            // --- arcade drive, mid-2000s street racer style: a set acceleration curve per car, strong off the line and
+            // fading to zero exactly at the car's top speed, plus whatever the air takes, so every car pulls through all its
+            // gears to its rated top speed. NOS lifts the curve and the top speed. Shifts cut the push for a moment.
+            if (Gear > 0 && Grounded && !inputLocked && thr > 0.01f)
+            {
+                float vF = Mathf.Max(0f, ForwardSpeed);
+                float vTop = spec.topKmh / 3.6f * (NitroActive ? NitroTopGain : 1f);
+                float a0 = arcadeA0 * (NitroActive ? NitroAccelGain : 1f);
+                // the curve fades towards 110% of top speed, so the car still pulls near the top; the last few km/h are a soft cap
+                float cap = Mathf.Clamp01((vTop - vF) / (vTop * 0.03f));
+                float aT = a0 * (1f - Mathf.Pow(Mathf.Clamp01(vF / (vTop * 1.1f)), arcadeK)) * cap;
+                // also what the body damping and the wheels (spin damping, tyre scrub, downforce load) take, measured on a flat strip
+                float f = thr * (rb.mass * aT + cap * (rb.mass * (LinearDamping + RollingLoss) * vF + dragK * vF * vF));   // nothing past top speed
+                if (shiftTimer > 0) f *= 0.3f;
+                if (brk > 0.1f) f = 0f;
+                rb.AddForce(transform.forward * f, ForceMode.Force);
+            }
             if (Grounded) rb.AddForce(-transform.up * vv * vv * 1.1f, ForceMode.Force);   // downforce
             // rolling resistance
             rb.AddForce(-v * spec.weightKg * 0.015f, ForceMode.Force);

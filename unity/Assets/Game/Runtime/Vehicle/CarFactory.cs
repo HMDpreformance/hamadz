@@ -208,6 +208,7 @@ namespace HMD
             }
             var lensMat = Res.Mat(new Color(0.42f, 0.015f, 0.01f), 0.95f, 0f); Res.SetEmission(lensMat, new Color(0.55f, 0.02f, 0.01f), null);
             var rimMat = Res.Mat(new Color(0.05f, 0.05f, 0.055f), 0.8f, 0.6f);
+            var centreMat = Res.Mat(new Color(0.9f, 0.1f, 0.06f), 0.95f, 0f); Res.SetEmission(centreMat, new Color(1.4f, 0.12f, 0.06f), null);
             var clearMat = Res.Mat(new Color(0.75f, 0.75f, 0.78f), 0.95f, 0.2f);
             var lamps = new Group(holder, "TailLenses");   // under the body: same layer and lights as the paint
             int made = 0;
@@ -222,15 +223,17 @@ namespace HMD
                 {
                     if (!Hit(sp.x, sp.y, out var p, out var n)) continue;
                     lampY += sp.y;
-                    Disc(lamps.t, "TailRim", p + n * 0.004f, n, 0.2f, rimMat);
-                    Disc(lamps.t, "TailLens", p + n * 0.008f, n, 0.17f, lensMat);
+                    Disc(lamps.t, "TailRim", p + n * 0.004f, n, 0.225f, rimMat);
+                    Disc(lamps.t, "TailLens", p + n * 0.008f, n, 0.19f, lensMat);
+                    Disc(lamps.t, "TailCentre", p + n * 0.011f, n, 0.07f, centreMat);   // bright centre, as in the design
                     made++;
                 }
                 if (made > 0)
                 {
                     lampY /= made;
                     // plate and badge: a body-colour panel over the middle of the tail, below the lamps
-                    var paint = Res.Paint(spec.paint);
+                    // matte and a shade darker: reads as a recess, and the rear rim light does not flare on it
+                    var paint = Res.Mat(spec.paint * 0.7f, 0.25f, 0f);
                     for (int i = 0; i < 2; i++)
                     {
                         float y = i == 0 ? lampY + 0.03f : lampY - 0.225f; float hh = i == 0 ? 0.09f : 0.21f;   // badge above the plate, plate between the lamps
@@ -257,6 +260,38 @@ namespace HMD
                     Box(lamps.t, "TailgateHandle", p + n * 0.02f + Vector3.up * 0.17f, n, new Vector3(0.3f, 0.07f, 0.02f), Res.Mat(new Color(0.8f, 0.8f, 0.82f), 0.95f, 1f));
                     made++;
                 }
+            }
+            var chrome = Res.Mat(new Color(0.85f, 0.85f, 0.88f), 0.9f, 0.5f); Res.SetEmission(chrome, new Color(0.12f, 0.12f, 0.13f), null);   // reads as chrome even in the dark
+            var dark = Res.Mat(new Color(0.02f, 0.02f, 0.025f), 0.3f, 0f);
+            if (spec.id == "sport")
+            {
+                // four round chrome tips in the dark lower valance, in the middle (as in the design's rear view)
+                foreach (float x in new[] { -0.225f, -0.075f, 0.075f, 0.225f })
+                    if (Hit(x, 0.37f, out var p, out var n))
+                    {
+                        Disc(lamps.t, "ExhaustTip", p + n * 0.02f, n, 0.1f, chrome);
+                        Disc(lamps.t, "ExhaustBore", p + n * 0.026f, n, 0.072f, dark);
+                    }
+            }
+            else
+            {
+                // black hides the truck's shape at night: chrome door handles and a clear dark gap between cab and bed
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    if (SideHit(s, -0.06f, 1.23f, out var hp, out var hn))
+                        Box(lamps.t, "DoorHandle", hp + hn * 0.015f, hn, new Vector3(0.2f, 0.04f, 0.02f), chrome);
+                    for (float y = 0.85f; y <= 1.5f; y += 0.13f)
+                        if (SideHit(s, -0.35f, y, out var bp, out var bn))
+                            Box(lamps.t, "CabBedGap", bp + bn * 0.006f, bn, new Vector3(0.03f, 0.135f, 0.01f), dark);
+                }
+            }
+            bool SideHit(int side, float z, float y, out Vector3 p, out Vector3 n)
+            {
+                p = Vector3.zero; n = Vector3.right * side; float best = float.MaxValue; bool any = false;
+                var o = root.TransformPoint(new Vector3(side * 3f, y, z)); var d = -root.right * side;
+                foreach (var hit in Physics.RaycastAll(o, d, 3f))
+                    if (cols.Contains(hit.collider) && hit.distance < best) { best = hit.distance; p = root.InverseTransformPoint(hit.point); n = root.InverseTransformDirection(hit.normal); any = true; }
+                return any;
             }
             foreach (var c in cols) Object.DestroyImmediate(c);
             Debug.Log($"[HMD] car {spec.id}: {made} tail lenses on the body");

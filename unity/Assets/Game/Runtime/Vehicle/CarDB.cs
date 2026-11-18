@@ -19,6 +19,8 @@ namespace HMD
         public Color paint = new Color(0.78f, 0.03f, 0.03f);
         public float wheelRadius = 0.33f;
         public float rideHeight = 0.0f;
+        /// <summary>Arcade drive: launch acceleration (m/s²) and how fast it fades towards top speed (0 = from power to weight).</summary>
+        public float accel0 = 0f, accelK = 0f;
     }
 
     /// <summary>The same 8 original cars as the Godot game (names and specs carried over).</summary>
@@ -46,8 +48,8 @@ namespace HMD
         {
             cars = new Dictionary<string, CarSpec>();
             // the two main cars (made-up names, no badges): an American V8 sports coupe and a full-size pickup
-            Add(new CarSpec { id = "sport", name = "VORTEX Z6", tag = "AMERICAN V8 SPORTS CAR", price = 0, hp = 400, torqueNm = 542, topKmh = 300, weightKg = 1440, handling = 84, drive = Drive.RWD, engine = "v8", cyl = "6.0L V8", length = 4.44f, rpmRedline = 6500, gears = new[] { 2.66f, 1.78f, 1.3f, 1.0f, 0.74f, 0.5f }, finalDrive = 3.42f, paint = new Color(0.78f, 0.03f, 0.03f) });
-            Add(new CarSpec { id = "pickup", name = "DUNE 1500", tag = "SINGLE CAB V8 STREET TRUCK", price = 0, hp = 315, torqueNm = 458, topKmh = 190, weightKg = 2080, handling = 52, drive = Drive.AWD, engine = "v8", cyl = "5.3L V8", length = 5.22f, rpmRedline = 5800, wheelRadius = 0.40f, finalDrive = 3.42f, paint = new Color(0.03f, 0.03f, 0.035f) });
+            Add(new CarSpec { id = "sport", name = "VORTEX Z6", tag = "AMERICAN V8 SPORTS CAR", price = 0, hp = 400, torqueNm = 542, topKmh = 300, weightKg = 1440, handling = 84, drive = Drive.RWD, engine = "v8", cyl = "6.0L V8", length = 4.44f, rpmRedline = 6500, gears = new[] { 3.33f, 2.53f, 1.92f, 1.46f, 1.11f, 0.84f }, finalDrive = 3.42f, accel0 = 6.9f, accelK = 0.9f, paint = new Color(0.78f, 0.03f, 0.03f) });   // short gears, 6th near redline at 300
+            Add(new CarSpec { id = "pickup", name = "DUNE 1500", tag = "SINGLE CAB V8 STREET TRUCK", price = 0, hp = 315, torqueNm = 458, topKmh = 200, weightKg = 2080, handling = 52, drive = Drive.AWD, engine = "v8", cyl = "5.3L V8", length = 5.22f, rpmRedline = 5800, wheelRadius = 0.40f, gears = new[] { 3.0f, 2.2f, 1.6f, 1.2f, 0.95f, 0.78f }, finalDrive = 4.3f, accel0 = 4.0f, accelK = 1.7f, paint = new Color(0.03f, 0.03f, 0.035f) });
             Add(new CarSpec { id = "tuner", name = "KAIDO RS-7", tag = "JAPANESE TUNER COUPE", price = 0, hp = 276, torqueNm = 353, topKmh = 245, weightKg = 1280, handling = 78, drive = Drive.RWD, engine = "i4", cyl = "2.0L TURBO I4", length = 4.45f, rpmRedline = 8000, paint = new Color(0.62f, 0.85f, 0.22f) });
             Add(new CarSpec { id = "muscle", name = "BRAWLER 427", tag = "AMERICAN MUSCLE", price = 18500, hp = 390, torqueNm = 624, topKmh = 254, weightKg = 1620, handling = 58, drive = Drive.RWD, engine = "v8", cyl = "7.0L V8", length = 4.75f, rpmRedline = 6500, gears = new[] { 2.9f, 1.9f, 1.35f, 1.0f, 0.8f }, finalDrive = 3.5f, paint = new Color(0.02f, 0.02f, 0.025f) });
             Add(new CarSpec { id = "euro", name = "VERANO GT", tag = "EUROPEAN PERFORMANCE", price = 32000, hp = 340, torqueNm = 420, topKmh = 275, weightKg = 1390, handling = 88, drive = Drive.RWD, engine = "i6", cyl = "3.6L FLAT 6", length = 4.5f, rpmRedline = 7800, paint = new Color(0.45f, 0.95f, 0.1f) });

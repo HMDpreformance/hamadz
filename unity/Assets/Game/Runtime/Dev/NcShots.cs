@@ -698,26 +698,35 @@ namespace HMD
                 float slope = Mathf.Abs(e11.pts[i + 30].y - e11.pts[i].y);
                 if (turn + slope * 3 < bestF) { bestF = turn + slope * 3; flat = i; }
             }
+            // a dead-flat, dead-straight 10 km test strip high above the city: clean numbers, no crests or bends
+            var strip = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            strip.name = "SpeedTestStrip";
+            strip.transform.position = new Vector3(1600f, 599.5f, 1000f);
+            strip.transform.localScale = new Vector3(40f, 1f, 10200f);
+            Physics.SyncTransforms();
             foreach (int mode in new[] { 0, 1, 2 })   // 0 no NOS, 1 NOS all the way (tank refilled), 2 NOS with the real tank
             {
-                var a = e11.pts[flat]; var b = e11.pts[flat + 1]; var dir = b - a; dir.y = 0;
-                car.Teleport(NewCity.Surface(a) + Vector3.up * 0.6f, Quaternion.LookRotation(dir));
-                car.NitroAmount = 1f; car.nitro = false;
+                car.Teleport(new Vector3(1600f, 600.6f, 1000f - 5000f), Quaternion.identity);
+                car.NitroAmount = 1f; car.nitro = false; car.steer = 0; car.brake = 0; car.throttle = 0;
                 yield return new WaitForSeconds(1.5f);
                 float t = 0, t60 = -1, t100 = -1, t180 = -1, t200 = -1, top = 0, topT = 0;
-                yield return Follow(car, e11, flat, 999f, 60f, tt =>
+                while (t < 110f && car.transform.position.z < 1000f + 5050f)
                 {
-                    t = tt; float v = car.SpeedKmh;
+                    t += Time.fixedDeltaTime; float v = car.ForwardSpeed * 3.6f;   // along the strip (not falling speed)
+                    car.throttle = 1f; car.brake = 0; car.steer = Mathf.Clamp((1600f - car.transform.position.x) * 0.02f - car.transform.forward.x * 3f, -0.4f, 0.4f);   // keep to the middle
                     car.nitro = mode > 0;
                     if (mode == 1) car.NitroAmount = 1f;
-                    if (t60 < 0 && v >= 60) t60 = tt; if (t100 < 0 && v >= 100) t100 = tt; if (t180 < 0 && v >= 180) t180 = tt; if (t200 < 0 && v >= 200) t200 = tt;
-                    if (v > top + 0.5f) { top = v; topT = tt; }
-                    return tt - topT > 6f && tt > 20f ? new Vector3(9, 0, 0) : new Vector3(0, 0, 1);   // stop when no faster for 6 s
-                });
-                car.nitro = false;
+                    if (t60 < 0 && v >= 60) t60 = t; if (t100 < 0 && v >= 100) t100 = t; if (t180 < 0 && v >= 180) t180 = t; if (t200 < 0 && v >= 200) t200 = t;
+                    if (v > top + 0.5f) { top = v; topT = t; }
+                    if (t - topT > 6f && t > 20f) break;   // no faster for 6 s
+                    if (car.transform.position.y < 595f) { Debug.Log("[HMD] nos test: left the strip"); break; }
+                    yield return new WaitForFixedUpdate();
+                }
+                car.nitro = false; car.throttle = 0;
                 string F(float x) => x < 0 ? "-" : x.ToString("F1");
-                Debug.Log($"[HMD] nos {car.spec.id} {(mode == 0 ? "no NOS" : mode == 1 ? "NOS (full tank all the way)" : "NOS (real 6 s tank)")}: 0-100 {F(t100)} s, 100-180 {(t180 > 0 && t100 > 0 ? F(t180 - t100) : "-")} s, 60-200 {(t200 > 0 && t60 > 0 ? F(t200 - t60) : "-")} s, 100-200 {(t200 > 0 && t100 > 0 ? F(t200 - t100) : "-")} s, top {top:F0} km/h at {topT:F0} s, gear {car.Gear}");
+                Debug.Log($"[HMD] nos {car.spec.id} {(mode == 0 ? "no NOS" : mode == 1 ? "NOS (full tank all the way)" : "NOS (real 6 s tank)")}: 0-100 {F(t100)} s, 0-200 {F(t200)} s, 100-180 {(t180 > 0 && t100 > 0 ? F(t180 - t100) : "-")} s, 60-200 {(t200 > 0 && t60 > 0 ? F(t200 - t60) : "-")} s, 100-200 {(t200 > 0 && t100 > 0 ? F(t200 - t100) : "-")} s, top {top:F0} km/h at {topT:F0} s, gear {car.Gear}");
             }
+            Destroy(strip);
         }
 
         /// <summary>-ncdrive bridge: the Creek Bridge foot at the Downtown Ring (near 3402,2061, a short steep stretch),

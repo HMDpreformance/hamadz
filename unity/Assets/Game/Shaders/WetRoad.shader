@@ -170,6 +170,9 @@ Shader "HMD/WetRoad"
                 }
 
                 color.rgb = MixFog(color.rgb, inputData.fogCoord);
+                // half precision on phones: never write NaN, a negative or a near-infinite value into the HDR target
+                // (the bloom would spread one such pixel into a coloured block)
+                color.rgb = any(isnan(color.rgb)) ? half3(0, 0, 0) : clamp(color.rgb, 0.0, 512.0);
                 color.a = 1;
                 outColor = color;
             }

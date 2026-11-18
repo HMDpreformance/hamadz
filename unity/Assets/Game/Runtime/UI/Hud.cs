@@ -43,6 +43,9 @@ namespace HMD
 
             // FPS: top middle
             fps = UIKit.Label("FPS", root, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -14), new Vector2(240, 44), "FPS --", 30, new Color(0.78f, 0.93f, 1f), TextAnchor.MiddleCenter, Res.TitleFont);
+            // long-press the FPS readout: the PERF panel (switch costs on and off on the phone and read the frame rate)
+            fps.raycastTarget = true;
+            fps.gameObject.AddComponent<LongPress>().onLongPress = PerfPanel.Toggle;
 
             // GARAGE button top-right
             UIKit.Btn("GarageBtn", root, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-28, -24), new Vector2(250, 86), "GARAGE", () => OnGarage?.Invoke(), new Color(0.24f, 0.63f, 1f), 40);

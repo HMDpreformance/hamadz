@@ -128,15 +128,19 @@ namespace HMD
             data.renderShadows = true;
             if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset urp)
             {
-                urp.renderScale = IsMobile ? PickRenderScale() : 1f;
+                urp.renderScale = AutoRenderScale = IsMobile ? PickRenderScale() : 1f;
                 urp.shadowDistance = QualitySettings.shadowDistance;
                 urp.supportsHDR = true;
+                // Two renderers (HMD > Setup Project): 0 = default WITHOUT SSAO (the road mirror and the paint probe use it),
+                // 1 = the same renderer WITH SSAO, for this camera only. An older asset with one renderer keeps b8's
+                // behaviour (SSAO on every camera) rather than switching the feature per camera.
+                hasSsaoRenderer = urp.rendererDataList.Length > RendererWithSsao && urp.rendererDataList[RendererWithSsao] != null;
             }
             BuildVolume();
             mainCam = cam;
-            ssao = FindFeature("SSAO");
-            RenderPipelineManager.beginCameraRendering += OnBeginCamera;
-            RenderPipelineManager.endCameraRendering += OnEndCamera;
+            data.SetRenderer(hasSsaoRenderer ? RendererWithSsao : RendererNoSsao);
+            // Stop NaNs: one bad half-float pixel (Mali, HDR) would otherwise spread through the bloom into coloured blocks
+            data.stopNaN = true;
 #endif
             // the wet road mirror
             if (PlanarReflection.Wanted)
@@ -161,6 +165,7 @@ namespace HMD
             var profile = ScriptableObject.CreateInstance<VolumeProfile>();
             // soft wide bloom: lights glow into the wet air without blowing out
             var bloom = profile.Add<Bloom>(true);
+            this.bloom = bloom;
             // lamps, signs and lit windows are well above 1 (HDR): a threshold of 1 lets them bloom hard while lit
             // walls and road (below 1) stay crisp; less scatter keeps the glow round the light instead of a wash
             bloom.intensity.Override(IsMobile ? 0.9f : 1.15f);
@@ -248,45 +253,38 @@ namespace HMD
         int probeRender;
 
 #if HMD_URP
-        // SSAO (DepthNormals prepass + full-screen AO) only for the main view. The road mirror (a fifth of the
-        // resolution, blurred) and the paint probe (64 px) cannot show AO, but each paid a full extra geometry pass for it.
-        ScriptableRendererFeature ssao;
+        // SSAO (DepthNormals prepass + full-screen AO) only for the main view: the road mirror (a fifth of the resolution,
+        // blurred) and the paint probe (64 px) cannot show AO. b9 (r15) did that by calling ssao.SetActive(cam == mainCam)
+        // in beginCameraRendering for every camera every frame, and pushed/popped QualitySettings.lodBias and
+        // meshLodThreshold round the mirror and probe. It was the first build to change render state between the cameras
+        // of one frame, and the first to flash coloured garbage on the S21 (Mali-G78, Vulkan): the SSAO pass, its
+        // DepthNormals prepass and its transient AO texture came and went from the render graph three times a frame.
+        // Now nothing changes per camera: SSAO lives in renderer 1, which only the main camera uses, and the quality
+        // settings stay put (the mirror's target is a fifth of the screen, so screen-space-error Mesh LODs already go
+        // coarser there on their own).
+        public const int RendererNoSsao = 0, RendererWithSsao = 1;
+        bool hasSsaoRenderer;
         Camera mainCam;
-        float lodBiasMain, meshLodMain;
-        void OnBeginCamera(ScriptableRenderContext ctx, Camera cam)
-        {
-            if (ssao != null) ssao.SetActive(cam == mainCam && !PerfProbe.SsaoOff);
-            if (cam == mainCam) return;
-            // mirror and probe: coarser mesh LODs (same textures and glow; both are drawn small and soft)
-            if (cam.cameraType == CameraType.Reflection || (PlanarReflection.I && PlanarReflection.I.IsCamera(cam)))
-            {
-                lodBiasMain = QualitySettings.lodBias; meshLodMain = QualitySettings.meshLodThreshold;
-                QualitySettings.lodBias = lodBiasMain * 0.7f;
-                QualitySettings.meshLodThreshold = meshLodMain * 4f;
-                lodPushed = true;
-            }
-        }
-        bool lodPushed;
-        void OnEndCamera(ScriptableRenderContext ctx, Camera cam)
-        {
-            if (!lodPushed) return;
-            lodPushed = false;
-            QualitySettings.lodBias = lodBiasMain; QualitySettings.meshLodThreshold = meshLodMain;
-        }
-        void OnDestroy()
-        {
-            RenderPipelineManager.beginCameraRendering -= OnBeginCamera;
-            RenderPipelineManager.endCameraRendering -= OnEndCamera;
-            if (ssao != null) ssao.SetActive(true);
-        }
+        Bloom bloom;
+        /// <summary>The render scale picked for this device at start (the perf panel's "auto").</summary>
+        public static float AutoRenderScale = 1f;
+        public static GfxSetup I;
+        void Awake() => I = this;
 
-        static ScriptableRendererFeature FindFeature(string name)
+        // ---- perf panel switches (PerfPanel): each one changes a setting once, when tapped, never per camera
+        public bool Ssao => hasSsaoRenderer && ssaoOn;
+        bool ssaoOn = true;
+        public void SetSsao(bool on)
         {
-            if (!(GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset u)) return null;
-            foreach (var d in u.rendererDataList)
-                if (d != null) foreach (var f in d.rendererFeatures) if (f != null && f.name == name) return f;
-            return null;
+            ssaoOn = on;
+            if (mainCam && hasSsaoRenderer) mainCam.GetUniversalAdditionalCameraData().SetRenderer(on ? RendererWithSsao : RendererNoSsao);
         }
+        public bool StopNaN => mainCam && mainCam.GetUniversalAdditionalCameraData().stopNaN;
+        public void SetStopNaN(bool on) { if (mainCam) mainCam.GetUniversalAdditionalCameraData().stopNaN = on; }
+        public bool BloomOn => bloom != null && bloom.active;
+        public void SetBloom(bool on) { if (bloom != null) bloom.active = on; }
+        public bool ProbeOn => probe && probe.enabled;
+        public void SetProbe(bool on) { if (probe) probe.enabled = on; }
 #endif
 
 #if HMD_URP

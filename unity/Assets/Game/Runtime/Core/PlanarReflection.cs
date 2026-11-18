@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Experimental.Rendering;
 #if HMD_URP
 using UnityEngine.Rendering.Universal;
 #endif
@@ -49,6 +50,7 @@ namespace HMD
             d.requiresDepthTexture = false;
             d.requiresColorTexture = false;
             d.antialiasing = AntialiasingMode.None;
+            d.SetRenderer(GfxSetup.RendererNoSsao);   // the default renderer, without SSAO (only the main view has AO)
 #endif
             MakeRT();
             RenderPipelineManager.beginCameraRendering += OnBegin;
@@ -61,10 +63,22 @@ namespace HMD
             int w = Mathf.Max(64, (int)(Screen.width * scale)), h = Mathf.Max(64, (int)(Screen.height * scale));
             if (rt != null && rt.width == w && rt.height == h) return;
             if (rt != null) { refl.targetTexture = null; rt.Release(); Destroy(rt); }
-            rt = new RenderTexture(w, h, 24, RenderTextureFormat.DefaultHDR) { name = "PlanarReflection", useMipMap = !GfxSetup.IsMobile, autoGenerateMips = !GfxSetup.IsMobile, filterMode = GfxSetup.IsMobile ? FilterMode.Bilinear : FilterMode.Trilinear, wrapMode = TextureWrapMode.Clamp };
+            // phones: B10G11R11 (32 bits, no sign bit, so no negative values reach the road) where it can be rendered to,
+            // instead of 64-bit half floats: half the memory traffic on a tile-based GPU. PCs keep DefaultHDR.
+            bool small = GfxSetup.IsMobile && SystemInfo.IsFormatSupported(GraphicsFormat.B10G11R11_UFloatPack32, GraphicsFormatUsage.Render);
+            var desc = new RenderTextureDescriptor(w, h, small ? RenderTextureFormat.RGB111110Float : RenderTextureFormat.DefaultHDR, 24)
+            { useMipMap = !GfxSetup.IsMobile, autoGenerateMips = !GfxSetup.IsMobile, msaaSamples = 1 };
+            rt = new RenderTexture(desc) { name = "PlanarReflection", filterMode = GfxSetup.IsMobile ? FilterMode.Bilinear : FilterMode.Trilinear, wrapMode = TextureWrapMode.Clamp };
             rt.Create();
+            // a new render texture holds whatever was in that memory before; on phones the mirror camera only draws every
+            // second frame, so the road could sample it once before it was ever drawn: clear it to black once here
+            var prev = RenderTexture.active;
+            RenderTexture.active = rt;
+            GL.Clear(true, true, Color.black);
+            RenderTexture.active = prev;
             refl.targetTexture = rt;
             Shader.SetGlobalTexture(TexId, rt);
+            Debug.Log($"[HMD] planar mirror RT {w}x{h} {rt.graphicsFormat}");
         }
 
         bool active = true;
@@ -73,7 +87,17 @@ namespace HMD
         void Update()
         {
             if (refl == null || !GfxSetup.IsMobile) return;
-            refl.enabled = active && (++frame & 1) == 0;
+            refl.enabled = active && !PanelOff && (++frame & 1) == 0;
+        }
+
+        /// <summary>Perf panel: mirror off (the road keeps its wet sheen and the paint probe reflection).</summary>
+        public static bool PanelOff;
+        public void SetPanelOff(bool off)
+        {
+            PanelOff = off;
+            bool on = active && !off;
+            if (refl) refl.enabled = on;
+            Shader.SetGlobalFloat(OnId, on ? 1f : 0f);
         }
 
         void OnApplicationQuit() => Shutdown();
@@ -94,6 +118,7 @@ namespace HMD
         public void SetActive(bool on)
         {
             active = on;   // (phones: Update re-enabled the camera every other frame, so the mirror kept rendering in the workshop)
+            on &= !PanelOff;
             if (refl) refl.enabled = on;
             Shader.SetGlobalFloat(OnId, on ? 1f : 0f);
         }

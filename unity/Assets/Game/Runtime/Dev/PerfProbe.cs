@@ -27,7 +27,6 @@ namespace HMD
         public static int TargetPixels;   // > 0: render scale set so the frame has this many pixels (equal GPU load between runs)
         public static string Tag = "before";
         public static bool Busy;
-        public static bool SsaoOff;   // A/B: GfxSetup keeps SSAO off for every camera while set
 
         public static void Run()
         {
@@ -273,7 +272,7 @@ namespace HMD
 #endif
             yield return new Toggle { name = "farclip600", off = () => { var c = g.rig.Cam; float o = c.farClipPlane; c.farClipPlane = 600f; return () => c.farClipPlane = o; } };
 #if HMD_URP
-            yield return new Toggle { name = "-ssao", off = () => { var f = Feature("SSAO"); if (f == null) return null; SsaoOff = true; f.SetActive(false); return () => { SsaoOff = false; f.SetActive(true); }; } };
+            yield return new Toggle { name = "-ssao", off = () => { var gx = GfxSetup.I; if (gx == null || !gx.Ssao) return null; gx.SetSsao(false); return () => gx.SetSsao(true); } };   // main camera's renderer 1 -> 0, never the feature
 #endif
         }
 

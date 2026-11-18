@@ -177,7 +177,29 @@ namespace HMD.EditorTools
         }
 
         // ---------------------------------------------------------------- render pipeline
-        static void MakePipeline()
+#if HMD_URP
+        /// <summary>Removes the SSAO feature (and its sub-asset and feature-map entry) from a renderer.</summary>
+        static void StripSsao(ScriptableRendererData rd)
+        {
+            var mapField = typeof(ScriptableRendererData).GetField("m_RendererFeatureMap", BindingFlags.NonPublic | BindingFlags.Instance);
+            var map = mapField?.GetValue(rd) as System.Collections.Generic.List<long>;
+            bool changed = false;
+            for (int i = rd.rendererFeatures.Count - 1; i >= 0; i--)
+            {
+                var f = rd.rendererFeatures[i];
+                if (!(f is ScreenSpaceAmbientOcclusion)) continue;
+                rd.rendererFeatures.RemoveAt(i);
+                if (map != null && i < map.Count) map.RemoveAt(i);
+                if (f != null) { AssetDatabase.RemoveObjectFromAsset(f); Object.DestroyImmediate(f, true); }
+                changed = true;
+            }
+            if (!changed) return;
+            EditorUtility.SetDirty(rd);
+            AssetDatabase.SaveAssets();
+        }
+#endif
+
+        public static void MakePipeline()
         {
 #if HMD_URP
             const string dir = "Assets/Settings";
@@ -212,8 +234,36 @@ namespace HMD.EditorTools
                 asset = UniversalRenderPipelineAsset.Create(data);
                 AssetDatabase.CreateAsset(asset, dir + "/HMD_URP.asset");
             }
-            // renderer: Forward+ so many lamp lights work
-            var rd = AssetDatabase.LoadAssetAtPath<ScriptableRendererData>(dir + "/HMD_Renderer.asset");
+            // Two renderers, both Forward+ (so many lamp lights work):
+            //   0 HMD_Renderer       (default) WITHOUT SSAO: the road mirror and the paint probe
+            //   1 HMD_Renderer_SSAO  the same WITH SSAO: only the main camera (GfxSetup sets it)
+            // b9 had one renderer and switched the SSAO feature on and off per camera in beginCameraRendering, which
+            // flashed coloured garbage on the S21 (Mali-G78, Vulkan); nothing switches per camera now.
+            var rd0 = AssetDatabase.LoadAssetAtPath<ScriptableRendererData>(dir + "/HMD_Renderer.asset");
+            const string ssaoPath = dir + "/HMD_Renderer_SSAO.asset";
+            if (rd0 != null && AssetDatabase.LoadAssetAtPath<ScriptableRendererData>(ssaoPath) == null)
+            {
+                AssetDatabase.SaveAssets();
+                AssetDatabase.CopyAsset(dir + "/HMD_Renderer.asset", ssaoPath);   // same post-processing data, shaders, settings
+            }
+            var rd = AssetDatabase.LoadAssetAtPath<ScriptableRendererData>(ssaoPath);
+            if (rd0 != null)
+            {
+                var so0 = new SerializedObject(rd0);
+                SetInt(so0, "m_RenderingMode", 2);
+                so0.ApplyModifiedPropertiesWithoutUndo();
+                StripSsao(rd0);
+            }
+            if (rd != null && rd0 != null)
+            {
+                var sl = new SerializedObject(asset);
+                var list = sl.FindProperty("m_RendererDataList");
+                list.arraySize = 2;
+                list.GetArrayElementAtIndex(0).objectReferenceValue = rd0;
+                list.GetArrayElementAtIndex(1).objectReferenceValue = rd;
+                SetInt(sl, "m_DefaultRendererIndex", 0);
+                sl.ApplyModifiedPropertiesWithoutUndo();
+            }
             if (rd != null)
             {
                 var so = new SerializedObject(rd);
@@ -397,6 +447,8 @@ namespace HMD.EditorTools
             PlayerSettings.allowedAutorotateToLandscapeLeft = true;
             PlayerSettings.allowedAutorotateToLandscapeRight = true;
             PlayerSettings.colorSpace = ColorSpace.Linear;
+            // CPU and GPU frame times for the in-game perf panel (FrameTimingManager); tells GPU-bound from CPU-bound on the phone
+            PlayerSettings.enableFrameTimingStats = true;
             PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "com.redlinefoundry.hmdnightclub");
             PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
@@ -448,6 +500,8 @@ namespace HMD.EditorTools
         public static void Android()
         {
             MeshLodBake.BakeAll();
+            MakePipeline();   // the two renderers (SSAO only on the main camera); quick when they are already there
+            PlayerSettings.enableFrameTimingStats = true;   // CPU/GPU frame times in the perf panel
             int code = PlayerSettings.Android.bundleVersionCode + 1;
             PlayerSettings.Android.bundleVersionCode = code;
             EditorUserBuildSettings.buildAppBundle = false;

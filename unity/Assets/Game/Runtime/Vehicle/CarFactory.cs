@@ -31,9 +31,11 @@ namespace HMD
             holder.SetParent(root.transform, false);
             foundLamps = default;
             var prefab = Res.Load<GameObject>("Cars/" + id);
+            GameObject modelGo = null;
             if (prefab != null)
             {
                 var model = Object.Instantiate(prefab, holder);
+                modelGo = model;
                 model.name = "Model";
                 model.transform.localPosition = Vector3.zero;
                 model.transform.localRotation = Quaternion.identity;
@@ -160,6 +162,7 @@ namespace HMD
 
             // --- lights
             AddLights(root.transform, spec, L, halfW, height, player, Mathf.Min(yF - rF, yR - rR) + 0.05f);
+            if (modelGo != null && (id == "sport" || id == "pickup")) RearDetail(root.transform, holder, modelGo, spec, L, halfW, height);
 
             if (player)
             {
@@ -182,6 +185,103 @@ namespace HMD
         }
 
         static (List<LampFinder.Lens> tail, List<LampFinder.Lens> head) foundLamps;
+
+        /// <summary>
+        /// The new main car bodies (2026-11-18) have the tail lamps only painted dark into the texture, and the sport car a
+        /// small plate with lettering and a badge. Real lenses go on the body surface (found by casting rays at the body
+        /// mesh): four round red lenses with a dark rim on the sport car (like Hamad's design picture), tall red lenses with
+        /// a clear reverse part on the pickup. On the sport car the plate and badge are covered with body paint (no logos).
+        /// </summary>
+        static void RearDetail(Transform root, Transform holder, GameObject model, CarSpec spec, float L, float halfW, float h)
+        {
+            var cols = new List<Collider>();
+            foreach (var mf in model.GetComponentsInChildren<MeshFilter>())
+                if (mf.sharedMesh != null) { var mc = mf.gameObject.AddComponent<MeshCollider>(); mc.sharedMesh = mf.sharedMesh; cols.Add(mc); }
+            Physics.SyncTransforms();
+            bool Hit(float x, float y, out Vector3 p, out Vector3 n)
+            {
+                p = Vector3.zero; n = Vector3.back; float best = float.MaxValue; bool any = false;
+                var o = root.TransformPoint(new Vector3(x, y, -L)); var d = root.forward;
+                foreach (var hit in Physics.RaycastAll(o, d, L * 1.6f))
+                    if (cols.Contains(hit.collider) && hit.distance < best) { best = hit.distance; p = root.InverseTransformPoint(hit.point); n = root.InverseTransformDirection(hit.normal); any = true; }
+                return any;
+            }
+            var lensMat = Res.Mat(new Color(0.42f, 0.015f, 0.01f), 0.95f, 0f); Res.SetEmission(lensMat, new Color(0.55f, 0.02f, 0.01f), null);
+            var rimMat = Res.Mat(new Color(0.05f, 0.05f, 0.055f), 0.8f, 0.6f);
+            var clearMat = Res.Mat(new Color(0.75f, 0.75f, 0.78f), 0.95f, 0.2f);
+            var lamps = new Group(holder, "TailLenses");   // under the body: same layer and lights as the paint
+            int made = 0;
+            if (spec.id == "sport")
+            {
+                // lens centres: where the new body has its four lamps painted (measured on the model, metres from the car centre / ground)
+                var spots = new List<Vector2>();
+                foreach (float x in new[] { -0.78f, -0.54f, 0.54f, 0.78f }) spots.Add(new Vector2(x, 0.98f));
+
+                float lampY = 0;
+                foreach (var sp in spots)
+                {
+                    if (!Hit(sp.x, sp.y, out var p, out var n)) continue;
+                    lampY += sp.y;
+                    Disc(lamps.t, "TailRim", p + n * 0.004f, n, 0.2f, rimMat);
+                    Disc(lamps.t, "TailLens", p + n * 0.008f, n, 0.17f, lensMat);
+                    made++;
+                }
+                if (made > 0)
+                {
+                    lampY /= made;
+                    // plate and badge: a body-colour panel over the middle of the tail, below the lamps
+                    var paint = Res.Paint(spec.paint);
+                    for (int i = 0; i < 2; i++)
+                    {
+                        float y = i == 0 ? lampY + 0.03f : lampY - 0.225f; float hh = i == 0 ? 0.09f : 0.21f;   // badge above the plate, plate between the lamps
+                        if (!Hit(0f, y, out var p, out var n)) continue;
+                        var q = GameObject.CreatePrimitive(PrimitiveType.Quad); Object.DestroyImmediate(q.GetComponent<Collider>());
+                        q.name = i == 0 ? "BadgeCover" : "PlateCover"; q.transform.SetParent(lamps.t, false);
+                        q.transform.localPosition = p + n * 0.006f; q.transform.localRotation = Quaternion.LookRotation(-n, Vector3.up);
+                        q.transform.localScale = new Vector3(i == 0 ? 0.22f : 0.47f, hh, 1f);
+                        var r = q.GetComponent<Renderer>(); r.sharedMaterial = paint; r.shadowCastingMode = ShadowCastingMode.Off;
+                    }
+                }
+            }
+            else
+            {
+                // the pickup body has its tall tail lamps painted well enough; the middle of the tailgate had a crumpled smear
+                // where the source picture had a badge and handle: a clean body-colour panel with a chrome handle on top
+                if (Hit(0f, 1.12f, out var p, out var n))
+                {
+                    var q = GameObject.CreatePrimitive(PrimitiveType.Quad); Object.DestroyImmediate(q.GetComponent<Collider>());
+                    q.name = "TailgatePanel"; q.transform.SetParent(lamps.t, false);
+                    q.transform.localPosition = p + n * 0.008f; q.transform.localRotation = Quaternion.LookRotation(-n, Vector3.up);
+                    q.transform.localScale = new Vector3(1.3f, 0.46f, 1f);
+                    var r = q.GetComponent<Renderer>(); r.sharedMaterial = Res.Paint(spec.paint); r.shadowCastingMode = ShadowCastingMode.Off;
+                    Box(lamps.t, "TailgateHandle", p + n * 0.02f + Vector3.up * 0.17f, n, new Vector3(0.3f, 0.07f, 0.02f), Res.Mat(new Color(0.8f, 0.8f, 0.82f), 0.95f, 1f));
+                    made++;
+                }
+            }
+            foreach (var c in cols) Object.DestroyImmediate(c);
+            Debug.Log($"[HMD] car {spec.id}: {made} tail lenses on the body");
+        }
+
+
+        struct Group { public Transform t; public Group(Transform parent, string name) { t = new GameObject(name).transform; t.SetParent(parent, false); } }
+
+        static void Disc(Transform parent, string name, Vector3 p, Vector3 n, float d, Material m)
+        {
+            var g = GameObject.CreatePrimitive(PrimitiveType.Cylinder); Object.DestroyImmediate(g.GetComponent<Collider>());
+            g.name = name; g.transform.SetParent(parent, false);
+            g.transform.localPosition = p; g.transform.localRotation = Quaternion.FromToRotation(Vector3.up, n);
+            g.transform.localScale = new Vector3(d, 0.006f, d);
+            var r = g.GetComponent<Renderer>(); r.sharedMaterial = m; r.shadowCastingMode = ShadowCastingMode.Off;
+        }
+
+        static void Box(Transform parent, string name, Vector3 p, Vector3 n, Vector3 size, Material m)
+        {
+            var g = GameObject.CreatePrimitive(PrimitiveType.Cube); Object.DestroyImmediate(g.GetComponent<Collider>());
+            g.name = name; g.transform.SetParent(parent, false);
+            g.transform.localPosition = p; g.transform.localRotation = Quaternion.LookRotation(-n, Vector3.up);
+            g.transform.localScale = size;
+            var r = g.GetComponent<Renderer>(); r.sharedMaterial = m; r.shadowCastingMode = ShadowCastingMode.Off;
+        }
 
         static Mesh halfLiner;
         /// <summary>
@@ -378,7 +478,7 @@ namespace HMD
             var tailMat = Res.Particle(new Color(1f, 0.08f, 0.05f, 0.85f), Res.SoftBox);
             var roundMat = Res.Particle(new Color(1f, 0.08f, 0.05f, 0.85f), Res.SoftDot);
             bool roundLamps = spec.id == "sport";
-            if (foundLamps.tail != null && foundLamps.tail.Count >= 2)
+            if (foundLamps.tail != null && foundLamps.tail.Count >= 2 && spec.id != "sport")   // the new sport body: its lamps are only painted, use the measured spots
             {
                 // measured on the real lenses: same place, same shape
                 foreach (var lens in foundLamps.tail)
@@ -401,7 +501,7 @@ namespace HMD
         {
             switch (id)
             {
-                case "sport": return new[] { new Lamp(0.48f, 0.67f, 0.05f, 0.24f, 0.24f, true), new Lamp(0.76f, 0.67f, 0.11f, 0.24f, 0.24f, true) };   // four round lamps
+                case "sport": return new[] { new Lamp(0.465f, 0.77f, 0.05f, 0.19f, 0.19f, true), new Lamp(0.67f, 0.77f, 0.11f, 0.19f, 0.19f, true) };   // four round lamps (2026-11-18 body)
                 case "pickup": return new[] { new Lamp(0.93f, 0.66f, -0.06f, 0.15f, 0.42f, false) };   // tall vertical lamps on the bed corners
                 default: return new[] { new Lamp(0.72f, 0.66f, -0.03f, 0.44f, 0.1f, false) };
             }

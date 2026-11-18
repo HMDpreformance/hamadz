@@ -166,7 +166,8 @@ namespace HMD
             rig.StartIntro();
             yield return Fade(1, 0, 1.2f);
 
-            if (AutoShots) { if (newCity) gameObject.AddComponent<NcShots>(); else gameObject.AddComponent<AutoShots>(); }
+            if (PerfProbe.Wanted) gameObject.AddComponent<PerfProbe>();
+            else if (AutoShots) { if (newCity) gameObject.AddComponent<NcShots>(); else gameObject.AddComponent<AutoShots>(); }
         }
 
         /// <summary>New city: a concrete driveway from the LSX forecourt down/up to the road in front (door faces -Z).</summary>

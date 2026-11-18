@@ -6,6 +6,15 @@ using UnityEngine.Rendering.Universal;
 
 namespace HMD
 {
+    /// <summary>The command line, read once. System.Environment.CommandLine joins the arguments into a new string on every
+    /// call, so asking it every frame made garbage each frame (GC pauses on phones).</summary>
+    public static class Cmd
+    {
+        static string line;
+        public static string Line => line ??= System.Environment.CommandLine;
+        public static bool Has(string flag) => Line.Contains(flag);
+    }
+
     /// <summary>
     /// The look: night sky, moonlight with soft shadows, purple-blue haze, a reflection probe that
     /// follows the camera (neon and lamps reflect in paint and on the road), HDR bloom, filmic tone
@@ -16,8 +25,9 @@ namespace HMD
     {
         /// <summary>Phone settings. -mobile on the command line (or ForceMobile in the Editor) runs the exact phone path
         /// on a PC, to measure and look at it without a phone.</summary>
-        public static bool IsMobile => Application.isMobilePlatform || ForceMobile || System.Environment.CommandLine.Contains("-mobile")
-            || (Application.isEditor && PlayerPrefs.GetInt("hmd_mobile", 0) == 1);   // Editor: survives the Play-mode reload
+        public static bool IsMobile => ForceMobile || (isMobile ??= Application.isMobilePlatform || Cmd.Has("-mobile")
+            || (Application.isEditor && PlayerPrefs.GetInt("hmd_mobile", 0) == 1));   // Editor: survives the Play-mode reload
+        static bool? isMobile;   // worked out once: many scripts ask every frame (the command line is rebuilt as a new string per call)
         public static bool ForceMobile;
         ReflectionProbe probe;
         Transform follow;
@@ -88,6 +98,10 @@ namespace HMD
             QualitySettings.shadowDistance = IsMobile ? 45f : 110f;
             QualitySettings.pixelLightCount = IsMobile ? 6 : 16;
             QualitySettings.lodBias = IsMobile ? 1f : 2f;
+            // Mesh LODs (MeshLodStore): how much screen-space error a coarser level may have before the renderer keeps the
+            // finer one. Phones: 4 (measured at Marina: 6.3M -> 2.3M triangles a frame; a pixel diff against 1 shows the
+            // towers, palms and car unchanged, only rain and far haze noise, like two shots at the same setting).
+            QualitySettings.meshLodThreshold = IsMobile ? 4f : 1f;
 
             // reflections: one realtime probe around the camera, updated a face at a time
             probe = new GameObject("CamProbe").AddComponent<ReflectionProbe>();
@@ -119,6 +133,10 @@ namespace HMD
                 urp.supportsHDR = true;
             }
             BuildVolume();
+            mainCam = cam;
+            ssao = FindFeature("SSAO");
+            RenderPipelineManager.beginCameraRendering += OnBeginCamera;
+            RenderPipelineManager.endCameraRendering += OnEndCamera;
 #endif
             // the wet road mirror
             if (PlanarReflection.Wanted)
@@ -204,10 +222,72 @@ namespace HMD
                 else sky.SetFloat("_GlowBoost", 0f);
             }
             if (probe == null || follow == null) return;
+            if (!IsMobile)
+            {
+                probe.transform.position = follow.position + Vector3.up * 1.5f;
+                if (++probeFrame % 2 == 0) probe.RenderProbe();
+                return;
+            }
+            // phones: the probe sees the street round the camera, which only changes when the camera moves. Re-render it
+            // when the camera has moved ProbeStep metres (at speed that is as often as before: every 12 frames was ~11 m
+            // at 100 km/h and 30 fps), or every few seconds when standing (lights and traffic still change). One render
+            // at a time: a new render is only started once the time-sliced one before it has finished.
+            if (!probe.isActiveAndEnabled) { probeRender = 0; probeAt = new Vector3(1e6f, 0, 0); return; }   // workshop: redo on the way out
+            if (probeRender != 0 && !probe.IsFinishedRendering(probeRender)) return;
+            float moved = (follow.position - probeAt).sqrMagnitude;
+            probeIdle += Time.deltaTime;
+            if (moved < ProbeStep * ProbeStep && probeIdle < 4f) return;
             probe.transform.position = follow.position + Vector3.up * 1.5f;
-            // refresh a full probe every few frames (time-sliced faces keep it cheap)
-            if (++probeFrame % (IsMobile ? 12 : 2) == 0) probe.RenderProbe();
+            probeAt = follow.position; probeIdle = 0f;
+            probeRender = probe.RenderProbe();
         }
+
+        const float ProbeStep = 11f;
+        Vector3 probeAt = new Vector3(1e6f, 0, 0);
+        float probeIdle;
+        int probeRender;
+
+#if HMD_URP
+        // SSAO (DepthNormals prepass + full-screen AO) only for the main view. The road mirror (a fifth of the
+        // resolution, blurred) and the paint probe (64 px) cannot show AO, but each paid a full extra geometry pass for it.
+        ScriptableRendererFeature ssao;
+        Camera mainCam;
+        float lodBiasMain, meshLodMain;
+        void OnBeginCamera(ScriptableRenderContext ctx, Camera cam)
+        {
+            if (ssao != null) ssao.SetActive(cam == mainCam && !PerfProbe.SsaoOff);
+            if (cam == mainCam) return;
+            // mirror and probe: coarser mesh LODs (same textures and glow; both are drawn small and soft)
+            if (cam.cameraType == CameraType.Reflection || (PlanarReflection.I && PlanarReflection.I.IsCamera(cam)))
+            {
+                lodBiasMain = QualitySettings.lodBias; meshLodMain = QualitySettings.meshLodThreshold;
+                QualitySettings.lodBias = lodBiasMain * 0.7f;
+                QualitySettings.meshLodThreshold = meshLodMain * 4f;
+                lodPushed = true;
+            }
+        }
+        bool lodPushed;
+        void OnEndCamera(ScriptableRenderContext ctx, Camera cam)
+        {
+            if (!lodPushed) return;
+            lodPushed = false;
+            QualitySettings.lodBias = lodBiasMain; QualitySettings.meshLodThreshold = meshLodMain;
+        }
+        void OnDestroy()
+        {
+            RenderPipelineManager.beginCameraRendering -= OnBeginCamera;
+            RenderPipelineManager.endCameraRendering -= OnEndCamera;
+            if (ssao != null) ssao.SetActive(true);
+        }
+
+        static ScriptableRendererFeature FindFeature(string name)
+        {
+            if (!(GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset u)) return null;
+            foreach (var d in u.rendererDataList)
+                if (d != null) foreach (var f in d.rendererFeatures) if (f != null && f.name == name) return f;
+            return null;
+        }
+#endif
 
 #if HMD_URP
         SplitToning nightGrade;

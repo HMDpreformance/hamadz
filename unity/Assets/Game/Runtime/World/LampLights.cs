@@ -11,6 +11,8 @@ namespace HMD
     public class LampLights : MonoBehaviour
     {
         readonly List<Light> pool = new List<Light>();
+        readonly List<int> best = new List<int>();
+        readonly List<float> dist = new List<float>();
         List<Vector3> heads;
         Transform cam;
         float timer;
@@ -91,8 +93,7 @@ namespace HMD
             Vector3 p = cam.position;
 
             // pick the nearest lamps (partial selection is plenty fast for a few hundred lamps)
-            var best = new List<int>(pool.Count);
-            var dist = new List<float>(pool.Count);
+            best.Clear(); dist.Clear();   // reused lists: no garbage
             for (int i = 0; i < heads.Count; i++)
             {
                 float d = (heads[i] - p).sqrMagnitude;

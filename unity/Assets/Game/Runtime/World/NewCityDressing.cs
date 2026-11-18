@@ -297,7 +297,7 @@ namespace HMD
             {
                 var prefab = Res.Load<GameObject>("Buildings/" + j.id);
                 if (prefab == null) { Debug.LogWarning($"[HMD] building model {j.id}: no GLB"); continue; }
-                var m = Bake(prefab, j);
+                var m = Bake(prefab, j, "Buildings");
                 if (m == null) continue;
                 models.Add(m);
                 if (j.styles != null)
@@ -307,12 +307,16 @@ namespace HMD
 
         /// <summary>Merges a model's meshes into one, bottom-centred at the origin, front along +Z; its materials get the
         /// albedo as emission too (the windows are painted into the texture, so they glow at night).</summary>
-        BModel Bake(GameObject prefab, BModelJson j)
+        /// <summary>The merged mesh of a model (all its parts and sub-meshes, bottom centre at the origin, front along +Z)
+        /// and its materials in sub-mesh order. 'mats' is always filled; the mesh is the Editor-baked copy with Mesh LODs
+        /// (MeshLodStore) when there is an up-to-date one, else merged here. The Editor bake calls this with useBaked false.</summary>
+        public static Mesh MergeModel(GameObject prefab, string folder, string id, float yaw, List<Material> mats, bool useBaked = true)
         {
             var mfs = prefab.GetComponentsInChildren<MeshFilter>(true);
             if (mfs.Length == 0) return null;
             var root = prefab.transform.worldToLocalMatrix;
-            var combines = new List<CombineInstance>(); var mats = new List<Material>();
+            var combines = new List<CombineInstance>();
+            long indices = 0;
             foreach (var mf in mfs)
             {
                 var mr = mf.GetComponent<MeshRenderer>(); if (mf.sharedMesh == null || mr == null) continue;
@@ -320,18 +324,34 @@ namespace HMD
                 {
                     combines.Add(new CombineInstance { mesh = mf.sharedMesh, subMeshIndex = s, transform = root * mf.transform.localToWorldMatrix });
                     mats.Add(mr.sharedMaterials[Mathf.Min(s, mr.sharedMaterials.Length - 1)]);
+                    indices += mf.sharedMesh.GetIndexCount(s);
                 }
             }
             if (combines.Count == 0) return null;
-            var mesh = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32, name = "bld_" + j.id };
+            if (useBaked)
+            {
+                var baked = MeshLodStore.Load(MeshLodStore.ModelKey(folder, id, yaw), indices);
+                if (baked != null && baked.subMeshCount == combines.Count) return baked;
+            }
+            var mesh = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32, name = "bld_" + id };
             mesh.CombineMeshes(combines.ToArray(), false, true);
             // bottom centre to the origin, turned so the front is +Z
-            var b = mesh.bounds; var rot = Quaternion.Euler(0, j.yaw, 0);
+            var b = mesh.bounds; var rot = Quaternion.Euler(0, yaw, 0);
             var v = mesh.vertices; var nrm = mesh.normals;
             for (int i = 0; i < v.Length; i++) v[i] = rot * (v[i] - new Vector3(b.center.x, b.min.y, b.center.z));
             if (nrm != null && nrm.Length == v.Length) for (int i = 0; i < nrm.Length; i++) nrm[i] = rot * nrm[i];
             mesh.vertices = v; if (nrm != null && nrm.Length == v.Length) mesh.normals = nrm; else mesh.RecalculateNormals();
-            mesh.RecalculateBounds(); mesh.UploadMeshData(false);
+            mesh.RecalculateBounds();
+            mesh.name = "bld_" + id + "#" + indices;
+            return mesh;
+        }
+
+        BModel Bake(GameObject prefab, BModelJson j, string folder)
+        {
+            var mats = new List<Material>();
+            var mesh = MergeModel(prefab, folder, j.id, j.yaw, mats);
+            if (mesh == null) return null;
+            if (mesh.lodCount <= 1) mesh.UploadMeshData(false);
             var variants = new Material[Tints.Length][]; Color avg = new Color(0.5f, 0.5f, 0.52f);
             for (int t = 0; t < Tints.Length; t++)
             {
@@ -442,7 +462,7 @@ namespace HMD
                 if (j.kind != "palm") continue;
                 var prefab = Res.Load<GameObject>("Trees/" + j.id);
                 if (prefab == null) { Debug.LogWarning($"[HMD] tree model {j.id}: no GLB"); continue; }
-                var m = Bake(prefab, new BModelJson { id = j.id, h = j.h });
+                var m = Bake(prefab, new BModelJson { id = j.id, h = j.h }, "Trees");
                 if (m == null) continue;
                 // fronds read green under the lamps; the light-wrapped palm glows
                 foreach (var mt in m.variants[0])
@@ -547,7 +567,7 @@ namespace HMD
             {
                 var prefab = Res.Load<GameObject>("Buildings/Landmarks/" + j.id);
                 if (prefab == null) { Debug.LogWarning($"[HMD] landmark model {j.id}: no GLB"); continue; }
-                var m = Bake(prefab, new BModelJson { id = j.id, yaw = j.yaw, h = j.h });
+                var m = Bake(prefab, new BModelJson { id = j.id, yaw = j.yaw, h = j.h }, "Landmarks");
                 if (m != null) landmarkModels[j.kind] = (j, m);
             }
         }

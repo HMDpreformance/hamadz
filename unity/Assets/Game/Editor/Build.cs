@@ -36,6 +36,7 @@ namespace HMD.EditorTools
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             MakePipeline();
             MakeMaterials();
+            MeshLodBake.BakeAll();   // Mesh LODs for buildings, palms, landmarks and car bodies (phones: far ones cost far less)
             PlayerSetup();
             MakeScene();
             AssetDatabase.SaveAssets();
@@ -432,6 +433,7 @@ namespace HMD.EditorTools
         [MenuItem("HMD/Build Windows")]
         public static void Windows()
         {
+            MeshLodBake.BakeAll();   // quick when nothing changed; a build never goes out without the Mesh LODs
             var opts = new BuildPlayerOptions
             {
                 scenes = new[] { ScenePath },
@@ -445,6 +447,7 @@ namespace HMD.EditorTools
         [MenuItem("HMD/Build Android APK")]
         public static void Android()
         {
+            MeshLodBake.BakeAll();
             int code = PlayerSettings.Android.bundleVersionCode + 1;
             PlayerSettings.Android.bundleVersionCode = code;
             EditorUserBuildSettings.buildAppBundle = false;

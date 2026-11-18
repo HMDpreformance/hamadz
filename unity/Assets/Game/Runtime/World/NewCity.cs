@@ -85,8 +85,86 @@ namespace HMD
             Debug.Log($"[HMD] newcity: mesh bounds {b.min} .. {b.max}, mirrored={Mirrored}, roads={roads.Count}, garage={Garage}");
 
             Materials(go);
+            // 600 m: 400 m tiles cut the most triangles but added up to 350 draw calls a frame (Marina)
+            SplitForCulling(go, 600f);
             FindSpawn();
             Lamps();
+        }
+
+        /// <summary>The road, pavement, terrain and water meshes each span the whole 4 km map, so every camera (main,
+        /// road mirror, paint probe, the AO prepass) drew all of them every frame, even what is behind the camera. For
+        /// drawing only, each big mesh is cut into 'cell'-metre tiles (whole triangles, by centre, so no seams) that the
+        /// camera culls on its own. The same triangles and materials, so nothing looks different; the colliders stay on
+        /// the original meshes (their renderers are switched off), so driving is unchanged.</summary>
+        static void SplitForCulling(GameObject go, float cell)
+        {
+            int made = 0; long tris = 0;
+            foreach (var mf in go.GetComponentsInChildren<MeshFilter>())
+            {
+                var src = mf.sharedMesh; var r = mf.GetComponent<MeshRenderer>();
+                if (src == null || r == null || !r.enabled || !src.isReadable) continue;
+                long n = MeshLodStore.IndexCount(src) / 3;
+                if (n < 20000) continue;
+                var tr = mf.transform;
+                var v = src.vertices; var nrm = src.normals; var tan = src.tangents; var uv = src.uv; var uv2 = src.uv2; var colr = src.colors32;
+                bool hasN = nrm.Length == v.Length, hasT = tan.Length == v.Length, hasUv = uv.Length == v.Length, hasUv2 = uv2.Length == v.Length, hasC = colr.Length == v.Length;
+                var world = new Vector3[v.Length];
+                for (int i = 0; i < v.Length; i++) world[i] = tr.TransformPoint(v[i]);
+                // triangles of every sub-mesh sorted into cells
+                var cells = new Dictionary<Vector2Int, List<int>[]>();
+                for (int s = 0; s < src.subMeshCount; s++)
+                {
+                    var idx = src.GetTriangles(s);
+                    for (int t = 0; t + 2 < idx.Length; t += 3)
+                    {
+                        var c = (world[idx[t]] + world[idx[t + 1]] + world[idx[t + 2]]) / 3f;
+                        var k = new Vector2Int(Mathf.FloorToInt(c.x / cell), Mathf.FloorToInt(c.z / cell));
+                        if (!cells.TryGetValue(k, out var lists)) { lists = new List<int>[src.subMeshCount]; cells[k] = lists; }
+                        (lists[s] ??= new List<int>()).Add(idx[t]); lists[s].Add(idx[t + 1]); lists[s].Add(idx[t + 2]);
+                    }
+                }
+                if (cells.Count < 2) continue;
+                var map = new int[v.Length];
+                var pv = new List<Vector3>(); var pn = new List<Vector3>(); var pt = new List<Vector4>(); var pu = new List<Vector2>(); var pu2 = new List<Vector2>(); var pc = new List<Color32>();
+                foreach (var kv in cells)
+                {
+                    System.Array.Fill(map, -1);
+                    pv.Clear(); pn.Clear(); pt.Clear(); pu.Clear(); pu2.Clear(); pc.Clear();
+                    var subs = new List<int>[src.subMeshCount];
+                    for (int s = 0; s < src.subMeshCount; s++)
+                    {
+                        var l = kv.Value[s]; var o = new List<int>(l?.Count ?? 0);
+                        if (l != null)
+                            foreach (int i in l)
+                            {
+                                int j = map[i];
+                                if (j < 0)
+                                {
+                                    j = map[i] = pv.Count; pv.Add(v[i]);
+                                    if (hasN) pn.Add(nrm[i]); if (hasT) pt.Add(tan[i]); if (hasUv) pu.Add(uv[i]); if (hasUv2) pu2.Add(uv2[i]); if (hasC) pc.Add(colr[i]);
+                                }
+                                o.Add(j);
+                            }
+                        subs[s] = o;
+                    }
+                    var m = new Mesh { name = src.name + "_" + kv.Key.x + "_" + kv.Key.y, indexFormat = pv.Count > 65000 ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16 };
+                    m.SetVertices(pv); if (hasN) m.SetNormals(pn); if (hasT) m.SetTangents(pt); if (hasUv) m.SetUVs(0, pu); if (hasUv2) m.SetUVs(1, pu2); if (hasC) m.SetColors(pc);
+                    m.subMeshCount = src.subMeshCount;
+                    for (int s = 0; s < subs.Length; s++) m.SetTriangles(subs[s], s, false);
+                    m.RecalculateBounds(); m.UploadMeshData(true);
+                    var tile = new GameObject(m.name);
+                    tile.transform.SetParent(tr, false);
+                    tile.layer = mf.gameObject.layer; tile.isStatic = true;
+                    tile.AddComponent<MeshFilter>().sharedMesh = m;
+                    var tr2 = tile.AddComponent<MeshRenderer>();
+                    tr2.sharedMaterials = r.sharedMaterials; tr2.shadowCastingMode = r.shadowCastingMode; tr2.receiveShadows = r.receiveShadows;
+                    tr2.reflectionProbeUsage = r.reflectionProbeUsage; tr2.lightProbeUsage = r.lightProbeUsage;
+                    made++;
+                }
+                r.enabled = false;   // the original stays for its collider
+                tris += n;
+            }
+            Debug.Log($"[HMD] newcity: {tris / 1000}k ground triangles cut into {made} tiles for culling");
         }
 
         void Materials(GameObject go)

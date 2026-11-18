@@ -89,8 +89,11 @@ namespace HMD
             if (rt != null) { rt.Release(); rt = null; }
         }
 
+        public bool IsCamera(Camera c) => c == refl;
+
         public void SetActive(bool on)
         {
+            active = on;   // (phones: Update re-enabled the camera every other frame, so the mirror kept rendering in the workshop)
             if (refl) refl.enabled = on;
             Shader.SetGlobalFloat(OnId, on ? 1f : 0f);
         }

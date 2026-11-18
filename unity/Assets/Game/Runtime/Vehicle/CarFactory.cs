@@ -122,6 +122,7 @@ namespace HMD
                     rw.transform.localScale = new Vector3((left ? -1 : 1) * k * flip, k, k);
                     foreach (var c in rw.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(c);
                     foreach (var wr0 in rw.GetComponentsInChildren<Renderer>()) { wr0.sharedMaterials = RealWheelMats(id, wr0.sharedMaterials); wr0.shadowCastingMode = ShadowCastingMode.On; }
+                    MeshLodStore.SwapIn(rw, "Cars");
                 }
                 else
                 {
@@ -163,6 +164,9 @@ namespace HMD
             // --- lights
             AddLights(root.transform, spec, L, halfW, height, player, Mathf.Min(yF - rF, yR - rR) + 0.05f);
             if (modelGo != null && (id == "sport" || id == "pickup")) RearDetail(root.transform, holder, modelGo, spec, L, halfW, height);
+            // the same body with Mesh LODs (after the lamp and lens placement, which read the plain mesh): full detail
+            // close; the road mirror and the paint probe draw it lighter
+            if (modelGo != null) MeshLodStore.SwapIn(modelGo, "Cars");
 
             if (player)
             {
@@ -699,6 +703,7 @@ namespace HMD
         public readonly List<Transform> pools = new List<Transform>();
         public readonly List<Renderer> headGlows = new List<Renderer>();
         bool lastInside;
+        bool? lastBraking;
         CarController car;
         MaterialPropertyBlock mpb;
 
@@ -717,7 +722,9 @@ namespace HMD
                 foreach (var g in headGlows) if (g) g.enabled = !inside;
             }
             bool braking = car.brake > 0.1f || car.handbrake;
-            if (tail) tail.intensity = System.Environment.CommandLine.Contains("-notail") ? 0f : (braking ? 2.4f : 0.5f);
+            if (braking == lastBraking) return;   // only when it changes (no per-frame property-block writes)
+            lastBraking = braking;
+            if (tail) tail.intensity = Cmd.Has("-notail") ? 0f : (braking ? 2.4f : 0.5f);
             float k = braking ? 2.2f : 0.9f;   // dim lamp bar when cruising, bright when braking
             foreach (var r in tailSprites)
             {

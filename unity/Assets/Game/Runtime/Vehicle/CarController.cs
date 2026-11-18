@@ -58,6 +58,11 @@ namespace HMD
         const float RollingLoss = 0.016f;    // per m/s: the sport car stalled at 270 km/h without it
         /// <summary>Share of the real engine torque still sent to the wheels while the arcade curve drives the car.</summary>
         public static float WheelTorqueShare = 0.15f;
+        public static float SpinAssist = 4f;
+        /// <summary>Arcade drive on (tests can switch it off to compare with the plain wheel physics).</summary>
+        public static bool Arcade = true;
+        /// <summary>Heavy, soft cars (pickup, SUV, lowrider, muscle): extra stability help. The sports cars keep their tested setup.</summary>
+        static bool Heavy(CarSpec s) => s.handling < 70f;
         float arcadeA0, arcadeK;   // sport: 100-180 38% quicker, top +10% (real 6 s tank)
         public const float NitroBurnSecs = 6f, NitroRefillSecs = 40f;
         public bool Shifting => shiftTimer > 0;
@@ -79,7 +84,8 @@ namespace HMD
             rb.SetDamping(LinearDamping, 0.35f);
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-            rb.centerOfMass = new Vector3(0, 0.38f, 0.05f);
+            // tall cars on big wheels (the pickup) get a lower mass centre, so a touch on a kerb or barrier does not roll them up
+            rb.centerOfMass = new Vector3(0, Heavy(s) ? 0.24f : 0.38f, 0.05f);
             rb.maxAngularVelocity = 12f;
 
             // torque peak lands mid-range; curve falls off so peak power is near redline*0.85
@@ -120,6 +126,9 @@ namespace HMD
                 side.stiffness = 1.45f + s.handling / 160f;
                 w.sidewaysFriction = side;
             }
+            // arcade grip: lots of it, and more at the back than the front, so the car stays planted in fast lane changes
+            // (the handbrake still takes the rear down to 42% for slides)
+            if (Heavy(s)) for (int i = 0; i < 4; i++) { var sf = wheels[i].sidewaysFriction; sf.stiffness *= i < 2 ? 1.1f : 1.35f; wheels[i].sidewaysFriction = sf; }
             frontSideBase = wheels[0].sidewaysFriction;
             rearSideBase = wheels[2].sidewaysFriction;
             Gear = 1;
@@ -157,7 +166,8 @@ namespace HMD
 
             // --- steering: less lock at speed, smoothed, with a little counter-steer help
             float speedFactor = Mathf.Pow(Mathf.InverseLerp(10f, 290f, SpeedKmh), 0.8f);   // speed-sensitive: quick in town, calm at 300
-            float maxLock = Mathf.Lerp(34f, 5.5f, speedFactor);
+            // heavy, soft cars (the pickup) steer less sharply than the sports car: lock scales with the handling rating
+            float maxLock = Mathf.Lerp(34f, 5.5f, speedFactor) * Mathf.Lerp(0.7f, 1f, Mathf.InverseLerp(50f, 85f, spec.handling));
             float target = steer * maxLock;
             // counter-steer assist: when the rear slides, steer into it a bit
             float slipAngle = Vector3.SignedAngle(transform.forward, v.sqrMagnitude > 4 ? v.normalized : transform.forward, Vector3.up);
@@ -213,7 +223,7 @@ namespace HMD
             float wheelT = engineT * ratio * 0.88f * nitroBoost;
             // arcade drive (below): the push comes from the acceleration curve; the wheels keep a little real torque so
             // they still bite, spin up at a launch and slide with the handbrake
-            if (Gear > 0) wheelT *= WheelTorqueShare;
+            if (Gear > 0 && Arcade) wheelT *= WheelTorqueShare;
             EngineLoad = thr;
 
             // traction control: back off torque when driven wheels spin much faster than the ground
@@ -258,19 +268,23 @@ namespace HMD
             wheels[3].sidewaysFriction = rs;
 
             // --- anti-roll bars
-            AntiRoll(wheels[0], wheels[1], spec.weightKg * 6f);
-            AntiRoll(wheels[2], wheels[3], spec.weightKg * 4.5f);
+            AntiRoll(wheels[0], wheels[1], spec.weightKg * (Heavy(spec) ? 9f : 6f));   // stiff bars on the heavy cars: little body roll
+            AntiRoll(wheels[2], wheels[3], spec.weightKg * (Heavy(spec) ? 6.5f : 4.5f));
 
             // --- aero
             Grounded = false;
             foreach (var w in wheels) if (w.isGrounded) Grounded = true;
             float vv = v.magnitude;
             rb.AddForce(-v.normalized * dragK * vv * vv, ForceMode.Force);
+            // anti-spin assist (arcade): past 12 degrees of slide the yaw is damped, so a lane change or a kerb does not
+            // turn into a spin; the handbrake switches it off for power slides
+            if (Heavy(spec) && Grounded && !handbrake && SpeedKmh > 30f && Mathf.Abs(slipAngle) > 12f)
+                rb.AddTorque(Vector3.up * (-rb.angularVelocity.y * rb.mass * SpinAssist), ForceMode.Force);
             if (NitroActive && Gear > 0 && Grounded) rb.AddForce(transform.forward * rb.mass * 9.81f * NitroPushG, ForceMode.Force);
             // --- arcade drive, mid-2000s street racer style: a set acceleration curve per car, strong off the line and
             // fading to zero exactly at the car's top speed, plus whatever the air takes, so every car pulls through all its
             // gears to its rated top speed. NOS lifts the curve and the top speed. Shifts cut the push for a moment.
-            if (Gear > 0 && Grounded && !inputLocked && thr > 0.01f)
+            if (Arcade && Gear > 0 && Grounded && !inputLocked && thr > 0.01f)
             {
                 float vF = Mathf.Max(0f, ForwardSpeed);
                 float vTop = spec.topKmh / 3.6f * (NitroActive ? NitroTopGain : 1f);
@@ -282,6 +296,8 @@ namespace HMD
                 float f = thr * (rb.mass * aT + cap * (rb.mass * (LinearDamping + RollingLoss) * vF + dragK * vF * vF));   // nothing past top speed
                 if (shiftTimer > 0) f *= 0.3f;
                 if (brk > 0.1f) f = 0f;
+                // sideways: the push fades with the slide angle (pushing along the nose of a sliding car fed spins)
+                if (v.sqrMagnitude > 25f) f *= Mathf.Clamp01(1f - (Mathf.Abs(slipAngle) - 8f) / 30f);
                 rb.AddForce(transform.forward * f, ForceMode.Force);
             }
             if (Grounded) rb.AddForce(-transform.up * vv * vv * 1.1f, ForceMode.Force);   // downforce
